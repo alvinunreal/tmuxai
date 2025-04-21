@@ -1,0 +1,1 @@
+Do git diff, summarize the changes, and write a git commit message and push.

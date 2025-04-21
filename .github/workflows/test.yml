@@ -1,0 +1,33 @@
+name: K9s Test
+
+on:
+  workflow_dispatch:
+    push:
+    branches:
+      - master
+    tags:
+      - rc*
+      - v*
+  pull_request:
+    branches:
+      - master
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4.2.2
+
+      - name: Install Go
+        uses: actions/setup-go@v5.4.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup GO env
+        run: go env -w CGO_ENABLED=0
+
+      - name: Run Tests
+        run: make test
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

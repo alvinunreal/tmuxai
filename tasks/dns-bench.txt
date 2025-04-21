@@ -1,0 +1,1 @@
+Benchmark DNS providers with to find the fastest for my region.

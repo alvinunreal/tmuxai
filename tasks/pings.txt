@@ -1,0 +1,5 @@
+I want to measure which has best latency.
+Ping google.com 5 times.
+Than ping bing.com 5 times.
+Than ping yahoo.com 5 times.
+Give me latency report.

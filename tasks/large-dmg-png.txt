@@ -1,0 +1,2 @@
+Find the number of dmg files and the largest dmg file in ~/Downloads/ folder.
+Than find the number of png files and the largest png file in ~/Downloads/ folder.

@@ -1,0 +1,168 @@
+max_context_size: 20000 # Maximum context size in tokens, reaching 80% triggers squashing
+max_capture_lines: 200 # Maximum number of lines to capture during each message
+wait_interval: 5 # Wait interval when exec pane is considered busy
+
+send_keys_confirm: true # Confirm before executing send keys
+paste_multiline_confirm: true # Confirm before pasting multiline content
+exec_confirm: true # Confirm before executing commands
+
+openrouter:
+  api_key: sk-or-v1-XXXXXXXXX
+  model: google/gemini-2.5-flash-preview
+  base_url: https://openrouter.ai/api/v1
+
+# AI generated and not verified - use with caution
+whitelist_patterns:
+  # --- File System Inspection (Broad Initial Allowance) ---
+  - '^find(\s+.*)?$' # Allow find initially (actions blacklisted below)
+  - '^ls(\s+(-[\w-]+|\.\.?|\~?[\/\w\.\*-]+))*$' # ls (already quite safe, specific pattern okay)
+  - '^stat(\s+.*)?$' # Allow stat initially
+  - '^file(\s+.*)?$' # Allow file initially
+  - '^tree(\s+.*)?$' # Allow tree initially
+  - '^pwd\s*$' # Print working directory (inherently safe)
+  - '^cd(\s+[\w\.\~\/-]+)?\s*$' # Change directory (relatively safe state change)
+
+  # --- File Content Viewing & Searching (Broad Initial Allowance) ---
+  - '^cat(\s+.*)?$' # Allow cat initially
+  - '^(less|more)(\s+.*)?$' # Allow less/more initially
+  - '^head(\s+.*)?$' # Allow head initially
+  - '^tail(\s+.*)?$' # Allow tail initially (beware -f, blacklisted below)
+  - '^grep(\s+.*)?$' # Allow grep/egrep/fgrep initially
+  - '^egrep(\s+.*)?$' # Allow grep/egrep/fgrep initially
+  - '^fgrep(\s+.*)?$' # Allow grep/egrep/fgrep initially
+  - '^wc(\s+.*)?$' # Allow wc initially
+  - '^diff(\s+.*)?$' # Allow diff initially
+
+  # --- System Information (Mostly Inherently Safe/Read-Only) ---
+  - '^uname(\s+.*)?$'
+  - '^hostname\s*$'
+  - '^whoami\s*$'
+  - '^id(\s+.*)?$'
+  - '^date(\s+.*)?$'
+  - '^uptime\s*$'
+  - '^df(\s+.*)?$'
+  - '^du(\s+.*)?$'
+  - '^free(\s+.*)?$'
+  - '^(ps|pgrep)(\s+.*)?$'
+  - '^env\s*$'
+  - '^printenv(\s+.*)?$'
+
+  # --- Network Information (Read-only focus) ---
+  - '^(ip|ss|netstat)(\s+[\w\.\-]+)*$' # Network config/stats (specific pattern better here)
+  - '^ping(\s+.*)?$' # Allow ping initially (potential DoS blacklisted below)
+  - '^(traceroute|tracepath)(\s+.*)?$' # Allow traceroute initially
+  - '^(host|dig|nslookup)(\s+.*)?$' # Allow DNS lookups initially
+  - '^(wget|curl)(\s+(-[\w-]+|https?:\/\/[^\s]+))*$' # Allow basic wget/curl (flags allowed, output/data blacklisted)
+
+  # --- Archiving/Compression (Specific Listing/Viewing Only) ---
+  - '^tar\s+.*(-t|--list)\b.*$' # List tar archive contents ONLY
+  - '^unzip\s+-l\b.*$' # List zip archive contents ONLY
+  - '^gzip\s+-l\b.*$' # List gzip file details ONLY
+  - '^zcat(\s+.*)?$' # View gzipped file contents
+  - '^gunzip\s+-c\b.*$' # View gzipped file contents (alternative)
+
+  # --- Version Control (Broad Initial Allowance for Read Commands) ---
+  - '^git(\s+.*)?$' # Allow git initially (modifying subcommands blacklisted)
+  - '^svn(\s+.*)?$' # Allow svn initially (modifying subcommands blacklisted)
+
+  # --- Development/Build Tools (Specific Read-only/Dry-run Only) ---
+  - '^make\s+(-n|--just-print|--dry-run)\b.*$' # Make dry run ONLY
+  - '^docker\s+(ps|images|info|version|logs|stats|inspect|history|port|top|search|system\s+df|volume\s+ls|network\s+ls)\b.*$' # Docker read-only/info commands ONLY
+  - '^kubectl\s+(get|describe|logs|top|cluster-info|version|api-resources|api-versions|explain|auth\s+can-i)\b.*$' # K8s read-only/info commands ONLY
+
+  # --- Basic Safe Utilities ---
+  - '^echo(\s+.*)?$' # Allow echo initially (execution via ``/$(...) blacklisted globally)
+  - '^printf(\s+.*)?$' # Allow printf initially (execution via ``/$(...) blacklisted globally)
+  - '^sleep\s+\d+(\.\d+)?\w?\s*$'
+  - '^(true|false)\s*$'
+  - '^seq\s+'
+  - '^which\s+[\w\.\-]+\s*$'
+  - '^type\s+[\w\.\-]+\s*$'
+  - '^man(\s+.*)?$'
+  - '^\w+\s+(--help|-h)\s*$' # Common help flags
+
+blacklist_patterns:
+  - '\bfind\s+.*\s+(-exec|-execdir|-delete|-quit|-exit)\b' # Dangerous find actions
+  - '\btail\s+.*\s+-f\b' # tail -f runs indefinitely
+  - '\bgit\s+(commit|push|pull|merge|rebase|reset|clean|checkout|add|rm|stash|tag\s+-d|branch\s+-d|remote\s+(add|remove|rename))\b' # Git state-modifying commands
+  - '\bsvn\s+(commit|ci|add|delete|del|remove|rm|copy|cp|move|mv|rename|ren|mkdir|import|switch|sw|merge|resolve|revert|update|up)\b' # SVN state-modifying commands
+  - '\b(wget|curl)\s+.*(-o|-O|--output|--output-document)\b' # wget/curl saving output to file
+  - '\b(wget|curl)\s+.*(--post-data|--data|-d|--data-raw|--data-binary|--data-urlencode|-F|--form)\b' # wget/curl sending data
+
+  # --- Dangerous Standalone Commands ---
+  - '\brm\s+'
+  - '\bmv\s+' # Moving/renaming can overwrite or move to sensitive locations
+  - '\bcp\s+' # Copying can overwrite (less critical than rm/mv but still risky)
+  - '\bdd\s+'
+  - '\bshred\s+'
+  - '\bmkfs\b'
+  - '\bfdisk\b|\bgdisk\b|\bparted\b' # Partitioning tools
+  - '\bmount\b'
+  - '\bumount\b'
+
+  # --- System Modification & Privilege Escalation ---
+  - '\bsudo\b'
+  - '\bsu\b'
+  - '\b(passwd|chpasswd)\b'
+  - '\b(useradd|usermod|userdel)\b'
+  - '\b(groupadd|groupmod|groupdel)\b'
+  - '\b(chmod|chown|chgrp)\b' # Permissions/ownership changes
+  - '\bvisudo\b'
+  - '\bsysctl\b'
+  - '\b(iptables|nft|firewall-cmd|ufw)\b'
+  - '\b(reboot|shutdown|halt|poweroff|init)\b' # System power state
+
+  # --- Package Management (Can run arbitrary scripts, modify system state) ---
+  - '\b(apt|apt-get|dpkg|yum|dnf|rpm|pacman|yay|paru|emerge|brew|pkg|nix-env|guix|snap)\s+(remove|purge|reinstall|del|autoremove)\b'
+  - '\bpip(\d)?\s+(uninstall|download)\b'
+  - '\bnpm\s+(uninstall|un|update|remove|publish)\b'
+  - '\byarn\s+(add|remove|upgrade|import)\b'
+  - '\b(gem|bundle)\s+(remove)\b'
+  - '\bcomposer\s+(remove)\b'
+
+  # --- Service Management ---
+  - '\b(systemctl|service|initctl|rcctl|launchctl)\s+(start|stop|restart|reload|enable|disable|mask|unmask|edit)\b'
+
+  # --- Process Killing ---
+  - '\b(kill|pkill|killall)\b' # Can disrupt essential services or user work
+
+  # --- Network Connections & Servers (Potential for exfiltration, access, exposure) ---
+  - '\b(ssh|scp|sftp)\s+' # Remote connections/transfers
+  - '\b(nc|netcat|ncat)\s+' # Versatile networking tool (listen/connect/transfer/scan)
+  - '\b(telnet)\s+'
+
+  # --- Direct Execution, Arbitrary Code, Dangerous Interpreters/Compilers ---
+  - '\b(sh|bash|zsh|ksh|csh|fish|ash)\s+-c\b' # Executing command string directly in a shell
+  - '\b(python|python\d|perl|ruby|node|php|lua|java|javac|gcc|g\+\+|make|./)\s+[\w\.\/-]+' # Running interpreters/compilers directly on arbitrary scripts/files (allow specific safe uses via whitelist if needed)
+  - '\beval\b' # Evaluate string as command
+  - '\bsource\s+' # Execute commands from a file in current shell
+
+  # --- Dangerous In-place Editing or File Modification ---
+  - '\bsed\s+.*\s+(-i|--in-place)\b' # In-place file editing with sed
+  - '\bawk\s+.*\b(system\(|getline\s*<)\b' # Awk executing external commands or risky input
+  - '\bperl\s+.*(-i)\b' # Perl in-place editing
+
+  # --- Shell ----
+  - ";" # Command separator
+  - "&&" # Logical AND conditional execution
+  - '\|\|' # Logical OR conditional execution
+  - '\|'
+  - \> # Redirection (overwrite/create) - Block general use
+  - \>> # Redirection (append) - Block general use
+
+# Prompts customization, see prompts.go for more details
+# prompts:
+#   base_system: |
+#     xxx
+
+#   # Chat assistant prompt
+#   chat_assistant: |
+#     xxx
+
+#   # Chat assistant prepared prompt
+#   chat_assistant_prepared: |
+#     xxx
+
+#   # Watch prompt
+#   watch: |
+#     xxx

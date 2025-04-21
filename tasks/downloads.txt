@@ -1,0 +1,1 @@
+Clean up my Downloads folder by sorting files into subfolders based on type, like images or PDFs, and tell me how many I had cluttering it.

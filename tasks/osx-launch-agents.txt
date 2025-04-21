@@ -1,0 +1,1 @@
+Find out unused macOS Launch Agents or Linux systemd services to free up resources.

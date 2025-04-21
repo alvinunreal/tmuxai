@@ -1,0 +1,1 @@
+Use vim, create docker compose file for nginx and mysql and start both.
