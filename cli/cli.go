@@ -72,6 +72,6 @@ func init() {
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
 }
 
-func Execute(cfg *config.Config) error {
+func Execute() error {
 	return rootCmd.Execute()
 }
