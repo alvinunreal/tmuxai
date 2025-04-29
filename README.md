@@ -75,6 +75,7 @@ TmuxAI requires only tmux to be installed on your system. It's designed to work 
 The fastest way to install TmuxAI is using the installation script:
 
 ```bash
+# install tmux if not already installed
 curl -fsSL https://get.tmuxai.dev | bash
 ```
 
@@ -85,6 +86,7 @@ This installs TmuxAI to `/usr/local/bin/tmuxai` by default. If you need to insta
 If you use Homebrew, you can install TmuxAI with:
 
 ```bash
+brew install tmux
 brew tap alvinunreal/tmuxai
 brew install tmuxai
 ```
