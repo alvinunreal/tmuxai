@@ -88,7 +88,7 @@ func (c *CLIInterface) printWelcomeMessage() {
 	infoColor := color.New(color.FgHiWhite)
 	fmt.Println()
 
-	infoColor.Println("Type 'help' for a list of commands, 'exit' to quit")
+	infoColor.Println("Type '/help' for a list of commands, '/exit' to quit")
 	fmt.Println()
 }
 
