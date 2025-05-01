@@ -92,6 +92,8 @@ brews:
       name: alvinunreal
       email: alvin@tmuxai.dev
     directory: Formula
+    dependencies:
+      - name: tmux
     homepage: https://tmuxai.dev/
     description: AI-Powered, Non-Intrusive Terminal Assistant
     test: |
