@@ -42,9 +42,9 @@ type PromptsConfig struct {
 }
 
 // PollinationsAIConfig holds Pollinations.ai API configuration
-type PollinationsAIConfig struct {
-	APIKey string `mapstructure:"api_key"`
-}
+// Da keine API Keys benötigt werden, ist die Struktur leer
+// (früher: APIKey string `mapstructure:"api_key"`)
+type PollinationsAIConfig struct{}
 
 // DefaultConfig returns a configuration with default values
 func DefaultConfig() *Config {
@@ -66,6 +66,7 @@ func DefaultConfig() *Config {
 			BaseSystem:    ``,
 			ChatAssistant: ``,
 		},
+		PollinationsAI: PollinationsAIConfig{},
 	}
 }
 
