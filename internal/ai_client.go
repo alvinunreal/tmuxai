@@ -191,3 +191,58 @@ func debugChatMessages(chatMessages []ChatMessage, response string) {
 	file.WriteString(response)
 	file.WriteString("\n\n==================    END DEBUG ==================\n")
 }
+
+// PollinationsAIClient represents an AI client for interacting with Pollinations.ai API
+type PollinationsAIClient struct {
+	Client *http.Client
+}
+
+// NewPollinationsAIClient creates a new PollinationsAIClient
+func NewPollinationsAIClient() *PollinationsAIClient {
+	return &PollinationsAIClient{
+		Client: &http.Client{},
+	}
+}
+
+// ChatCompletion sends a chat completion request to the Pollinations.ai API
+func (c *PollinationsAIClient) ChatCompletion(messages []Message, model string) (string, error) {
+	reqBody := map[string]interface{}{
+		"model":    model,
+		"messages": messages,
+	}
+
+	reqJSON, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", "https://text.pollinations.ai/openai", bytes.NewBuffer(reqJSON))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	// No API key needed for Pollinations
+
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var completionResp ChatCompletionResponse
+	if err := json.Unmarshal(body, &completionResp); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if len(completionResp.Choices) > 0 {
+		return completionResp.Choices[0].Message.Content, nil
+	}
+
+	return "", fmt.Errorf("no completion choices returned")
+}
