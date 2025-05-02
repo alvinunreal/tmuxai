@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alvinunreal/tmuxai/config"
@@ -21,20 +22,38 @@ type AiClient struct {
 
 // Message represents a chat message
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 // ChatCompletionRequest represents a request to the chat completion API
 type ChatCompletionRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
+	Model      string      `json:"model"`
+	Messages   []Message   `json:"messages"`
+	Tools      []Tool      `json:"tools,omitempty"`
+	ToolChoice interface{} `json:"tool_choice,omitempty"`
+}
+
+// FunctionCall represents a function call made by the AI
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// ToolCall represents a tool call made by the AI
+type ToolCall struct {
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
 }
 
 // ChatCompletionChoice represents a choice in the chat completion response
 type ChatCompletionChoice struct {
-	Index   int     `json:"index"`
-	Message Message `json:"message"`
+	Index     int        `json:"index"`
+	Message   Message    `json:"message"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // ChatCompletionResponse represents a response from the chat completion API
@@ -68,10 +87,19 @@ func (c *AiClient) GetResponseFromChatMessages(chatMessages []ChatMessage, model
 			role = "assistant"
 		}
 
-		aiMessages = append(aiMessages, Message{
+		// Parse the content to check for tool calls
+		message := Message{
 			Role:    role,
 			Content: msg.Content,
-		})
+		}
+
+		// If this is an assistant message, check for tool calls
+		if role == "assistant" {
+			// We don't need to extract tool calls from previous messages
+			// as they're already in the XML format
+		}
+
+		aiMessages = append(aiMessages, message)
 	}
 
 	logger.Info("Sending %d messages to AI", len(aiMessages))
@@ -88,8 +116,10 @@ func (c *AiClient) GetResponseFromChatMessages(chatMessages []ChatMessage, model
 // ChatCompletion sends a chat completion request to the OpenRouter API
 func (c *AiClient) ChatCompletion(messages []Message, model string) (string, error) {
 	reqBody := ChatCompletionRequest{
-		Model:    model,
-		Messages: messages,
+		Model:      model,
+		Messages:   messages,
+		Tools:      tools,
+		ToolChoice: "auto",
 	}
 
 	reqJSON, err := json.Marshal(reqBody)
@@ -143,7 +173,31 @@ func (c *AiClient) ChatCompletion(messages []Message, model string) (string, err
 
 	// Return the response content
 	if len(completionResp.Choices) > 0 {
-		responseContent := completionResp.Choices[0].Message.Content
+		choice := completionResp.Choices[0]
+
+		// Format the response with function calls
+		var response strings.Builder
+
+		// Add the message content if it exists
+		if choice.Message.Content != "" {
+			response.WriteString(choice.Message.Content)
+		}
+
+		// Process each tool call
+		for _, toolCall := range choice.Message.ToolCalls {
+			functionName := toolCall.Function.Name
+			arguments := toolCall.Function.Arguments
+
+			// Add a newline if there's already content
+			if response.Len() > 0 {
+				response.WriteString("\n\n")
+			}
+
+			// Format the function call
+			response.WriteString(fmt.Sprintf("function: %s\narguments: %s", functionName, arguments))
+		}
+
+		responseContent := response.String()
 		logger.Debug("Received AI response (%d characters): %s", len(responseContent), responseContent)
 		return responseContent, nil
 	}

@@ -119,7 +119,9 @@ func (c *CLIInterface) processInput(input string) {
 	// Run the message processing in the main thread
 	c.manager.Status = "running"
 	c.manager.ProcessUserMessage(input)
-	c.manager.Status = ""
+	if c.manager.Status != "question" {
+		c.manager.Status = ""
+	}
 
 	close(done)
 

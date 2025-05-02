@@ -1,255 +1,295 @@
-// Unit tests for parseAIResponse in process_response.go
 package internal
 
 import (
-	"reflect"
+	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-// Test: Single tag, inline
-func TestParseAIResponse_WaitingForUserResponse(t *testing.T) {
+func TestParseAIResponse(t *testing.T) {
 	m := &Manager{}
-	input := "Just let me know what you'd like me to do. <WaitingForUserResponse>1</WaitingForUserResponse>"
-	want := AIResponse{
-		Message:                "Just let me know what you'd like me to do.",
-		WaitingForUserResponse: true,
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
 
-// Test: Tag inside code block
-func TestParseAIResponse_RequestAccomplished_CodeBlock(t *testing.T) {
-	m := &Manager{}
-	input := "Here is some lines and than the tag.\n```xml\n<RequestAccomplished>1</RequestAccomplished>\n```"
-	want := AIResponse{
-		Message:             "Here is some lines and than the tag.",
-		RequestAccomplished: true,
+	tests := []struct {
+		name           string
+		input          string
+		expectedOutput AIResponse
+		expectedError  bool
+	}{
+		{
+			name:  "Plain text only",
+			input: "This is a simple response.",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "message", Content: "This is a simple response."},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Single sendKeys action",
+			input: `<TmuxSendKeys>{"keys":"ls -la\n"}</TmuxSendKeys>`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "sendKeys", Content: "ls -la\n"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Single sendKeys action with tool_code",
+			input: `<tool_code><TmuxSendKeys>{"keys":"ls -la\n"}</TmuxSendKeys></tool_code>`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "sendKeys", Content: "ls -la\n"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Single sendKeys action with markdown fence",
+			input: "`" + `<TmuxSendKeys>{"keys":"echo hello\n"}</TmuxSendKeys>` + "`",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "sendKeys", Content: "echo hello\n"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Single sendKeys action with markdown fence and tool_code",
+			input: "`" + `<tool_code><TmuxSendKeys>{"keys":"echo hello\n"}</TmuxSendKeys></tool_code>` + "`",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "sendKeys", Content: "echo hello\n"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Single sendKeys action with markdown fences",
+			input: "```\n" + `<TmuxSendKeys>{"keys":"echo hello"}</TmuxSendKeys>` + "\n```",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "sendKeys", Content: "echo hello"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Single sendKeys action with markdown fences and tool_code",
+			input: "```\n" + `<tool_code><TmuxSendKeys>{"keys":"echo hello"}</TmuxSendKeys></tool_code>` + "\n```",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "sendKeys", Content: "echo hello"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Single sendKeys action with xml fences",
+			input: "```xml\n" + `<TmuxSendKeys>{"keys":"echo hello"}</TmuxSendKeys>` + "\n```",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "sendKeys", Content: "echo hello"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Single sendKeys action with xml fences and tool_code",
+			input: "```xml\n" + `<tool_code><TmuxSendKeys>{"keys":"echo hello"}</TmuxSendKeys></tool_code>` + "\n```",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "sendKeys", Content: "echo hello"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "No action with markdown fences",
+			input: "```\n" + "<Something>value</Something>" + "\n```",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "message", Content: "```\n<Something>value</Something>\n```"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "No action with xml fences",
+			input: "```" + "xml\n<Something>value</Something>\n" + "```",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "message", Content: "```xml\n<Something>value</Something>\n```"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Single execCommand action",
+			input: `<ExecCommand>{"command":"git status"}</ExecCommand>`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "execCommand", Content: "git status"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Multiple actions",
+			input: `<TmuxSendKeys>{"keys":"cd /tmp\n"}</TmuxSendKeys><ExecCommand>{"command":"pwd"}</ExecCommand>`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "sendKeys", Content: "cd /tmp\n"},
+					{Type: "execCommand", Content: "pwd"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Text and actions mixed",
+			input: `First, go to tmp: <TmuxSendKeys>{"keys":"cd /tmp\n"}</TmuxSendKeys> Then, check where you are: <ExecCommand>{"command":"pwd"}</ExecCommand>All done.`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "message", Content: "First, go to tmp:"},
+					{Type: "sendKeys", Content: "cd /tmp\n"},
+					{Type: "message", Content: "Then, check where you are:"},
+					{Type: "execCommand", Content: "pwd"},
+					{Type: "message", Content: "All done."},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Text and actions mixed with markdown fences",
+			input: "Okay, I will run the command.\n" + "```xml\n" + `<ExecCommand>{"command":"ls -l"}</ExecCommand>` + "\n```\nLet me know the output.",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "message", Content: "Okay, I will run the command."},
+					{Type: "execCommand", Content: "ls -l"},
+					{Type: "message", Content: "Let me know the output."},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "ChangeState action",
+			input: `Changing state now. <ChangeState>{"state":"PROCESSING"}</ChangeState> Done processing.`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "message", Content: "Changing state now."},
+					{Type: "message", Content: "Done processing."},
+				},
+				State: "PROCESSING",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Multiple ChangeState actions, last one wins",
+			input: `<ChangeState>{"state":"START"}</ChangeState>Working...<ChangeState>{"state":"END"}</ChangeState>`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "message", Content: "Working..."},
+				},
+				State: "END",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Unknown action",
+			input: `<UnknownAction>{"data":"some data"}</UnknownAction>`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{},
+				State:    "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Malformed JSON",
+			input: `<TmuxSendKeys>{"keys":"invalid json'}</TmuxSendKeys>`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{},
+				State:    "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Missing arguments field",
+			input: `<TmuxSendKeys>{}</TmuxSendKeys>`,
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{},
+				State:    "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Empty input",
+			input: "",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{},
+				State:    "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Whitespace input",
+			input: "   \n\t   ",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{},
+				State:    "",
+			},
+			expectedError: false,
+		},
+		{
+			name:  "Test case with a comma",
+			input: "Test case with a comma",
+			expectedOutput: AIResponse{
+				Sequence: []ActionStep{
+					{Type: "message", Content: "Test case with a comma"},
+				},
+				State: "",
+			},
+			expectedError: false,
+		},
 	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
 
-// Test: Multiple tags, mixed content
-func TestParseAIResponse_MultipleTags_MixedContent(t *testing.T) {
-	m := &Manager{}
-	input := "Here is some lines and than the tag.\n```\n<TmuxSendKeys>SOmething</TmuxSendKeys>\n```\nMore content\n```<ExecPaneSeemsBusy>```"
-	want := AIResponse{
-		Message:           "Here is some lines and than the tag.\nMore content",
-		SendKeys:          []string{"SOmething"},
-		ExecPaneSeemsBusy: true,
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actualOutput, err := m.parseAIResponse(tt.input)
 
-// Test: Array field extraction
-func TestParseAIResponse_SendKeys_Array(t *testing.T) {
-	m := &Manager{}
-	input := "<TmuxSendKeys>foo</TmuxSendKeys><TmuxSendKeys>bar</TmuxSendKeys>"
-	want := AIResponse{
-		SendKeys: []string{"foo", "bar"},
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: No tags, only message
-func TestParseAIResponse_OnlyMessage(t *testing.T) {
-	m := &Manager{}
-	input := "Just a message with no tags."
-	want := AIResponse{
-		Message: "Just a message with no tags.",
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: Only tags, no message
-func TestParseAIResponse_OnlyTags(t *testing.T) {
-	m := &Manager{}
-	input := "<RequestAccomplished>1</RequestAccomplished>"
-	want := AIResponse{
-		RequestAccomplished: true,
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: Tags with extra whitespace/newlines
-func TestParseAIResponse_TagsWithWhitespace(t *testing.T) {
-	m := &Manager{}
-	input := "Some text\n\n<RequestAccomplished> 1 </RequestAccomplished>\n"
-	want := AIResponse{
-		Message:             "Some text",
-		RequestAccomplished: true,
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: NoComment tag
-func TestParseAIResponse_NoComment(t *testing.T) {
-	m := &Manager{}
-	input := "Some text <NoComment>1</NoComment>"
-	want := AIResponse{
-		Message:   "Some text",
-		NoComment: true,
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: Multiline tag content
-func TestParseAIResponse_SendKeys_Multiline(t *testing.T) {
-	m := &Manager{}
-	input := "<TmuxSendKeys>line1\nline2</TmuxSendKeys>"
-	want := AIResponse{
-		SendKeys: []string{"line1\nline2"},
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: Tags wrapped in quotes or backticks
-func TestParseAIResponse_TagsInQuotesOrBackticks(t *testing.T) {
-	m := &Manager{}
-	input := "`<RequestAccomplished>1</RequestAccomplished>`"
-	want := AIResponse{
-		RequestAccomplished: true,
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: Non-AI XML tags and code blocks are preserved
-func TestParseAIResponse_NonAIXMLTagsAndBackticksPreserved(t *testing.T) {
-	m := &Manager{}
-	input := "This is a message with a code block:\n```\n<NotAIResponse>foo</NotAIResponse>\n```\nAnd a backtick: `<OtherTag>bar</OtherTag>`"
-	want := AIResponse{
-		Message: "This is a message with a code block:\n```\n<NotAIResponse>foo</NotAIResponse>\n```\nAnd a backtick: `<OtherTag>bar</OtherTag>`",
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: XML entity decoding in TmuxSendKeys
-func TestParseAIResponse_SendKeys_XMLEntities(t *testing.T) {
-	m := &Manager{}
-	input := "<TmuxSendKeys>foo &amp; bar &lt;baz&gt; &quot;qux&quot; &apos;zap&apos;</TmuxSendKeys>"
-	want := AIResponse{
-		SendKeys: []string{`foo & bar <baz> "qux" 'zap'`},
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: Mixed encoded and unencoded XML entities in TmuxSendKeys
-func TestParseAIResponse_SendKeys_MixedEntities(t *testing.T) {
-	m := &Manager{}
-	input := "<TmuxSendKeys>foo &amp; bar & baz</TmuxSendKeys>"
-	want := AIResponse{
-		SendKeys: []string{"foo & bar & baz"},
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: Multiline content with XML entities in TmuxSendKeys
-func TestParseAIResponse_SendKeys_MultilineEntities(t *testing.T) {
-	m := &Manager{}
-	input := "<TmuxSendKeys>line1 &lt;tag&gt;\nline2 &amp; more</TmuxSendKeys>"
-	want := AIResponse{
-		SendKeys: []string{"line1 <tag>\nline2 & more"},
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
-	}
-}
-
-// Test: Mixed AI and non-AI XML tags, only AI tags are stripped, others preserved
-func TestParseAIResponse_MixedAIAndNonAIXMLTags(t *testing.T) {
-	m := &Manager{}
-	input := "Message before.\n<TmuxSendKeys>foo</TmuxSendKeys>\n```\n<NotAIResponse>foo</NotAIResponse>\n```\n<MessageTag>bar</MessageTag>\n<RequestAccomplished>1</RequestAccomplished>\nAfter."
-	want := AIResponse{
-		Message:             "Message before.\n```\n<NotAIResponse>foo</NotAIResponse>\n```\n<MessageTag>bar</MessageTag>\nAfter.",
-		SendKeys:            []string{"foo"},
-		RequestAccomplished: true,
-	}
-	got, err := m.parseAIResponse(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// Compare Sequence length and content carefully
+				if !assert.Equal(t, len(tt.expectedOutput.Sequence), len(actualOutput.Sequence), "Sequence length mismatch") {
+					fmt.Println(tt.expectedOutput.Sequence)
+					fmt.Println(actualOutput.Sequence)
+				}
+				for i := range tt.expectedOutput.Sequence {
+					if i < len(actualOutput.Sequence) {
+						assert.Equal(t, tt.expectedOutput.Sequence[i], actualOutput.Sequence[i], "Sequence item mismatch at index %d", i)
+					}
+				}
+				// Compare state
+				assert.Equal(t, tt.expectedOutput.State, actualOutput.State, "State mismatch")
+			}
+		})
 	}
 }

@@ -1,107 +1,136 @@
 package internal
 
 import (
-	"fmt"
-	"html"
+	"encoding/json"
 	"regexp"
+	"slices"
 	"strings"
+
+	"github.com/alvinunreal/tmuxai/logger"
 )
 
-func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
-	// Tag mapping: tag name -> field
-	type tagInfo struct {
-		name     string
-		isArray  bool
-		isBool   bool
-		setField func(*AIResponse, string)
-	}
-	tags := []tagInfo{
-		{"TmuxSendKeys", true, false, func(r *AIResponse, v string) { r.SendKeys = append(r.SendKeys, v) }},
-		{"ExecCommand", true, false, func(r *AIResponse, v string) { r.ExecCommand = append(r.ExecCommand, v) }},
-		{"PasteMultilineContent", false, false, func(r *AIResponse, v string) { r.PasteMultilineContent = v }},
-		{"ExecAndWait", false, false, func(r *AIResponse, v string) { r.ExecAndWait = v }},
-		{"RequestAccomplished", false, true, func(r *AIResponse, v string) { r.RequestAccomplished = isTrue(v) }},
-		{"ExecPaneSeemsBusy", false, true, func(r *AIResponse, v string) { r.ExecPaneSeemsBusy = isTrue(v) }},
-		{"WaitingForUserResponse", false, true, func(r *AIResponse, v string) { r.WaitingForUserResponse = isTrue(v) }},
-		{"NoComment", false, true, func(r *AIResponse, v string) { r.NoComment = isTrue(v) }},
-	}
+var toolCodeRegex = regexp.MustCompile(`(?s)(?:\x60\x60\x60(?:xml)?\s*)?<tool_code>(.*?)</tool_code>(?:\s*\x60)?(?:\x60\x60)?`)
+var functionNames = []string{"TmuxSendKeys", "ExecCommand", "PasteMultilineContent", "ExecAndWait", "ChangeState"}
 
-	clean := response
-	tagPattern := `(?s)<%s>(.*?)</%s>`
-	r := AIResponse{}
-	cleanForMsg := clean
-	for _, t := range tags {
-		reTag := regexp.MustCompile(fmt.Sprintf(tagPattern, t.name, t.name))
-		tagMatches := reTag.FindAllStringSubmatch(clean, -1)
-		for _, m := range tagMatches {
-			// m[0] is the full match, m[1] is the value
-			if len(m) < 2 {
-				continue // skip invalid match
+func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
+	r := AIResponse{
+		Sequence: make([]ActionStep, 0),
+	}
+	var lastState string
+	currentPos := 0
+	response = removeToolCode(response)
+
+	// Regex to find the next command tag
+	functionPattern := `(?s)(?:\x60\x60\x60(?:xml)?\s*)?<(\w+)>({.*?})</\w+>(?:\s*\x60)?(?:\x60\x60)?`
+	reFunctions := regexp.MustCompile(functionPattern)
+
+	for currentPos < len(response) {
+		// Find the next function call starting from currentPos
+		loc := reFunctions.FindStringSubmatchIndex(response[currentPos:])
+		if loc != nil {
+			// Adjust indices relative to the original response string
+			loc[0] += currentPos // start of full match
+			loc[1] += currentPos // end of full match
+			loc[2] += currentPos // start of function name
+			loc[3] += currentPos // end of function name
+			loc[4] += currentPos // start of arguments JSON
+			loc[5] += currentPos // end of arguments JSON
+		}
+
+		// 1. Handle text before the tag (or all remaining text if no tag found)
+		textEnd := len(response)
+		if loc != nil {
+			textEnd = loc[0] // Text ends where the tag begins
+		}
+
+		if textEnd > currentPos {
+			textContent := response[currentPos:textEnd]
+
+			// Trim surrounding fences if adjacent to a tag
+			if loc != nil && slices.Contains(functionNames, response[loc[2]:loc[3]]) { // Check if a tag follows this text
+				textContent = strings.TrimPrefix(textContent, "```xml")
+				textContent = strings.TrimPrefix(textContent, "```")
+				textContent = strings.TrimPrefix(textContent, "`")
+
+				// Always check for prefix, handles text after a tag or final text part
+				textContent = strings.TrimSuffix(textContent, "```")
+				textContent = strings.TrimSuffix(textContent, "`")
 			}
-			val := strings.TrimSpace(m[1])
-			// Decode XML entities for non-bool tags
-			if !t.isBool {
-				val = html.UnescapeString(val)
-			}
-			if t.isArray {
-				t.setField(&r, val)
-			} else {
-				t.setField(&r, val)
+			// Trim whitespace *after* potentially removing fences
+			textContent = strings.TrimSpace(textContent)
+
+			if textContent != "" {
+				r.Sequence = append(r.Sequence, ActionStep{Type: "message", Content: textContent})
 			}
 		}
-		// For message: remove all tag blocks, including code/backtick wrappers
-		// Remove code block: ```xml\n<tag>...</tag>\n```, ```\n<tag>...</tag>\n```
-		cleanForMsg = regexp.MustCompile(fmt.Sprintf("(?s)```(?:xml)?\\s*<%s>.*?</%s>\\s*```", t.name, t.name)).ReplaceAllString(cleanForMsg, "")
-		// Remove single backtick-wrapped tags: `<Tag>...</Tag>`
-		cleanForMsg = regexp.MustCompile(fmt.Sprintf("`<%s>.*?</%s>`", t.name, t.name)).ReplaceAllString(cleanForMsg, "")
-		// Remove plain tag: <Tag>...</Tag>
-		cleanForMsg = reTag.ReplaceAllString(cleanForMsg, "")
-	}
 
-	// Special handling: tags that may appear as <TagName> or ```<TagName>``` (no value)
-	// Set bool fields to true if such tag is present, even if no value
-	for _, t := range tags {
-		if !t.isBool {
+		// If no more tags found, we're done
+		if loc == nil {
+			break
+		}
+
+		// 2. Process the found tag
+		functionName := response[loc[2]:loc[3]]
+		argumentsJSON := response[loc[4]:loc[5]]
+
+		// Parse arguments
+		var args map[string]interface{}
+		if err := json.Unmarshal([]byte(argumentsJSON), &args); err != nil {
+			logger.Error("Failed to parse JSON arguments for %s: %v. Args: %s", functionName, err, argumentsJSON)
+			currentPos = loc[1]
 			continue
 		}
-		// Match <TagName> or ```<TagName>```
-		pat := fmt.Sprintf("(?s)(<%s>\\s*</%s>|<%s>\\s*|```<%s>```|<%s/>)", t.name, t.name, t.name, t.name, t.name)
-		if regexp.MustCompile(pat).MatchString(clean) {
-			t.setField(&r, "1")
+
+		// Process based on function name
+		var functionTag bool
+		switch functionName {
+		case "TmuxSendKeys":
+			if keys, ok := args["keys"].(string); ok {
+				r.Sequence = append(r.Sequence, ActionStep{Type: "sendKeys", Content: keys})
+				functionTag = true
+			}
+		case "ExecCommand":
+			if cmd, ok := args["command"].(string); ok {
+				r.Sequence = append(r.Sequence, ActionStep{Type: "execCommand", Content: cmd})
+				functionTag = true
+			}
+		case "PasteMultilineContent":
+			if content, ok := args["content"].(string); ok {
+				r.Sequence = append(r.Sequence, ActionStep{Type: "pasteMultiline", Content: content})
+				functionTag = true
+			}
+		case "ExecAndWait":
+			if cmd, ok := args["command"].(string); ok {
+				r.Sequence = append(r.Sequence, ActionStep{Type: "execAndWait", Content: cmd})
+				functionTag = true
+			}
+		case "ChangeState":
+			if state, ok := args["state"].(string); ok {
+				lastState = state
+				functionTag = true
+			}
+		default:
+			logger.Error("Unknown function call found: %s", functionTag)
 		}
+
+		// 3. Advance current position past the processed tag
+		currentPos = loc[1]
 	}
 
-	// Message: trim, collapse multiple newlines
-	msg := strings.TrimSpace(cleanForMsg)
-	msg = collapseBlankLines(msg)
-	// Remove any leftover tag lines (e.g. <TagName>) that may not have been removed
-	for _, t := range tags {
-		// Remove lines that are just <TagName> or ```<TagName>```
-		reLeftover := regexp.MustCompile(fmt.Sprintf("(?m)^\\s*(<%s>\\s*|```<%s>```)?\\s*$", t.name, t.name))
-		msg = reLeftover.ReplaceAllString(msg, "")
-	}
-	msg = strings.TrimSpace(msg)
-	r.Message = msg
+	r.State = lastState
 
 	return r, nil
 }
 
-// Helper: check if string is "1" or "true" (case-insensitive)
-func isTrue(s string) bool {
-	s = strings.TrimSpace(strings.ToLower(s))
-	return s == "1" || s == "true"
-}
+func removeToolCode(input string) string {
+	trimmed := strings.TrimSpace(input)
 
-// Collapse multiple blank lines to a single newline
-func collapseBlankLines(s string) string {
-	return mustCompile(`\n{2,}`).ReplaceAllString(s, "\n")
-}
-
-// mustCompile is a helper for regexp.MustCompile
-func mustCompile(expr string) *regexp.Regexp {
-	re, err := regexp.Compile(expr)
-	if err != nil {
-		panic(err)
+	// Check if the pattern exists in the input
+	if !toolCodeRegex.MatchString(trimmed) {
+		return input
 	}
-	return re
+
+	// Replace all occurrences of the pattern with just the captured content
+	result := toolCodeRegex.ReplaceAllString(trimmed, "$1")
+	return result
 }

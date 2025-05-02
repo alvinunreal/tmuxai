@@ -12,16 +12,16 @@ import (
 	"github.com/fatih/color"
 )
 
+// ActionStep represents a single action or message from the AI response sequence.
+type ActionStep struct {
+	Type    string // "message", "sendKeys", "execCommand", "pasteMultiline", "execAndWait"
+	Content string // The text message, keys to send, command to execute, or content to paste
+}
+
+// AIResponse represents the parsed response from the AI, including a sequence of actions.
 type AIResponse struct {
-	Message                string
-	SendKeys               []string
-	ExecCommand            []string
-	PasteMultilineContent  string
-	ExecAndWait            string
-	RequestAccomplished    bool
-	ExecPaneSeemsBusy      bool
-	WaitingForUserResponse bool
-	NoComment              bool
+	Sequence []ActionStep // Ordered sequence of actions and messages
+	State    string       // Final state determined by the AI (e.g., RequestAccomplished)
 }
 
 // Parsed only when pane is prepared
@@ -35,7 +35,7 @@ type CommandExecHistory struct {
 type Manager struct {
 	Config           *config.Config
 	AiClient         *AiClient
-	Status           string // running, waiting, done
+	Status           string // running, question, done
 	PaneId           string
 	ExecPane         *system.TmuxPaneDetails
 	Messages         []ChatMessage
@@ -121,7 +121,7 @@ func (m *Manager) GetPrompt() string {
 	switch m.Status {
 	case "running":
 		stateSymbol = "▶"
-	case "waiting":
+	case "question":
 		stateSymbol = "?"
 	case "done":
 		stateSymbol = "✓"
@@ -140,26 +140,21 @@ func (m *Manager) GetPrompt() string {
 	return prompt
 }
 
+// String representation for AIResponse
 func (ai *AIResponse) String() string {
+	var sequenceStr strings.Builder
+	for i, step := range ai.Sequence {
+		sequenceStr.WriteString(fmt.Sprintf("\n  Step %d: Type=%s, Content=`%s`", i+1, step.Type, step.Content))
+	}
+	if len(ai.Sequence) == 0 {
+		sequenceStr.WriteString("\n  (No actions in sequence)")
+	}
+
 	return fmt.Sprintf(`
-	Message: %s
-	SendKeys: %v
-	ExecCommand: %v
-	PasteMultilineContent: %s
-	ExecAndWait: %s
-	RequestAccomplished: %v
-	ExecPaneSeemsBusy: %v
-	WaitingForUserResponse: %v
-	NoComment: %v
+	State: %s
+	Sequence: %s
 `,
-		ai.Message,
-		ai.SendKeys,
-		ai.ExecCommand,
-		ai.PasteMultilineContent,
-		ai.ExecAndWait,
-		ai.RequestAccomplished,
-		ai.ExecPaneSeemsBusy,
-		ai.WaitingForUserResponse,
-		ai.NoComment,
+		ai.State,
+		sequenceStr.String(),
 	)
 }
