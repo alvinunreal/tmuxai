@@ -19,6 +19,7 @@ type ChatMessage struct {
 	Content   string
 	FromUser  bool
 	Timestamp time.Time
+	ToolCalls []AIToolCall // Adding tool calls to ChatMessage
 }
 
 type CLIInterface struct {

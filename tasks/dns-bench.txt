@@ -1,1 +1,1 @@
-Benchmark DNS providers with to find the fastest for my region.
+use dig to benchmark DNS providers with to find the fastest for my region.

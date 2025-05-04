@@ -1,7 +1,9 @@
 package internal
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alvinunreal/tmuxai/logger"
@@ -28,8 +30,13 @@ func (m *Manager) ProcessUserMessage(message string) bool {
 	}
 
 	currentTmuxWindow := m.GetTmuxPanesInXml(m.Config)
+	var execPaneEnv string
+	if !m.ExecPane.IsSubShell && m.ExecPane.Shell != "" && m.ExecPane.OS != "" {
+		execPaneEnv = fmt.Sprintf("IMPORTANT: the exec commands syntax should be for the shell: `%s` and OS: `%s`", m.ExecPane.Shell, m.ExecPane.OS)
+	}
+
 	currentMessage := ChatMessage{
-		Content:   currentTmuxWindow + "\n\n" + message,
+		Content:   currentTmuxWindow + "\n\n" + execPaneEnv + "\n\n" + message,
 		FromUser:  true,
 		Timestamp: time.Now(),
 	}
@@ -49,7 +56,8 @@ func (m *Manager) ProcessUserMessage(message string) bool {
 
 	sending := append(history, currentMessage)
 
-	response, err := m.AiClient.GetResponseFromChatMessages(sending, m.GetOpenRouterModel())
+	tools := GetTools()
+	response, err := m.AiClient.GetResponseFromChatMessages(sending, m.GetOpenRouterModel(), tools)
 	if err != nil {
 		s.Stop()
 		m.Status = ""
@@ -80,18 +88,10 @@ func (m *Manager) ProcessUserMessage(message string) bool {
 	s.Stop()
 
 	responseMsg := ChatMessage{
-		Content:   response,
+		Content:   r.Message,
 		FromUser:  false,
 		Timestamp: time.Now(),
-	}
-
-	// did AI follow our guidelines?
-	guidelineError, validResponse := m.aiFollowedGuidelines(r)
-	if !validResponse {
-		m.Println("AI didn't follow guidelines, trying again...")
-		m.Messages = append(m.Messages, currentMessage, responseMsg)
-		return m.ProcessUserMessage(guidelineError)
-
+		ToolCalls: r.ToolCalls, // Include tool calls in the chat message
 	}
 
 	// colorize code blocks in the response
@@ -100,51 +100,110 @@ func (m *Manager) ProcessUserMessage(message string) bool {
 	}
 
 	// Don't append to history if AI is waiting for the pane or is watch mode no comment
-	if r.ExecPaneSeemsBusy || r.NoComment {
+	// if r.ExecPaneSeemsBusy || r.NoComment {
+	if r.NoComment {
 	} else {
 		m.Messages = append(m.Messages, currentMessage, responseMsg)
 	}
 
-	// observe mode
-	for _, execCommand := range r.ExecCommand {
-		code, _ := system.HighlightCode("sh", execCommand)
-		m.Println(code)
+	// Process tool calls in the order they were requested
+	for _, toolCall := range r.ToolCalls {
+		switch toolCall.Type {
+		case "ExecCommand":
+			code, _ := system.HighlightCode("sh", toolCall.Content)
+			m.Println(code)
 
-		isSafe := false
-		command := execCommand
-		if m.GetExecConfirm() {
-			isSafe, command = m.confirmedToExec(execCommand, "Execute this command?", true)
-		} else {
-			isSafe = true
-		}
-		if isSafe {
-			m.Println("Executing command: " + command)
-			system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
-			time.Sleep(1 * time.Second)
-		} else {
-			m.Status = ""
-			return false
+			isSafe := false
+			command := toolCall.Content
+			if m.GetExecConfirm() {
+				isSafe, command = m.confirmedToExec(toolCall.Content, "Execute this command?", true)
+			} else {
+				isSafe = true
+			}
+			if isSafe {
+				m.Println("Executing command: " + command)
+				system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
+				time.Sleep(1 * time.Second)
+			} else {
+				m.Status = ""
+				return false
+			}
+
+		case "TmuxSendKeys":
+			var keys []string
+			if err := json.Unmarshal([]byte(toolCall.Content), &keys); err != nil {
+				fmt.Println("Failed to unmarshal keys: " + err.Error())
+			} else {
+				if m.GetSendKeysConfirm() {
+					keysDisplay := strings.Join(keys, ", ")
+					code, _ := system.HighlightCode("txt", keysDisplay)
+					m.Println(code)
+
+					isSafe, _ := m.confirmedToExec(keysDisplay, "Send these keys sequentially?", true)
+					if !isSafe {
+						m.Status = ""
+						return false
+					}
+				}
+
+				for _, key := range keys {
+					m.Println("Sending key: " + key)
+					system.TmuxSendCommandToPane(m.ExecPane.Id, key, false)
+					time.Sleep(1 * time.Second) // Pause between each key to allow proper processing
+				}
+			}
+
+		case "SendMultilineContent":
+			code, _ := system.HighlightCode("txt", toolCall.Content)
+			fmt.Println(code)
+
+			isSafe := false
+			if m.GetPasteMultilineConfirm() {
+				isSafe, _ = m.confirmedToExec(toolCall.Content, "Paste multiline content?", false)
+			} else {
+				isSafe = true
+			}
+
+			if isSafe {
+				m.Println("Pasting...")
+				system.TmuxSendCommandToPane(m.ExecPane.Id, toolCall.Content, true)
+				time.Sleep(1 * time.Second)
+			} else {
+				m.Status = ""
+				return false
+			}
+
+		case "ExecAndWait":
+			code, _ := system.HighlightCode("sh", toolCall.Content)
+			fmt.Println(code)
+
+			isSafe := false
+			command := toolCall.Content
+			if m.GetExecConfirm() {
+				isSafe, command = m.confirmedToExec(toolCall.Content, "Execute this command?", true)
+			} else {
+				isSafe = true
+			}
+			if isSafe {
+				m.ExecWaitCapture(command)
+			} else {
+				m.Status = ""
+				return false
+			}
+
+		case "ChangeState":
+			// ChangeState calls don't need further processing here as they're already
+			// handled in parseAIResponse and set the corresponding boolean flags
+			// Just logging that a state change was requested
+			// m.Println("State change requested: " + toolCall.StateValue)
 		}
 	}
 
-	for _, sendKey := range r.SendKeys {
-		code, _ := system.HighlightCode("txt", sendKey)
-		m.Println(code)
-
-		isSafe := false
-		command := sendKey
-		if m.GetSendKeysConfirm() {
-			isSafe, command = m.confirmedToExec(sendKey, "Send this key(s)?", true)
-		} else {
-			isSafe = true
-		}
-		if isSafe {
-			m.Println("Sending keys: " + command)
-			system.TmuxSendCommandToPane(m.ExecPane.Id, command, false)
-			time.Sleep(1 * time.Second)
-		} else {
-			m.Status = ""
-			return false
+	if r.StartCountdown {
+		m.Countdown(m.GetWaitInterval())
+		accomplished := m.ProcessUserMessage("waited for 5 more seconds, here is the current pane(s) content")
+		if accomplished {
+			return true
 		}
 	}
 
@@ -153,48 +212,6 @@ func (m *Manager) ProcessUserMessage(message string) bool {
 		accomplished := m.ProcessUserMessage("waited for 5 more seconds, here is the current pane(s) content")
 		if accomplished {
 			return true
-		}
-	}
-
-	// prepared mode
-	if r.ExecAndWait != "" {
-		code, _ := system.HighlightCode("sh", r.ExecAndWait)
-		fmt.Println(code)
-
-		isSafe := false
-		command := r.ExecAndWait
-		if m.GetExecConfirm() {
-			isSafe, command = m.confirmedToExec(r.ExecAndWait, "Execute this command?", true)
-		} else {
-			isSafe = true
-		}
-		if isSafe {
-			m.ExecWaitCapture(command)
-		} else {
-			m.Status = ""
-			return false
-		}
-	}
-
-	// observe or prepared mode
-	if r.PasteMultilineContent != "" {
-		code, _ := system.HighlightCode("txt", r.PasteMultilineContent)
-		fmt.Println(code)
-
-		isSafe := false
-		if m.GetPasteMultilineConfirm() {
-			isSafe, _ = m.confirmedToExec(r.PasteMultilineContent, "Paste multiline content?", false)
-		} else {
-			isSafe = true
-		}
-
-		if isSafe {
-			m.Println("Pasting...")
-			system.TmuxSendCommandToPane(m.ExecPane.Id, r.PasteMultilineContent, true)
-			time.Sleep(1 * time.Second)
-		} else {
-			m.Status = ""
-			return false
 		}
 	}
 
@@ -213,13 +230,21 @@ func (m *Manager) ProcessUserMessage(message string) bool {
 		return false
 	}
 
-	if !m.WatchMode {
-		accomplished := m.ProcessUserMessage("sending updated pane(s) content")
-		if accomplished {
-			return true
-		}
+	if r.StopAgenticLoop {
+		m.Status = ""
+		return true
 	}
-	return false
+	accomplished := m.ProcessUserMessage("sending updated pane(s) content")
+	return accomplished
+
+	// this is the agentic loop
+	// only when watch mode is false and there are tool calls
+	// if !m.WatchMode && len(r.ToolCalls) > 0 {
+	// 	accomplished := m.ProcessUserMessage("sending updated pane(s) content")
+	// 	if accomplished {
+	// 		return true
+	// 	}
+	// }
 }
 
 func (m *Manager) startWatchMode(desc string) {
@@ -244,15 +269,15 @@ func (m *Manager) startWatchMode(desc string) {
 }
 
 func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
-	// Check if only one boolean is true in AI response
+	// Count boolean flags
 	boolCount := 0
-	if r.RequestAccomplished {
-		boolCount++
-	}
 	if r.ExecPaneSeemsBusy {
 		boolCount++
 	}
 	if r.WaitingForUserResponse {
+		boolCount++
+	}
+	if r.RequestAccomplished {
 		boolCount++
 	}
 	if r.NoComment {
@@ -263,41 +288,49 @@ func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
 		return "You didn't follow the guidelines. Only one boolean flag should be set to true in your response. Pay attention!", false
 	}
 
-	// Check if only one tag is used
-	tags := []int{len(r.ExecCommand), len(r.SendKeys), len(r.PasteMultilineContent), len(r.ExecAndWait)}
-	count := 0
-	for _, len := range tags {
-		if len > 0 {
-			count++
+	// Count tool call types
+	toolCallTypes := make(map[string]int)
+	for _, call := range r.ToolCalls {
+		toolCallTypes[call.Type]++
+	}
+
+	// Check if multiple types of tool calls are used
+	typeCount := len(toolCallTypes)
+
+	// In watch mode, no tool calls are expected except possibly ChangeState
+	if m.WatchMode {
+		// If any tool call other than ChangeState with NoComment is used, reject
+		if typeCount > 0 && !(typeCount == 1 && toolCallTypes["ChangeState"] == 1) {
+			return "You didn't follow the guidelines. In watch mode, you should only use ChangeState if needed. Pay attention!", false
 		}
-	}
-
-	if count > 1 {
-		return "You didn't follow the guidelines. You can only use one type of XML tag in your response. Pay attention!", false
-	}
-
-	// watch mode has no xml tags, otherwise should be at least 1 xml tag in response
-	if !m.WatchMode && count+boolCount == 0 {
-		return "You didn't follow the guidelines. You must use at least one XML tag in your response. Pay attention!", false
+	} else {
+		// Normal mode - there should be at least one tool call or boolean flag
+		if typeCount+boolCount == 0 {
+			return "You didn't follow the guidelines. You must call at least one function in your response. Pay attention!", false
+		}
 	}
 
 	// Check if ExecCommand elements have max 120 characters
-	for _, cmd := range r.ExecCommand {
-		if len(cmd) > 120 {
-			return fmt.Sprintf("You didn't follow the guidelines. ExecCommand content should have max 120 characters, but you provided %d characters: Pay attention!", len(cmd)), false
+	for _, call := range r.ToolCalls {
+		if call.Type == "ExecCommand" && len(call.Content) > 120 {
+			return fmt.Sprintf("You didn't follow the guidelines. ExecCommand content should have max 120 characters, but you provided %d characters: Pay attention!", len(call.Content)), false
 		}
 	}
 
-	// Check if TmuxSendKeys elements have max 30 characters
-	for _, key := range r.SendKeys {
-		if len(key) > 120 {
-			return fmt.Sprintf("You didn't follow the guidelines. TmuxSendKeys content should have max 30 characters, but you provided %d characters: Pay attention!", len(key)), false
+	// Check if TmuxSendKeys elements have max 120 characters
+	tmuxSendKeysCount := 0
+	for _, call := range r.ToolCalls {
+		if call.Type == "TmuxSendKeys" {
+			tmuxSendKeysCount++
+			if len(call.Content) > 120 {
+				return fmt.Sprintf("You didn't follow the guidelines. TmuxSendKeys content should have max 120 characters, but you provided %d characters: Pay attention!", len(call.Content)), false
+			}
 		}
 	}
 
 	// Check if there are max 5 TmuxSendKeys elements
-	if len(r.SendKeys) > 5 {
-		return fmt.Sprintf("You didn't follow the guidelines. There should be max 5 TmuxSendKeys elements, but you provided %d elements. Pay attention!", len(r.SendKeys)), false
+	if tmuxSendKeysCount > 5 {
+		return fmt.Sprintf("You didn't follow the guidelines. There should be max 5 TmuxSendKeys calls, but you provided %d calls. Pay attention!", tmuxSendKeysCount), false
 	}
 
 	return "", true

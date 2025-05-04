@@ -12,8 +12,8 @@ import (
 // - Inline code is rendered with a gray background and yellow text (ANSI codes).
 // All other text is left as-is.
 func Cosmetics(message string) string {
-	// Regex for code blocks: ```lang\ncode\n```
-	codeBlockRe := regexp.MustCompile("(?s)```([a-zA-Z0-9]*)\\n(.*?)\\n```")
+	// Regex for code blocks: ```lang\ncode\n``` (allowing spaces before the backticks)
+	codeBlockRe := regexp.MustCompile(`(?s)\x60{3}([a-zA-Z0-9]*)\s*\n(.*?)\s*\n\x60{3}`)
 	// Regex for inline code: `code`
 	inlineCodeRe := regexp.MustCompile("`([^`]+)`")
 
@@ -39,7 +39,7 @@ func Cosmetics(message string) string {
 		highlighted, err := HighlightCode(lang, code)
 		if err != nil {
 			// Fallback: print as plain code block
-			highlighted = fmt.Sprintf("```%s\n%s\n```", lang, code)
+			highlighted = fmt.Sprintf("\n%s\n", code)
 		}
 		result += highlighted
 		lastIndex = end
@@ -52,9 +52,9 @@ func Cosmetics(message string) string {
 // processInlineCode finds inline code (single backticks) and applies ANSI formatting.
 func processInlineCode(text string, inlineCodeRe *regexp.Regexp) string {
 	const (
-		bgGray   = "\033[48;5;240m"
-		fgYellow = "\033[38;5;226m"
-		reset    = "\033[0m"
+		bgDarkBlue = "\033[48;5;235m"
+		fgCyan     = "\033[38;5;51m"
+		reset      = "\033[0m"
 	)
 	result := ""
 	lastIndex := 0
@@ -66,7 +66,7 @@ func processInlineCode(text string, inlineCodeRe *regexp.Regexp) string {
 		result += text[lastIndex:start]
 		// Add formatted inline code
 		code := text[codeStart:codeEnd]
-		result += bgGray + fgYellow + code + reset
+		result += bgDarkBlue + fgCyan + code + reset
 		lastIndex = end
 	}
 	// Add any remaining text

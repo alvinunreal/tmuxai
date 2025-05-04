@@ -119,7 +119,7 @@ func (m *Manager) summarizeChatHistory(messages []ChatMessage) (string, error) {
 		},
 	}
 
-	summary, err := m.AiClient.GetResponseFromChatMessages(summarizationMessage, m.GetOpenRouterModel())
+	summary, err := m.AiClient.GetResponseFromChatMessages(summarizationMessage, m.GetOpenRouterModel(), nil)
 	if err != nil {
 		return "", err
 	}

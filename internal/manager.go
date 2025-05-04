@@ -14,14 +14,20 @@ import (
 
 type AIResponse struct {
 	Message                string
-	SendKeys               []string
-	ExecCommand            []string
-	PasteMultilineContent  string
-	ExecAndWait            string
+	ToolCalls              []AIToolCall
+	StartCountdown         bool
+	StopAgenticLoop        bool
+	WorkingOnUserRequest   bool
 	RequestAccomplished    bool
 	ExecPaneSeemsBusy      bool
 	WaitingForUserResponse bool
 	NoComment              bool
+}
+
+type AIToolCall struct {
+	Type       string // "TmuxSendKeys", "ExecCommand", "PasteMultilineContent", "ExecAndWait", "ChangeState"
+	Content    string
+	StateValue string // Used for ChangeState (ExecPaneSeemsBusy, WaitingForUserResponse, RequestAccomplished, NoComment)
 }
 
 // Parsed only when pane is prepared
@@ -47,9 +53,9 @@ type Manager struct {
 
 // NewManager creates a new manager agent
 func NewManager(cfg *config.Config) (*Manager, error) {
-	if cfg.OpenRouter.APIKey == "" {
-		fmt.Println("OpenRouter API key is required. Set it in the config file or as an environment variable: TMUXAI_OPENROUTER_API_KEY")
-		return nil, fmt.Errorf("OpenRouter API key is required")
+	if cfg.OpenRouter.APIKey == "" && cfg.ApiKey == "" {
+		fmt.Println("API key is required. Set it in the config file or as an environment variable: TMUXAI_OPENROUTER_API_KEY or TMUXAI_API_KEY")
+		return nil, fmt.Errorf("API key is required")
 	}
 
 	paneId, err := system.TmuxCurrentPaneId()
@@ -72,7 +78,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		os.Exit(0)
 	}
 
-	aiClient := NewAiClient(&cfg.OpenRouter)
+	aiClient := NewAiClient(cfg)
 	os := system.GetOSDetails()
 
 	manager := &Manager{
@@ -143,20 +149,16 @@ func (m *Manager) GetPrompt() string {
 func (ai *AIResponse) String() string {
 	return fmt.Sprintf(`
 	Message: %s
-	SendKeys: %v
-	ExecCommand: %v
-	PasteMultilineContent: %s
-	ExecAndWait: %s
+	ToolCalls: %v
+	WorkingOnUserRequest: %v
 	RequestAccomplished: %v
 	ExecPaneSeemsBusy: %v
 	WaitingForUserResponse: %v
 	NoComment: %v
 `,
 		ai.Message,
-		ai.SendKeys,
-		ai.ExecCommand,
-		ai.PasteMultilineContent,
-		ai.ExecAndWait,
+		ai.ToolCalls,
+		ai.WorkingOnUserRequest,
 		ai.RequestAccomplished,
 		ai.ExecPaneSeemsBusy,
 		ai.WaitingForUserResponse,
