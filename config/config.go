@@ -106,6 +106,8 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	ResolveEnvKeyInConfig(config)
+
 	return config, nil
 }
 
@@ -211,4 +213,25 @@ func TryInferType(key, value string) any {
 		}
 	}
 	return typedValue
+}
+
+// ResolveEnvKeyInConfig recursively expands environment variables in all string fields of the config struct.
+func ResolveEnvKeyInConfig(cfg *Config) {
+	val := reflect.ValueOf(cfg).Elem()
+	resolveEnvKeyReferenceInValue(val)
+}
+
+func resolveEnvKeyReferenceInValue(val reflect.Value) {
+	switch val.Kind() {
+	case reflect.String:
+		val.SetString(os.ExpandEnv(val.String()))
+	case reflect.Struct:
+		for i := 0; i < val.NumField(); i++ {
+			resolveEnvKeyReferenceInValue(val.Field(i))
+		}
+	case reflect.Ptr:
+		if !val.IsNil() {
+			resolveEnvKeyReferenceInValue(val.Elem())
+		}
+	}
 }
