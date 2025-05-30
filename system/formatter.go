@@ -12,7 +12,6 @@ type InfoFormatter struct {
 	// Color schemes
 	HeaderColor  *color.Color
 	LabelColor   *color.Color
-	ValueColor   *color.Color
 	SuccessColor *color.Color
 	WarningColor *color.Color
 	ErrorColor   *color.Color
@@ -22,13 +21,12 @@ type InfoFormatter struct {
 // NewInfoFormatter creates a new formatter with default color schemes
 func NewInfoFormatter() *InfoFormatter {
 	return &InfoFormatter{
-		HeaderColor:  color.New(color.FgHiCyan, color.Bold),
-		LabelColor:   color.New(color.FgHiBlue),
-		ValueColor:   color.New(color.FgHiWhite),
-		SuccessColor: color.New(color.FgHiGreen),
-		WarningColor: color.New(color.FgHiYellow),
-		ErrorColor:   color.New(color.FgHiRed),
-		NeutralColor: color.New(color.FgHiBlack),
+		HeaderColor:  color.New(color.FgCyan, color.Bold),
+		LabelColor:   color.New(color.FgBlue, color.Bold),
+		SuccessColor: color.New(color.FgGreen, color.Bold),
+		WarningColor: color.New(color.FgYellow, color.Bold),
+		ErrorColor:   color.New(color.FgRed, color.Bold),
+		NeutralColor: color.New(color.FgBlue),
 	}
 }
 
@@ -43,7 +41,7 @@ func (f *InfoFormatter) FormatSection(title string) string {
 func (f *InfoFormatter) FormatKeyValue(key string, value interface{}) string {
 	return fmt.Sprintf("%s %s\n",
 		f.LabelColor.Sprintf("%-16s:", key),
-		f.ValueColor.Sprint(value))
+		fmt.Sprint(value))
 }
 
 // FormatProgressBar generates a visual indicator for percentage values
@@ -80,7 +78,7 @@ func (f *InfoFormatter) FormatProgressBar(percent float64, width int) string {
 		bar += f.NeutralColor.Sprint(strings.Repeat("░", width-filled))
 	}
 
-	return fmt.Sprintf("%s %s", bar, f.ValueColor.Sprintf("%.1f%%", percent))
+	return fmt.Sprintf("%s %.1f%%", bar, percent)
 }
 
 // FormatBool formats boolean values with color
@@ -88,5 +86,5 @@ func (f *InfoFormatter) FormatBool(value bool) string {
 	if value {
 		return f.SuccessColor.Sprint("yes")
 	}
-	return f.NeutralColor.Sprint("no")
+	return color.New(color.FgMagenta).Sprint("no")
 }

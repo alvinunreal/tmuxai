@@ -12,7 +12,6 @@ import (
 	"github.com/alvinunreal/tmuxai/config"
 	"github.com/alvinunreal/tmuxai/logger"
 	"github.com/chzyer/readline"
-	"github.com/fatih/color"
 )
 
 // Message represents a chat message
@@ -86,10 +85,8 @@ func (c *CLIInterface) Start(initMessage string) error {
 
 // printWelcomeMessage prints a welcome message
 func (c *CLIInterface) printWelcomeMessage() {
-	infoColor := color.New(color.FgHiWhite)
 	fmt.Println()
-
-	infoColor.Println("Type '/help' for a list of commands, '/exit' to quit")
+	fmt.Println("Type '/help' for a list of commands, '/exit' to quit")
 	fmt.Println()
 }
 

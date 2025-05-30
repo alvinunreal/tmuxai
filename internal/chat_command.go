@@ -164,7 +164,7 @@ func (m *Manager) formatInfo() {
 	formatLine := func(key string, value any) {
 		fmt.Print(formatter.LabelColor.Sprintf("%-*s", labelWidth, key))
 		fmt.Print("  ")
-		fmt.Println(formatter.ValueColor.Sprint(value))
+		fmt.Println(value)
 	}
 	// Display general information
 	fmt.Println(formatter.FormatSection("\nGeneral"))
@@ -186,7 +186,7 @@ func (m *Manager) formatInfo() {
 	}
 	fmt.Print(formatter.LabelColor.Sprintf("%-*s", labelWidth, "Context Size~"))
 	fmt.Print("  ") // Two spaces for separation
-	fmt.Printf("%s\n", formatter.ValueColor.Sprintf("%d tokens", totalTokens))
+	fmt.Printf("%s\n", fmt.Sprintf("%d tokens", totalTokens))
 	fmt.Printf("%-*s  %s\n", labelWidth, "", formatter.FormatProgressBar(usagePercent, 10))
 	formatLine("Max Size", fmt.Sprintf("%d tokens", m.GetMaxContextSize()))
 

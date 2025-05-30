@@ -10,9 +10,9 @@ import (
 )
 
 func (m *Manager) Countdown(seconds int) {
-	highlightColor := color.New(color.FgHiYellow).SprintFunc()
-	dimColor := color.New(color.FgHiBlack).SprintFunc()
-	pauseColor := color.New(color.FgHiRed).SprintFunc()
+	highlightColor := color.New(color.FgYellow, color.Bold).SprintFunc()
+	dimColor := color.New(color.FgBlue).SprintFunc()
+	pauseColor := color.New(color.FgRed, color.Bold).SprintFunc()
 
 	// Set up keyboard
 	if err := keyboard.Open(); err != nil {

@@ -15,7 +15,7 @@ func (m *Manager) confirmedToExec(command string, prompt string, edit bool) (boo
 		return true, command
 	}
 
-	promptColor := color.New(color.FgHiCyan)
+	promptColor := color.New(color.FgCyan, color.Bold)
 
 	var promptText string
 	if edit {

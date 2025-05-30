@@ -74,7 +74,7 @@ func (p *TmuxPaneDetails) FormatInfo(f *InfoFormatter) string {
 	formatLine := func(key string, value any) {
 		builder.WriteString(f.LabelColor.Sprintf("%-*s", labelWidth, key))
 		builder.WriteString("  ")
-		builder.WriteString(f.ValueColor.Sprint(value))
+		builder.WriteString(value.(string))
 		builder.WriteString("\n")
 	}
 
