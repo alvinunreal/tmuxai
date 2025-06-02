@@ -12,17 +12,18 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Debug                 bool             `mapstructure:"debug"`
-	MaxCaptureLines       int              `mapstructure:"max_capture_lines"`
-	MaxContextSize        int              `mapstructure:"max_context_size"`
-	WaitInterval          int              `mapstructure:"wait_interval"`
-	SendKeysConfirm       bool             `mapstructure:"send_keys_confirm"`
-	PasteMultilineConfirm bool             `mapstructure:"paste_multiline_confirm"`
-	ExecConfirm           bool             `mapstructure:"exec_confirm"`
-	WhitelistPatterns     []string         `mapstructure:"whitelist_patterns"`
-	BlacklistPatterns     []string         `mapstructure:"blacklist_patterns"`
-	OpenRouter            OpenRouterConfig `mapstructure:"openrouter"`
-	Prompts               PromptsConfig    `mapstructure:"prompts"`
+	Debug                 bool                 `mapstructure:"debug"`
+	MaxCaptureLines       int                  `mapstructure:"max_capture_lines"`
+	MaxContextSize        int                  `mapstructure:"max_context_size"`
+	WaitInterval          int                  `mapstructure:"wait_interval"`
+	SendKeysConfirm       bool                 `mapstructure:"send_keys_confirm"`
+	PasteMultilineConfirm bool                 `mapstructure:"paste_multiline_confirm"`
+	ExecConfirm           bool                 `mapstructure:"exec_confirm"`
+	WhitelistPatterns     []string             `mapstructure:"whitelist_patterns"`
+	BlacklistPatterns     []string             `mapstructure:"blacklist_patterns"`
+	OpenRouter            OpenRouterConfig     `mapstructure:"openrouter"`
+	Prompts               PromptsConfig        `mapstructure:"prompts"`
+	PollinationsAI        PollinationsAIConfig `mapstructure:"pollinations_ai"`
 }
 
 // OpenRouterConfig holds OpenRouter API configuration
@@ -39,6 +40,11 @@ type PromptsConfig struct {
 	ChatAssistantPrepared string `mapstructure:"chat_assistant_prepared"`
 	Watch                 string `mapstructure:"watch"`
 }
+
+// PollinationsAIConfig holds Pollinations.ai API configuration
+// Da keine API Keys benötigt werden, ist die Struktur leer
+// (früher: APIKey string `mapstructure:"api_key"`)
+type PollinationsAIConfig struct{}
 
 // DefaultConfig returns a configuration with default values
 func DefaultConfig() *Config {
@@ -60,6 +66,7 @@ func DefaultConfig() *Config {
 			BaseSystem:    ``,
 			ChatAssistant: ``,
 		},
+		PollinationsAI: PollinationsAIConfig{},
 	}
 }
 

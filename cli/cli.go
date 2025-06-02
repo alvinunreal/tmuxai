@@ -70,6 +70,8 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().StringVarP(&taskFileFlag, "file", "f", "", "Read request from specified file")
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
+	// Add flag to select AI provider
+	rootCmd.Flags().String("ai-provider", "openrouter", "Select AI provider (openrouter, pollinations_ai)")
 }
 
 func Execute() error {
