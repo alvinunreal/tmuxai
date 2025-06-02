@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/alvinunreal/tmuxai/config"
-	"github.com/alvinunreal/tmuxai/logger"
-	"github.com/chzyer/readline"
+	"github.com/nyaosorg/go-readline-ny"
+	"github.com/nyaosorg/go-readline-ny/completion"
+	"github.com/nyaosorg/go-readline-ny/keys"
+	"github.com/nyaosorg/go-readline-ny/simplehistory"
 )
 
 // Message represents a chat message
@@ -37,30 +39,42 @@ func NewCLIInterface(manager *Manager) *CLIInterface {
 func (c *CLIInterface) Start(initMessage string) error {
 	c.printWelcomeMessage()
 
-	rl, err := readline.NewEx(&readline.Config{
-		Prompt:                 c.manager.GetPrompt(),
-		HistoryFile:            config.GetConfigFilePath("history"),
-		HistorySearchFold:      true,
-		InterruptPrompt:        "^C",
-		EOFPrompt:              "exit",
-		DisableAutoSaveHistory: false,
-		AutoComplete:           c.newCompleter(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to initialize readline: %w", err)
+	// Initialize history
+	history := simplehistory.New()
+	historyFilePath := config.GetConfigFilePath("history")
+
+	// Load history from file if it exists
+	if historyData, err := os.ReadFile(historyFilePath); err == nil {
+		for _, line := range strings.Split(string(historyData), "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				history.Add(line)
+			}
+		}
 	}
-	defer rl.Close()
+
+	// Initialize editor
+	editor := &readline.Editor{
+		PromptWriter: func(w io.Writer) (int, error) {
+			return io.WriteString(w, c.manager.GetPrompt())
+		},
+		History:        history,
+		HistoryCycling: true,
+	}
+
+	// Bind TAB key to completion
+	editor.BindKey(keys.CtrlI, c.newCompleter())
 
 	if initMessage != "" {
 		fmt.Printf("%s%s\n", c.manager.GetPrompt(), initMessage)
 		c.processInput(initMessage)
 	}
 
-	for {
-		rl.SetPrompt(c.manager.GetPrompt())
+	ctx := context.Background()
 
-		line, err := rl.Readline()
-		if err == readline.ErrInterrupt {
+	for {
+		line, err := editor.ReadLine(ctx)
+
+		if err == readline.CtrlC {
 			// Ctrl+C pressed, clear the line and continue
 			continue
 		} else if err == io.EOF {
@@ -70,15 +84,31 @@ func (c *CLIInterface) Start(initMessage string) error {
 			return err
 		}
 
-		input := strings.TrimSpace(line)
-		if input == "exit" || input == "quit" {
+		// Save history
+		if line != "" {
+			history.Add(line)
+
+			// Build history data by iterating through all entries
+			historyLines := make([]string, 0, history.Len())
+			for i := 0; i < history.Len(); i++ {
+				historyLines = append(historyLines, history.At(i))
+			}
+			historyData := strings.Join(historyLines, "\n")
+			os.WriteFile(historyFilePath, []byte(historyData), 0644)
+		}
+
+		// Process the input (preserving multiline content)
+		input := line // Keep the original line including newlines
+
+		// Check for exit/quit commands (only if it's the entire line content)
+		trimmed := strings.TrimSpace(input)
+		if trimmed == "exit" || trimmed == "quit" {
 			return nil
 		}
-		if input == "" {
+		if trimmed == "" {
 			continue
 		}
 
-		logger.Debug("Processing User input: %s", input)
 		c.processInput(input)
 	}
 }
@@ -128,33 +158,26 @@ func (c *CLIInterface) processInput(input string) {
 	signal.Stop(sigChan)
 }
 
-// newCompleter creates a readline.AutoCompleter for command completion
-func (c *CLIInterface) newCompleter() readline.AutoCompleter {
-	configCompleter := readline.PcItem("/config",
-		readline.PcItem("set",
-			readline.PcItemDynamic(func(_ string) []string {
-				// Only return the allowed keys
-				return AllowedConfigKeys
-			}),
-		),
-		readline.PcItem("get",
-			readline.PcItemDynamic(func(_ string) []string {
-				// Only return the allowed keys
-				return AllowedConfigKeys
-			}),
-		),
-	)
+// newCompleter creates a completion handler for command completion
+func (c *CLIInterface) newCompleter() *completion.CmdCompletionOrList2 {
+	return &completion.CmdCompletionOrList2{
+		Delimiter: " ",
+		Postfix:   " ",
+		Candidates: func(field []string) (forComp []string, forList []string) {
+			// Handle top-level commands
+			if len(field) == 0 || (len(field) == 1 && !strings.HasSuffix(field[0], " ")) {
+				return commands, commands
+			}
 
-	// Create completers for each base command using the global subCommands variable
-	completers := make([]readline.PrefixCompleterInterface, 0, len(commands))
-	for _, cmd := range commands {
-		// Special handling for config to add nested completion
-		if cmd == "/config" {
-			completers = append(completers, configCompleter)
-		} else {
-			completers = append(completers, readline.PcItem(cmd))
-		}
+			// Handle /config subcommands
+			if len(field) > 0 && field[0] == "/config" {
+				if len(field) == 1 || (len(field) == 2 && !strings.HasSuffix(field[1], " ")) {
+					return []string{"set", "get"}, []string{"set", "get"}
+				} else if len(field) == 2 || (len(field) == 3 && !strings.HasSuffix(field[2], " ")) {
+					return AllowedConfigKeys, AllowedConfigKeys
+				}
+			}
+			return nil, nil
+		},
 	}
-
-	return readline.NewPrefixCompleter(completers...)
 }
