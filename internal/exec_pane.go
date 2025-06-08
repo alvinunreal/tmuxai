@@ -12,77 +12,277 @@ import (
 	"github.com/alvinunreal/tmuxai/system"
 )
 
-// GetAvailablePane finds an available pane or creates a new one if none are available
-func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
-	panes, _ := m.GetTmuxPanes()
-	for _, pane := range panes {
-		if !pane.IsTmuxAiPane {
-			logger.Info("Found available pane: %s", pane.Id)
-			return pane
+// refreshExecPaneDetails updates the ExecPane's details, including content.
+func (m *Manager) refreshExecPaneDetails() error {
+	if m.ExecPane == nil || m.ExecPane.Id == "" {
+		return fmt.Errorf("exec pane not initialized")
+	}
+
+	content, err := m.Mux.CapturePane(m.ExecPane.Id, m.GetMaxCaptureLines())
+	if err != nil {
+		logger.Error("Failed to capture exec pane %s content: %v", m.ExecPane.Id, err)
+		// Keep stale content if capture fails, or clear it? For now, keep.
+		// m.ExecPane.Content = "" // Or some error message
+	} else {
+		m.ExecPane.Content = content
+		lines := strings.Split(strings.TrimSpace(content), "\n")
+		if len(lines) > 0 {
+			m.ExecPane.LastLine = lines[len(lines)-1]
+		} else {
+			m.ExecPane.LastLine = ""
 		}
 	}
 
-	return system.TmuxPaneDetails{}
+	// Get other details like PID, command, etc.
+	// This might overwrite Content if PaneDetails from GetPaneDetails also includes it.
+	// Ensure CapturePane's content is preserved or GetPaneDetails doesn't fetch full content.
+	// For now, assume GetPaneDetails provides metadata primarily.
+	details, err := m.Mux.GetPaneDetails(m.ExecPane.Id)
+	if err != nil {
+		logger.Error("Failed to get exec pane %s details: %v", m.ExecPane.Id, err)
+		return fmt.Errorf("failed to get exec pane details for %s: %w", m.ExecPane.Id, err)
+	}
+
+	if len(details) > 0 {
+		originalContent := m.ExecPane.Content // Preserve captured content
+		originalLastLine := m.ExecPane.LastLine
+		isPrepared := m.ExecPane.IsPrepared // Preserve IsPrepared status
+
+		*m.ExecPane = details[0] // Update metadata
+
+		m.ExecPane.Content = originalContent // Restore potentially more complete captured content
+		m.ExecPane.LastLine = originalLastLine
+		m.ExecPane.IsPrepared = isPrepared // Restore IsPrepared
+	} else {
+		logger.Warning("No details returned for exec pane %s", m.ExecPane.Id)
+		return fmt.Errorf("no details returned for exec pane %s", m.ExecPane.Id)
+	}
+	return nil
+}
+
+
+// GetAvailablePane finds an available pane (not the AI pane itself).
+// It prefers a pane that is not the current AI pane.
+func (m *Manager) GetAvailablePane() (system.PaneDetails, error) {
+	// Uses GetCurrentWindowPanes, which uses m.Mux.GetPaneDetails
+	panes, err := m.GetCurrentWindowPanes()
+	if err != nil {
+		logger.Error("Failed to get current window panes: %v", err)
+		return system.PaneDetails{}, err
+	}
+
+	for _, pane := range panes {
+		// IsTmuxAiPane is set by GetCurrentWindowPanes
+		if !pane.IsTmuxAiPane {
+			logger.Info("Found available pane: %s", pane.Id)
+			return pane, nil
+		}
+	}
+	// If only the AI pane exists, that's an issue handled by InitExecPane creating a new one.
+	return system.PaneDetails{}, fmt.Errorf("no available pane found (other than the AI pane itself)")
 }
 
 func (m *Manager) InitExecPane() {
-	availablePane := m.GetAvailablePane()
-	if availablePane.Id == "" {
-		system.TmuxCreateNewPane(m.PaneId)
-		availablePane = m.GetAvailablePane()
+	if m.ExecPane == nil { // Should have been initialized to &system.PaneDetails{} in NewManager
+		m.ExecPane = &system.PaneDetails{}
 	}
-	m.ExecPane = &availablePane
+
+	availablePane, err := m.GetAvailablePane()
+	if err != nil || availablePane.Id == "" {
+		logger.Info("No suitable existing pane found or error: %v. Creating new pane for execution.", err)
+		newPaneId, createErr := m.Mux.CreateNewPane(m.CurrentPaneId, "") // No specific command for exec pane initially
+		if createErr != nil {
+			logger.Fatal("Failed to create new exec pane: %v", createErr)
+			// This is a fatal error, tmuxai cannot function without an exec pane.
+			// Consider how to handle this, perhaps by exiting or returning an error up the chain.
+			// For now, assume logger.Fatal exits or panics.
+			return
+		}
+		logger.Info("Created new exec pane with ID: %s", newPaneId)
+		// After creating, we need its details.
+		newPaneDetails, detailsErr := m.Mux.GetPaneDetails(newPaneId)
+		if detailsErr != nil || len(newPaneDetails) == 0 {
+			logger.Fatal("Failed to get details for newly created exec pane %s: %v", newPaneId, detailsErr)
+			return
+		}
+		m.ExecPane = &newPaneDetails[0]
+	} else {
+		logger.Info("Using existing pane %s as exec pane.", availablePane.Id)
+		m.ExecPane = &availablePane
+	}
+	m.ExecPane.IsTmuxAiExecPane = true // Mark it as such
+	// Preparation (like setting PS1) will be done in PrepareExecPane
 }
 
+
 func (m *Manager) PrepareExecPane() {
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
-	if m.ExecPane.IsPrepared && m.ExecPane.Shell != "" {
+	if m.ExecPane == nil || m.ExecPane.Id == "" {
+		logger.Error("PrepareExecPane: ExecPane not initialized.")
 		return
 	}
 
-	shellCommand := m.ExecPane.CurrentCommand
+	if err := m.refreshExecPaneDetails(); err != nil {
+		logger.Error("PrepareExecPane: Failed to refresh exec pane details: %v", err)
+		// Decide if we can proceed or should return.
+		// If shell is not known, PS1 modification might fail or be incorrect.
+	}
+
+	if m.ExecPane.IsPrepared && m.ExecPane.Shell != "" {
+		logger.Debug("Exec pane %s already prepared for shell %s.", m.ExecPane.Id, m.ExecPane.Shell)
+		return
+	}
+
+	shellCommand := m.ExecPane.Shell // Shell should be populated by refreshExecPaneDetails via GetPaneDetails
+	if shellCommand == "" {
+		// Attempt to get it again if it was empty
+		details, err := m.Mux.GetPaneDetails(m.ExecPane.Id)
+		if err == nil && len(details) > 0 {
+			shellCommand = details[0].Shell
+			m.ExecPane.Shell = shellCommand // Update it
+		}
+		if shellCommand == "" {
+			logger.Warning("PrepareExecPane: Shell type for exec pane %s is unknown. Cannot set custom PS1.", m.ExecPane.Id)
+			return
+		}
+	}
+
+
 	var ps1Command string
 	switch shellCommand {
-	case "zsh":
-		ps1Command = `export PROMPT='%n@%m:%~[%T][%?]» '`
-	case "bash":
-		ps1Command = `export PS1='\u@\h:\w[\A][$?]» '`
+	case "zsh", "bash": // Assuming similar PS1 setup for simplicity here
+		// This PS1 is basic. A more robust one would check existing PS1 or use shell-specific methods.
+		// Example PS1 that includes status code, time, user, host, path
+		// For bash: export PS1='\[\e[32m\]\u@\h\[\e[00m\]:\[\e[34m\]\w\[\e[00m\][\A][\$?]» '
+		// For zsh: export PROMPT='%F{green}%n@%m%f:%F{blue}%~%f[%D{%H:%M}][%?]» '
+		// Using a simpler, compatible version for now.
+		ps1Command = `PS1='AIReady[%?]» '`
+		if shellCommand == "zsh" {
+			ps1Command = `PROMPT='AIReady[%?]» '`
+		}
+
 	case "fish":
-		ps1Command = `function fish_prompt; set -l s $status; printf '%s@%s:%s[%s][%d]» ' $USER (hostname -s) (prompt_pwd) (date +"%H:%M") $s; end`
+		// Fish prompt is a function.
+		ps1Command = `function fish_prompt; set -l last_status $status; echo "AIReady["$last_status"]» "; end`
 	default:
-		errMsg := fmt.Sprintf("Shell '%s' in pane %s is recognized but not yet supported for PS1 modification.", shellCommand, m.ExecPane.Id)
-		logger.Info(errMsg)
-		return
+		logger.Info("Shell '%s' in exec pane %s is recognized but not yet supported for PS1 modification by this agent.", shellCommand, m.ExecPane.Id)
+		// We can still mark it as prepared if we don't want to enforce PS1 for all shells.
+		// m.ExecPane.IsPrepared = true
+		return // Or, don't set IsPrepared and let user handle it.
 	}
 
-	system.TmuxSendCommandToPane(m.ExecPane.Id, ps1Command, true)
-	system.TmuxSendCommandToPane(m.ExecPane.Id, "C-l", false)
+	logger.Debug("Preparing exec pane %s (shell: %s) with PS1 command: %s", m.ExecPane.Id, shellCommand, ps1Command)
+	if err := m.Mux.SendCommandToPane(m.ExecPane.Id, ps1Command, true); err != nil {
+		logger.Error("Failed to set PS1 for exec pane %s: %v", m.ExecPane.Id, err)
+		return
+	}
+	// Send Ctrl+L to clear the screen after setting PS1
+	if err := m.Mux.SendCommandToPane(m.ExecPane.Id, "C-l", false); err != nil {
+		logger.Warning("Failed to send Ctrl-L to exec pane %s after PS1 set: %v", m.ExecPane.Id, err)
+	}
+	m.ExecPane.IsPrepared = true
+	logger.Info("Exec pane %s prepared for shell %s.", m.ExecPane.Id, shellCommand)
 }
 
 func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
-	system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
+	if m.ExecPane == nil || m.ExecPane.Id == "" {
+		return CommandExecHistory{}, fmt.Errorf("exec pane not initialized")
+	}
+	if !m.ExecPane.IsPrepared {
+		logger.Warning("ExecWaitCapture: Exec pane %s is not prepared (PS1 might not be set). Prompt detection may fail.", m.ExecPane.Id)
+	}
 
-	m.Println("")
+	if err := m.Mux.SendCommandToPane(m.ExecPane.Id, command, true); err != nil {
+		return CommandExecHistory{}, fmt.Errorf("failed to send command to exec pane %s: %w", m.ExecPane.Id, err)
+	}
+
+	// Initial refresh to get the command echo if possible
+	if err := m.refreshExecPaneDetails(); err != nil {
+		logger.Warning("ExecWaitCapture: Failed to refresh exec pane details after sending command: %v", err)
+	}
+
+	m.Println("") // Newline in the AI pane for cleaner status update
 
 	animChars := []string{"⋯", "⋱", "⋮", "⋰"}
 	animIndex := 0
-	for !strings.HasSuffix(m.ExecPane.LastLine, "]»") && m.Status != "" {
+	startTime := time.Now()
+	// Check for prompt, but also a timeout to avoid infinite loop
+	// The prompt format 'AIReady[%?]» ' is what we expect after PrepareExecPane
+	expectedPromptSuffix := "]» " // Ensure there's a space if PS1 ends with it.
+								 // The regex in parseExecPaneCommandHistory handles optional space.
+
+	for {
+		if m.Status == "" { // Manager stopped
+			return CommandExecHistory{}, fmt.Errorf("manager stopped while waiting for command execution")
+		}
+		if time.Since(startTime) > m.GetCommandTimeout() {
+			logger.Error("ExecWaitCapture: Timeout waiting for command '%s' to complete in exec pane %s.", command, m.ExecPane.Id)
+			// Attempt one last refresh and parse
+			m.refreshExecPaneDetails() // Best effort to get final state
+			m.parseExecPaneCommandHistory()
+			// Return the last command from history if any, or an error indicating timeout
+			if len(m.ExecHistory) > 0 {
+				return m.ExecHistory[len(m.ExecHistory)-1], fmt.Errorf("timeout waiting for command to complete, last known state parsed")
+			}
+			return CommandExecHistory{Command: command, Output: "Error: Timeout", Code: -1}, fmt.Errorf("timeout waiting for command to complete")
+		}
+
 		fmt.Printf("\r%s%s ", m.GetPrompt(), animChars[animIndex])
 		animIndex = (animIndex + 1) % len(animChars)
-		time.Sleep(500 * time.Millisecond)
-		m.ExecPane.Refresh(m.GetMaxCaptureLines())
-	}
-	fmt.Print("\r\033[K")
+		time.Sleep(500 * time.Millisecond) // Polling interval
 
+		if err := m.refreshExecPaneDetails(); err != nil {
+			logger.Warning("ExecWaitCapture: Error refreshing exec pane: %v. Retrying.", err)
+			continue
+		}
+
+		// Check if the last line of the refreshed content contains the prompt.
+		// The prompt is 'AIReady[STATUS_CODE]» '
+		// A more robust check might involve regex on m.ExecPane.LastLine
+		// For example: regexp.MatchString(`AIReady\[\d+\]» $`, m.ExecPane.LastLine)
+		if strings.Contains(m.ExecPane.LastLine, expectedPromptSuffix) && strings.HasPrefix(m.ExecPane.LastLine, "AIReady[") {
+			logger.Debug("ExecWaitCapture: Detected prompt suffix '%s' in last line: '%s'", expectedPromptSuffix, m.ExecPane.LastLine)
+			break
+		}
+	}
+	fmt.Print("\r\033[K") // Clear animation line
+
+	// Final refresh and parse
+	if err := m.refreshExecPaneDetails(); err != nil {
+		logger.Error("ExecWaitCapture: Failed to perform final refresh of exec pane %s: %v", m.ExecPane.Id, err)
+		// Attempt to parse with what we have
+	}
 	m.parseExecPaneCommandHistory()
-	cmd := m.ExecHistory[len(m.ExecHistory)-1]
-	logger.Debug("Command: %s\nOutput: %s\nCode: %d\n", cmd.Command, cmd.Output, cmd.Code)
-	return cmd, nil
+
+	if len(m.ExecHistory) == 0 {
+		logger.Error("ExecWaitCapture: Command history is empty after parsing exec pane %s for command '%s'. This indicates a parsing issue.", m.ExecPane.Id, command)
+		// This could happen if the prompt was detected but parsing failed to extract any command.
+		// Return a generic error or a dummy CommandExecHistory.
+		return CommandExecHistory{Command: command, Output: "Error: Failed to parse command output or no history found.", Code: -1},
+			fmt.Errorf("failed to parse command output from exec pane %s for command '%s'", m.ExecPane.Id, command)
+	}
+
+	// Assuming the last command in history is the one we just executed.
+	// This might need adjustment if commands can complete out of order or if history parsing is imperfect.
+	cmdResult := m.ExecHistory[len(m.ExecHistory)-1]
+	logger.Debug("Command executed: %s\nOutput: %s\nCode: %d\n", cmdResult.Command, cmdResult.Output, cmdResult.Code)
+	return cmdResult, nil
 }
 
+
 func (m *Manager) parseExecPaneCommandHistory() {
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
+	if m.ExecPane == nil || m.ExecPane.Id == "" {
+		logger.Error("parseExecPaneCommandHistory: ExecPane not initialized.")
+		return
+	}
+	// Ensure freshest content before parsing
+	if err := m.refreshExecPaneDetails(); err != nil {
+		logger.Error("parseExecPaneCommandHistory: Failed to refresh exec pane %s before parsing: %v", m.ExecPane.Id, err)
+		// Depending on severity, might return or try to parse stale content
+		if m.ExecPane.Content == "" { // If content is empty after failed refresh, nothing to parse
+			return
+		}
+	}
+
 
 	var history []CommandExecHistory
 

@@ -5,7 +5,7 @@
   </a>
   <h3 align="center">TmuxAI</h3>
   <p align="center">
-    Your intelligent pair programmer directly within your tmux sessions.
+    Your intelligent pair programmer directly within your tmux and zellij sessions.
     <br/>
     <br/>
     <a href="https://github.com/alvinunreal/tmuxai/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/alvinunreal/tmuxai?style=flat-square"></a>
@@ -56,9 +56,11 @@
 
 ![Product Demo](https://tmuxai.dev/demo.png)
 
-TmuxAI is an intelligent terminal assistant that lives inside your tmux sessions. Unlike other CLI AI tools, TmuxAI observes and understands the content of your tmux panes, providing assistance without requiring you to change your workflow or interrupt your terminal sessions.
+TmuxAI is an intelligent terminal assistant that lives inside your tmux and zellij sessions. Unlike other CLI AI tools, TmuxAI observes and understands the content of your multiplexer panes, providing assistance without requiring you to change your workflow or interrupt your terminal sessions.
 
 Think of TmuxAI as a _pair programmer_ that sits beside you, watching your terminal environment exactly as you see it. It can understand what you're working on across multiple panes, help solve problems and execute commands on your behalf in a dedicated execution pane.
+
+TmuxAI automatically detects whether you are running inside a Tmux or Zellij session. If launched outside of a supported multiplexer, TmuxAI will attempt to start one for you, trying Zellij first, then Tmux if Zellij is unavailable or fails to start.
 
 ### Human-Inspired Interface
 
@@ -72,7 +74,7 @@ This approach provides powerful AI assistance while respecting your existing wor
 
 ## Installation
 
-TmuxAI requires only tmux to be installed on your system. It's designed to work on Unix-based operating systems including Linux and macOS.
+TmuxAI requires either **Tmux** or **Zellij** to be installed on your system. It's designed to work on Unix-based operating systems including Linux and macOS. TmuxAI will auto-detect the active multiplexer environment.
 
 ### Quick Install
 
@@ -125,14 +127,15 @@ After installing TmuxAI, you need to configure your API key to start using it:
 
 ![Panes](https://tmuxai.dev/shots/panes.png?lastmode=1)
 
-TmuxAI is designed to operate within a single tmux window, with one instance of
-TmuxAI running per window and organizes your workspace using the following pane structure:
+TmuxAI is designed to operate within a single multiplexer window (Tmux window or Zellij tab/layout), with one instance of TmuxAI running per window/tab. It organizes your workspace using the following conceptual pane structure:
 
-1. **Chat Pane**: This is where you interact with the AI. It features a REPL-like interface with syntax highlighting, auto-completion, and readline shortcuts.
+1. **Chat Pane**: This is where you interact with the AI. It features a REPL-like interface with syntax highlighting, auto-completion, and readline shortcuts. This pane is created by TmuxAI.
 
-2. **Exec Pane**: TmuxAI selects (or creates) a pane where commands can be executed.
+2. **Exec Pane**: TmuxAI selects (or creates) a pane where commands can be executed. This allows the AI to run commands safely with your approval.
 
-3. **Read-Only Panes**: All other panes in the current window serve as additional context. TmuxAI can read their content but does not interact with them.
+3. **Read-Only Panes**: All other panes in the current window/tab serve as additional context. TmuxAI can read their content but does not interact with them directly.
+
+*The specific pane creation and management behavior might differ slightly between Tmux and Zellij due to their inherent differences, but the core concept of Chat, Exec, and Read-Only panes remains the same.*
 
 ## Observe Mode
 
@@ -143,7 +146,7 @@ TmuxAI operates by default in "observe mode". Here's how the interaction flow wo
 
 1. **User types a message** in the Chat Pane.
 
-2. **TmuxAI captures context** from all visible panes in your current tmux window (excluding the Chat Pane itself). This includes:
+2. **TmuxAI captures context** from all visible panes in your current multiplexer window/tab (excluding the Chat Pane itself). This includes:
 
    - Current command with arguments
    - Detected shell type
