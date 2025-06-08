@@ -8,10 +8,12 @@ import (
 	"github.com/alvinunreal/tmuxai/system"
 )
 
-func (m *Manager) GetTmuxPanes() ([]system.TmuxPaneDetails, error) {
-	currentPaneId, _ := system.TmuxCurrentPaneId()
-	windowTarget, _ := system.TmuxCurrentWindowTarget()
-	currentPanes, _ := system.TmuxPanesDetails(windowTarget)
+func (m *Manager) GetPanes() ([]system.PaneDetails, error) {
+	currentPaneId, _ := m.Multiplexer.GetCurrentPaneId()
+	currentPanes, err := m.Multiplexer.GetPaneDetails(m.TargetWindow)
+	if err != nil {
+		return nil, err
+	}
 
 	for i := range currentPanes {
 		currentPanes[i].IsTmuxAiPane = currentPanes[i].Id == currentPaneId
@@ -22,18 +24,22 @@ func (m *Manager) GetTmuxPanes() ([]system.TmuxPaneDetails, error) {
 		} else {
 			currentPanes[i].OS = m.OS
 		}
-
 	}
 	return currentPanes, nil
 }
 
-func (m *Manager) GetTmuxPanesInXml(config *config.Config) string {
-	currentTmuxWindow := strings.Builder{}
-	currentTmuxWindow.WriteString("<current_tmux_window_state>\n")
-	panes, _ := m.GetTmuxPanes()
+func (m *Manager) GetPanesInXml(config *config.Config) string {
+	currentWindow := strings.Builder{}
+	currentWindow.WriteString("<current_multiplexer_window_state>\n")
+	panes, err := m.GetPanes()
+	if err != nil {
+		currentWindow.WriteString(fmt.Sprintf("<!-- Error getting panes: %v -->\n", err))
+		currentWindow.WriteString("</current_multiplexer_window_state>\n")
+		return currentWindow.String()
+	}
 
 	// Filter out tmuxai_pane
-	var filteredPanes []system.TmuxPaneDetails
+	var filteredPanes []system.PaneDetails
 	for _, p := range panes {
 		if !p.IsTmuxAiPane {
 			filteredPanes = append(filteredPanes, p)
@@ -41,7 +47,11 @@ func (m *Manager) GetTmuxPanesInXml(config *config.Config) string {
 	}
 	for _, pane := range filteredPanes {
 		if !pane.IsTmuxAiPane {
-			pane.Refresh(m.GetMaxCaptureLines())
+			err := pane.Refresh(m.Multiplexer, m.GetMaxCaptureLines())
+			if err != nil {
+				// Log error but continue processing
+				currentWindow.WriteString(fmt.Sprintf("<!-- Error refreshing pane %s: %v -->\n", pane.Id, err))
+			}
 		}
 		if pane.IsTmuxAiExecPane {
 			m.ExecPane = &pane
@@ -54,31 +64,32 @@ func (m *Manager) GetTmuxPanesInXml(config *config.Config) string {
 			title = "read_only_pane"
 		}
 
-		currentTmuxWindow.WriteString(fmt.Sprintf("<%s>\n", title))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - Id: %s\n", pane.Id))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - CurrentPid: %d\n", pane.CurrentPid))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - CurrentCommand: %s\n", pane.CurrentCommand))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - CurrentCommandArgs: %s\n", pane.CurrentCommandArgs))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - Shell: %s\n", pane.Shell))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - OS: %s\n", pane.OS))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - LastLine: %s\n", pane.LastLine))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - IsActive: %d\n", pane.IsActive))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - IsTmuxAiPane: %t\n", pane.IsTmuxAiPane))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - IsTmuxAiExecPane: %t\n", pane.IsTmuxAiExecPane))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - IsPrepared: %t\n", pane.IsPrepared))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - IsSubShell: %t\n", pane.IsSubShell))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - HistorySize: %d\n", pane.HistorySize))
-		currentTmuxWindow.WriteString(fmt.Sprintf(" - HistoryLimit: %d\n", pane.HistoryLimit))
+		currentWindow.WriteString(fmt.Sprintf("<%s>\n", title))
+		currentWindow.WriteString(fmt.Sprintf(" - Id: %s\n", pane.Id))
+		currentWindow.WriteString(fmt.Sprintf(" - CurrentPid: %d\n", pane.CurrentPid))
+		currentWindow.WriteString(fmt.Sprintf(" - CurrentCommand: %s\n", pane.CurrentCommand))
+		currentWindow.WriteString(fmt.Sprintf(" - CurrentCommandArgs: %s\n", pane.CurrentCommandArgs))
+		currentWindow.WriteString(fmt.Sprintf(" - Shell: %s\n", pane.Shell))
+		currentWindow.WriteString(fmt.Sprintf(" - OS: %s\n", pane.OS))
+		currentWindow.WriteString(fmt.Sprintf(" - LastLine: %s\n", pane.LastLine))
+		currentWindow.WriteString(fmt.Sprintf(" - IsActive: %d\n", pane.IsActive))
+		currentWindow.WriteString(fmt.Sprintf(" - IsTmuxAiPane: %t\n", pane.IsTmuxAiPane))
+		currentWindow.WriteString(fmt.Sprintf(" - IsTmuxAiExecPane: %t\n", pane.IsTmuxAiExecPane))
+		currentWindow.WriteString(fmt.Sprintf(" - IsPrepared: %t\n", pane.IsPrepared))
+		currentWindow.WriteString(fmt.Sprintf(" - IsSubShell: %t\n", pane.IsSubShell))
+		currentWindow.WriteString(fmt.Sprintf(" - HistorySize: %d\n", pane.HistorySize))
+		currentWindow.WriteString(fmt.Sprintf(" - HistoryLimit: %d\n", pane.HistoryLimit))
+		currentWindow.WriteString(fmt.Sprintf(" - MultiplexerType: %s\n", pane.MultiplexerType.String()))
 
 		if !pane.IsTmuxAiPane && pane.Content != "" {
-			currentTmuxWindow.WriteString("<pane_content>\n")
-			currentTmuxWindow.WriteString(pane.Content)
-			currentTmuxWindow.WriteString("\n</pane_content>\n")
+			currentWindow.WriteString("<pane_content>\n")
+			currentWindow.WriteString(pane.Content)
+			currentWindow.WriteString("\n</pane_content>\n")
 		}
 
-		currentTmuxWindow.WriteString(fmt.Sprintf("</%s>\n\n", title))
+		currentWindow.WriteString(fmt.Sprintf("</%s>\n\n", title))
 	}
 
-	currentTmuxWindow.WriteString("</current_tmux_window_state>\n")
-	return currentTmuxWindow.String()
+	currentWindow.WriteString("</current_multiplexer_window_state>\n")
+	return currentWindow.String()
 }

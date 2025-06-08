@@ -28,7 +28,7 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		return false
 	}
 
-	currentTmuxWindow := m.GetTmuxPanesInXml(m.Config)
+	currentTmuxWindow := m.GetPanesInXml(m.Config)
 	execPaneEnv := ""
 	if !m.ExecPane.IsSubShell {
 		execPaneEnv = fmt.Sprintf("Keep in mind, you are working within the shell: %s and OS: %s", m.ExecPane.Shell, m.ExecPane.OS)
@@ -149,7 +149,12 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 			if m.ExecPane.IsPrepared {
 				m.ExecWaitCapture(command)
 			} else {
-				system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
+				err := m.Multiplexer.SendCommand(m.ExecPane.Id, command)
+				if err != nil {
+					m.Println(fmt.Sprintf("Error sending command: %v", err))
+					m.Status = ""
+					return false
+				}
 				time.Sleep(1 * time.Second)
 			}
 		} else {
@@ -192,7 +197,10 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		// Send each key with delay
 		for _, sendKey := range r.SendKeys {
 			m.Println("Sending keys: " + sendKey)
-			system.TmuxSendCommandToPane(m.ExecPane.Id, sendKey, false)
+			err := m.Multiplexer.SendKeys(m.ExecPane.Id, sendKey)
+			if err != nil {
+				m.Println(fmt.Sprintf("Error sending keys: %v", err))
+			}
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -222,7 +230,12 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 
 		if isSafe {
 			m.Println("Pasting...")
-			system.TmuxSendCommandToPane(m.ExecPane.Id, r.PasteMultilineContent, true)
+			err := m.Multiplexer.SendCommand(m.ExecPane.Id, r.PasteMultilineContent)
+			if err != nil {
+				m.Println(fmt.Sprintf("Error pasting content: %v", err))
+				m.Status = ""
+				return false
+			}
 			time.Sleep(1 * time.Second)
 		} else {
 			m.Status = ""

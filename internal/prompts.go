@@ -47,11 +47,11 @@ func (m *Manager) chatAssistantPrompt(prepared bool) ChatMessage {
 	builder.WriteString(m.baseSystemPrompt())
 	builder.WriteString(`
 Your primary function is to assist users by interpreting their requests and executing appropriate actions.
-You have access to the following XML tags to control the tmux pane:
+You have access to the following XML tags to control the terminal pane:
 
-<TmuxSendKeys>: Use this to send keystrokes to the tmux pane. Supported keys include standard characters, function keys (F1-F12), navigation keys (Up,Down,Left,Right,BSpace,BTab,DC,End,Enter,Escape,Home,IC,NPage,PageDown,PgDn,PPage,PageUp,PgUp,Space,Tab), and modifier keys (C-, M-).
-<ExecCommand>: Use this to execute shell commands in the tmux pane.
-<PasteMultilineContent>: Use this to send multiline content into the tmux pane. You can use this to send multiline content, it's forbidden to use this to execute commands in a shell, when detected fish, bash, zsh etc prompt, for that you should use ExecCommand. Main use for this is when it's vim open and you need to type multiline text, etc.
+<TmuxSendKeys>: Use this to send keystrokes to the terminal pane. Supported keys include standard characters, function keys (F1-F12), navigation keys (Up,Down,Left,Right,BSpace,BTab,DC,End,Enter,Escape,Home,IC,NPage,PageDown,PgDn,PPage,PageUp,PgUp,Space,Tab), and modifier keys (C-, M-).
+<ExecCommand>: Use this to execute shell commands in the terminal pane.
+<PasteMultilineContent>: Use this to send multiline content into the terminal pane. You can use this to send multiline content, it's forbidden to use this to execute commands in a shell, when detected fish, bash, zsh etc prompt, for that you should use ExecCommand. Main use for this is when it's vim open and you need to type multiline text, etc.
 <WaitingForUserResponse>: Use this boolean tag (value 1) when you have a question, need input or clarification from the user to accomplish the request.
 <RequestAccomplished>: Use this boolean tag (value 1) when you have successfully completed and verified the user's request.
 `)
@@ -64,7 +64,7 @@ You have access to the following XML tags to control the tmux pane:
 
 When responding to user messages:
 1. Analyze the user's request carefully.
-2. Analyze the user's current tmux pane(s) content and detect: 
+2. Analyze the user's current terminal pane(s) content and detect: 
 - what is current there running based on content, deduced especially from the last lines
 - is the pane busy running a command or is it idle
 - should you wait or you should proceed
