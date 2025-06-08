@@ -55,8 +55,7 @@ type Multiplexer interface {
 // NewMultiplexer creates a new multiplexer instance based on environment detection
 func NewMultiplexer() (Multiplexer, error) {
 	if os.Getenv("ZELLIJ_SESSION_NAME") != "" {
-		// TODO: Implement ZellijBackend in phase 1.3
-		return nil, fmt.Errorf("zellij backend not yet implemented")
+		return NewZellijBackend(), nil
 	}
 	
 	if os.Getenv("TMUX_PANE") != "" {

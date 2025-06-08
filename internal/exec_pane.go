@@ -14,28 +14,44 @@ import (
 
 // GetAvailablePane finds an available pane or creates a new one if none are available
 func (m *Manager) GetAvailablePane() system.PaneDetails {
-	panes, _ := m.GetPanes()
-	for _, pane := range panes {
+	logger.Debug("GetAvailablePane: Starting search for available pane")
+	panes, err := m.GetPanes()
+	if err != nil {
+		logger.Error("GetAvailablePane: Error getting panes: %v", err)
+		return system.PaneDetails{}
+	}
+	
+	logger.Debug("GetAvailablePane: Found %d total panes", len(panes))
+	for i, pane := range panes {
+		logger.Debug("GetAvailablePane: Pane %d - ID='%s', IsTmuxAiPane=%t", i, pane.Id, pane.IsTmuxAiPane)
 		if !pane.IsTmuxAiPane {
 			logger.Info("Found available pane: %s", pane.Id)
 			return pane
 		}
 	}
 
+	logger.Debug("GetAvailablePane: No available pane found")
 	return system.PaneDetails{}
 }
 
 func (m *Manager) InitExecPane() {
+	logger.Debug("InitExecPane: Starting exec pane initialization")
 	availablePane := m.GetAvailablePane()
+	logger.Debug("InitExecPane: GetAvailablePane returned pane with ID='%s'", availablePane.Id)
+	
 	if availablePane.Id == "" {
-		_, err := m.Multiplexer.CreateNewPane(m.TargetWindow)
+		logger.Debug("InitExecPane: No available pane found, creating new pane")
+		newPaneId, err := m.Multiplexer.CreateNewPane(m.TargetWindow)
 		if err != nil {
 			logger.Error("Failed to create new pane: %v", err)
 			return
 		}
+		logger.Debug("InitExecPane: Created new pane with ID='%s'", newPaneId)
 		availablePane = m.GetAvailablePane()
+		logger.Debug("InitExecPane: After creating new pane, GetAvailablePane returned ID='%s'", availablePane.Id)
 	}
 	m.ExecPane = &availablePane
+	logger.Debug("InitExecPane: Set exec pane to ID='%s'", m.ExecPane.Id)
 }
 
 func (m *Manager) PrepareExecPane() {

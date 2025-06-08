@@ -5,20 +5,37 @@ import (
 	"strings"
 
 	"github.com/alvinunreal/tmuxai/config"
+	"github.com/alvinunreal/tmuxai/logger"
 	"github.com/alvinunreal/tmuxai/system"
 )
 
 func (m *Manager) GetPanes() ([]system.PaneDetails, error) {
+	logger.Debug("GetPanes: Starting to get panes")
 	currentPaneId, _ := m.Multiplexer.GetCurrentPaneId()
+	logger.Debug("GetPanes: Current pane ID='%s'", currentPaneId)
+	
 	currentPanes, err := m.Multiplexer.GetPaneDetails(m.TargetWindow)
 	if err != nil {
+		logger.Error("GetPanes: Error getting pane details: %v", err)
 		return nil, err
 	}
+	
+	logger.Debug("GetPanes: Retrieved %d panes from multiplexer", len(currentPanes))
+	logger.Debug("GetPanes: ExecPane.Id='%s'", m.ExecPane.Id)
 
 	for i := range currentPanes {
+		oldIsTmuxAiPane := currentPanes[i].IsTmuxAiPane
+		oldIsTmuxAiExecPane := currentPanes[i].IsTmuxAiExecPane
+		
 		currentPanes[i].IsTmuxAiPane = currentPanes[i].Id == currentPaneId
 		currentPanes[i].IsTmuxAiExecPane = currentPanes[i].Id == m.ExecPane.Id
 		currentPanes[i].IsPrepared = currentPanes[i].Id == m.ExecPane.Id
+		
+		logger.Debug("GetPanes: Pane %d - ID='%s', IsTmuxAiPane=%t->%t, IsTmuxAiExecPane=%t->%t", 
+			i, currentPanes[i].Id, 
+			oldIsTmuxAiPane, currentPanes[i].IsTmuxAiPane,
+			oldIsTmuxAiExecPane, currentPanes[i].IsTmuxAiExecPane)
+		
 		if currentPanes[i].IsSubShell {
 			currentPanes[i].OS = "OS Unknown (subshell)"
 		} else {
