@@ -82,14 +82,23 @@ func (m *Manager) ProcessSubCommand(command string) {
 
 	case prefixMatch(commandPrefix, "/clear"):
 		m.Messages = []ChatMessage{}
-		system.TmuxClearPane(m.PaneId)
+		err := m.Multiplexer.ClearPane(m.PaneId)
+		if err != nil {
+			fmt.Printf("Error clearing pane: %v\n", err)
+		}
 		return
 
 	case prefixMatch(commandPrefix, "/reset"):
 		m.Status = ""
 		m.Messages = []ChatMessage{}
-		system.TmuxClearPane(m.PaneId)
-		system.TmuxClearPane(m.ExecPane.Id)
+		err := m.Multiplexer.ClearPane(m.PaneId)
+		if err != nil {
+			fmt.Printf("Error clearing chat pane: %v\n", err)
+		}
+		err = m.Multiplexer.ClearPane(m.ExecPane.Id)
+		if err != nil {
+			fmt.Printf("Error clearing exec pane: %v\n", err)
+		}
 		return
 
 	case prefixMatch(commandPrefix, "/exit"):
@@ -194,9 +203,12 @@ func (m *Manager) formatInfo() {
 	fmt.Println()
 	fmt.Println(formatter.FormatSection("Tmux Window Panes"))
 
-	panes, _ := m.GetTmuxPanes()
+	panes, _ := m.GetPanes()
 	for _, pane := range panes {
-		pane.Refresh(m.GetMaxCaptureLines())
+		err := pane.Refresh(m.Multiplexer, m.GetMaxCaptureLines())
+		if err != nil {
+			fmt.Printf("Error refreshing pane %s: %v\n", pane.Id, err)
+		}
 		fmt.Println(pane.FormatInfo(formatter))
 	}
 }

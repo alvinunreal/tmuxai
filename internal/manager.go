@@ -36,12 +36,14 @@ type Manager struct {
 	AiClient         *AiClient
 	Status           string // running, waiting, done
 	PaneId           string
-	ExecPane         *system.TmuxPaneDetails
+	ExecPane         *system.PaneDetails
 	Messages         []ChatMessage
 	ExecHistory      []CommandExecHistory
 	WatchMode        bool
 	OS               string
 	SessionOverrides map[string]interface{} // session-only config overrides
+	Multiplexer      system.Multiplexer     // New field for multiplexer interface
+	TargetWindow     string                 // Current window/session target
 }
 
 // NewManager creates a new manager agent
@@ -51,37 +53,53 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		return nil, fmt.Errorf("OpenRouter API key is required")
 	}
 
-	paneId, err := system.TmuxCurrentPaneId()
+	// Initialize multiplexer
+	multiplexer, err := system.NewMultiplexer()
 	if err != nil {
-		// If we're not in a tmux session, start a new session and execute the same command
-		paneId, err = system.TmuxCreateSession()
+		// If we're not in a multiplexer session, try to create one
+		// For now, default to tmux for backward compatibility
+		multiplexer = system.NewTmuxBackend()
+		paneId, err := multiplexer.CreateSession()
 		if err != nil {
-			return nil, fmt.Errorf("system.TmuxCreateSession failed: %w", err)
+			return nil, fmt.Errorf("failed to create session: %w", err)
 		}
 		args := strings.Join(os.Args[1:], " ")
 
-		system.TmuxSendCommandToPane(paneId, "tmuxai "+args, true)
+		multiplexer.SendCommand(paneId, "tmuxai "+args)
 		// shell initialization may take some time
 		time.Sleep(1 * time.Second)
-		system.TmuxSendCommandToPane(paneId, "Enter", false)
-		err = system.TmuxAttachSession(paneId)
+		multiplexer.SendKeys(paneId, "Enter")
+		err = multiplexer.AttachSession(paneId)
 		if err != nil {
-			return nil, fmt.Errorf("system.TmuxAttachSession failed: %w", err)
+			return nil, fmt.Errorf("failed to attach to session: %w", err)
 		}
 		os.Exit(0)
 	}
 
+	// Get current pane and session info
+	paneId, err := multiplexer.GetCurrentPaneId()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current pane ID: %w", err)
+	}
+
+	targetWindow, err := multiplexer.GetCurrentSession()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current session: %w", err)
+	}
+
 	aiClient := NewAiClient(&cfg.OpenRouter)
-	os := system.GetOSDetails()
+	osDetails := system.GetOSDetails()
 
 	manager := &Manager{
 		Config:           cfg,
 		AiClient:         aiClient,
 		PaneId:           paneId,
 		Messages:         []ChatMessage{},
-		ExecPane:         &system.TmuxPaneDetails{},
-		OS:               os,
+		ExecPane:         &system.PaneDetails{},
+		OS:               osDetails,
 		SessionOverrides: make(map[string]interface{}),
+		Multiplexer:      multiplexer,
+		TargetWindow:     targetWindow,
 	}
 
 	manager.InitExecPane()

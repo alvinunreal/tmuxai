@@ -13,29 +13,53 @@ import (
 )
 
 // GetAvailablePane finds an available pane or creates a new one if none are available
-func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
-	panes, _ := m.GetTmuxPanes()
-	for _, pane := range panes {
+func (m *Manager) GetAvailablePane() system.PaneDetails {
+	logger.Debug("GetAvailablePane: Starting search for available pane")
+	panes, err := m.GetPanes()
+	if err != nil {
+		logger.Error("GetAvailablePane: Error getting panes: %v", err)
+		return system.PaneDetails{}
+	}
+	
+	logger.Debug("GetAvailablePane: Found %d total panes", len(panes))
+	for i, pane := range panes {
+		logger.Debug("GetAvailablePane: Pane %d - ID='%s', IsTmuxAiPane=%t", i, pane.Id, pane.IsTmuxAiPane)
 		if !pane.IsTmuxAiPane {
 			logger.Info("Found available pane: %s", pane.Id)
 			return pane
 		}
 	}
 
-	return system.TmuxPaneDetails{}
+	logger.Debug("GetAvailablePane: No available pane found")
+	return system.PaneDetails{}
 }
 
 func (m *Manager) InitExecPane() {
+	logger.Debug("InitExecPane: Starting exec pane initialization")
 	availablePane := m.GetAvailablePane()
+	logger.Debug("InitExecPane: GetAvailablePane returned pane with ID='%s'", availablePane.Id)
+	
 	if availablePane.Id == "" {
-		system.TmuxCreateNewPane(m.PaneId)
+		logger.Debug("InitExecPane: No available pane found, creating new pane")
+		newPaneId, err := m.Multiplexer.CreateNewPane(m.TargetWindow)
+		if err != nil {
+			logger.Error("Failed to create new pane: %v", err)
+			return
+		}
+		logger.Debug("InitExecPane: Created new pane with ID='%s'", newPaneId)
 		availablePane = m.GetAvailablePane()
+		logger.Debug("InitExecPane: After creating new pane, GetAvailablePane returned ID='%s'", availablePane.Id)
 	}
 	m.ExecPane = &availablePane
+	logger.Debug("InitExecPane: Set exec pane to ID='%s'", m.ExecPane.Id)
 }
 
 func (m *Manager) PrepareExecPane() {
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
+	err := m.ExecPane.Refresh(m.Multiplexer, m.GetMaxCaptureLines())
+	if err != nil {
+		logger.Error("Failed to refresh exec pane: %v", err)
+		return
+	}
 	if m.ExecPane.IsPrepared && m.ExecPane.Shell != "" {
 		return
 	}
@@ -55,13 +79,27 @@ func (m *Manager) PrepareExecPane() {
 		return
 	}
 
-	system.TmuxSendCommandToPane(m.ExecPane.Id, ps1Command, true)
-	system.TmuxSendCommandToPane(m.ExecPane.Id, "C-l", false)
+	err = m.Multiplexer.SendCommand(m.ExecPane.Id, ps1Command)
+	if err != nil {
+		logger.Error("Failed to send PS1 command: %v", err)
+		return
+	}
+	err = m.Multiplexer.SendKeys(m.ExecPane.Id, "C-l")
+	if err != nil {
+		logger.Error("Failed to send clear command: %v", err)
+	}
 }
 
 func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
-	system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
+	err := m.Multiplexer.SendCommand(m.ExecPane.Id, command)
+	if err != nil {
+		return CommandExecHistory{}, fmt.Errorf("failed to send command: %w", err)
+	}
+	
+	err = m.ExecPane.Refresh(m.Multiplexer, m.GetMaxCaptureLines())
+	if err != nil {
+		return CommandExecHistory{}, fmt.Errorf("failed to refresh pane: %w", err)
+	}
 
 	m.Println("")
 
@@ -71,7 +109,10 @@ func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
 		fmt.Printf("\r%s%s ", m.GetPrompt(), animChars[animIndex])
 		animIndex = (animIndex + 1) % len(animChars)
 		time.Sleep(500 * time.Millisecond)
-		m.ExecPane.Refresh(m.GetMaxCaptureLines())
+		err = m.ExecPane.Refresh(m.Multiplexer, m.GetMaxCaptureLines())
+		if err != nil {
+			logger.Error("Failed to refresh pane during wait: %v", err)
+		}
 	}
 	fmt.Print("\r\033[K")
 
@@ -82,7 +123,11 @@ func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
 }
 
 func (m *Manager) parseExecPaneCommandHistory() {
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
+	err := m.ExecPane.Refresh(m.Multiplexer, m.GetMaxCaptureLines())
+	if err != nil {
+		logger.Error("Failed to refresh pane for command history parsing: %v", err)
+		return
+	}
 
 	var history []CommandExecHistory
 
