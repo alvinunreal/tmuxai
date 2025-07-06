@@ -42,6 +42,51 @@ DO NOT WRITE MORE TEXT AFTER THE TOOL CALLS IN A RESPONSE. You can wait until th
 
 }
 
+func (m *Manager) agenticPrompt() ChatMessage {
+	var builder strings.Builder
+	builder.WriteString(m.baseSystemPrompt())
+	builder.WriteString(`
+Your primary function is to assist users by interpreting their requests and executing appropriate actions across multiple panes.
+You have access to the following XML tags to control the tmux panes:
+
+<ExecCommand pane_id="%1">: Use this to execute shell commands in a specific tmux pane. If pane_id is omitted, the command runs in the primary exec pane.
+<TmuxSendKeys pane_id="%1">: Use this to send keystrokes to a specific tmux pane.
+<PasteMultilineContent pane_id="%1">: Use this to paste multiline content into a specific tmux pane.
+<CreateExecPane>: Use this boolean tag (value 1) to create a new horizontal split pane for execution. The new pane will become the primary exec pane.
+<WaitingForUserResponse>: Use this boolean tag (value 1) when you have a question, need input or clarification from the user to accomplish the request.
+<RequestAccomplished>: Use this boolean tag (value 1) when you have successfully completed and verified the user's request.
+<ExecPaneSeemsBusy>: Use this boolean tag (value 1) when you need to wait for a command to finish before proceeding.
+`)
+
+	builder.WriteString(`
+You should be concise, direct, and to the point. When you run a non-trivial bash command, you should explain what the command does and why you are running it, to make sure the user understands what you are doing (this is especially important when you are running a command that will make changes to the user's system).
+
+You must pay close attention to the entire conversation history. The user may have provided instructions or context in previous messages that are critical for completing the current task. Do not ask for information that has already been provided.
+`)
+
+	builder.WriteString(`
+==== Rules which are critical priority ====
+
+- You can only use ONE TYPE of action tag in your response (<ExecCommand>, <TmuxSendKeys>, or <PasteMultilineContent>).
+- The <CreateExecPane> tag can be used by itself or combined with a single action tag. It cannot be used with state tags.
+- The "state" tags (<RequestAccomplished>, <WaitingForUserResponse>, <ExecPaneSeemsBusy>, <NoComment>) are mutually exclusive. You must only use one of them, and they cannot be combined with any action tags or with <CreateExecPane>.
+- CRITICAL: You MUST ALWAYS include at least one XML tag in your response. If you are apologizing, confused, or asking a question, you MUST end your response with <WaitingForUserResponse>1</WaitingForUserResponse>. There are no exceptions.
+
+==== End of critical priority rules. ====
+`)
+
+	// Custom additional prompt
+	if m.Config.Prompts.Agentic != "" {
+		builder.WriteString(m.Config.Prompts.Agentic)
+	}
+
+	return ChatMessage{
+		Content:   builder.String(),
+		Timestamp: time.Now(),
+		FromUser:  false,
+	}
+}
+
 func (m *Manager) chatAssistantPrompt(prepared bool) ChatMessage {
 	var builder strings.Builder
 	builder.WriteString(m.baseSystemPrompt())
@@ -49,9 +94,9 @@ func (m *Manager) chatAssistantPrompt(prepared bool) ChatMessage {
 Your primary function is to assist users by interpreting their requests and executing appropriate actions.
 You have access to the following XML tags to control the tmux pane:
 
-<TmuxSendKeys>: Use this to send keystrokes to the tmux pane. Supported keys include standard characters, function keys (F1-F12), navigation keys (Up,Down,Left,Right,BSpace,BTab,DC,End,Enter,Escape,Home,IC,NPage,PageDown,PgDn,PPage,PageUp,PgUp,Space,Tab), and modifier keys (C-, M-).
-<ExecCommand>: Use this to execute shell commands in the tmux pane.
-<PasteMultilineContent>: Use this to send multiline content into the tmux pane. You can use this to send multiline content, it's forbidden to use this to execute commands in a shell, when detected fish, bash, zsh etc prompt, for that you should use ExecCommand. Main use for this is when it's vim open and you need to type multiline text, etc.
+<ExecCommand>: Use this to execute shell commands in the exec pane.
+<TmuxSendKeys>: Use this to send keystrokes to the tmux pane.
+<PasteMultilineContent>: Use this to send multiline content into the tmux pane.
 <WaitingForUserResponse>: Use this boolean tag (value 1) when you have a question, need input or clarification from the user to accomplish the request.
 <RequestAccomplished>: Use this boolean tag (value 1) when you have successfully completed and verified the user's request.
 `)
@@ -64,12 +109,12 @@ You have access to the following XML tags to control the tmux pane:
 
 When responding to user messages:
 1. Analyze the user's request carefully.
-2. Analyze the user's current tmux pane(s) content and detect: 
+2. Analyze the user's current tmux pane(s) content and detect:
 - what is current there running based on content, deduced especially from the last lines
 - is the pane busy running a command or is it idle
 - should you wait or you should proceed
 
-3. Based on your analysis, choose the most appropriate action required and call it at the end of your response with appropriate tool. Always should be at least 1 XML tag.
+3. Based on your analysis, choose the most appropriate action required and call it at the end of your response with appropriate tool.
 4. Respond with user message with normal text and place function calls at the end of your response.
 
 Avoid creating a script files to achieve a task, if the same task can be achieve just by calling one or multiple ExecCommand.
@@ -81,9 +126,9 @@ Respond to the user's message using the appropriate XML tag based on the action 
 When generating your response pay attention to this checks:
 ==== Rules which are critical priority ====
 
-Check the length of ExecCommand content. Is more than 60 characters? If yes, try to split the task into smaller steps and generate shorter ExecCommand for the first step only in this response.
-Use only ONE TYPE, KIND of XML tag in your response and never mix different types of XML tags in the same response.
-Always include at least one XML tag in your response.
+- You can only use ONE TYPE of action tag in your response (<ExecCommand>, <TmuxSendKeys>, or <PasteMultilineContent>).
+- The "state" tags (<RequestAccomplished>, <WaitingForUserResponse>, <ExecPaneSeemsBusy>, <NoComment>) are mutually exclusive. You must only use one of them, and they cannot be combined with any action tags.
+- CRITICAL: You MUST ALWAYS include at least one XML tag in your response. If you are apologizing, confused, or asking a question, you MUST end your response with <WaitingForUserResponse>1</WaitingForUserResponse>. There are no exceptions.
 
 ==== End of critical priority rules. ====
 

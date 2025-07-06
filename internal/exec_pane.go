@@ -34,13 +34,26 @@ func (m *Manager) InitExecPane() {
 	m.ExecPane = &availablePane
 }
 
-func (m *Manager) PrepareExecPane() {
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
-	if m.ExecPane.IsPrepared && m.ExecPane.Shell != "" {
+func (m *Manager) CreateNewExecPane() {
+	system.TmuxCreateNewPane(m.PaneId)
+	// The new pane might take a moment to register, so we get all panes again
+	availablePane := m.GetAvailablePane()
+	if availablePane.Id != "" {
+		m.ExecPane = &availablePane
+		m.Println(fmt.Sprintf("Created new exec pane %s. It is now the primary exec pane.", m.ExecPane.Id))
+	} else {
+		m.Println("Error: Failed to create or find a new exec pane.")
+	}
+}
+
+func (m *Manager) PreparePane(targetPane *system.TmuxPaneDetails) {
+	targetPane.Refresh(m.GetMaxCaptureLines())
+	if targetPane.IsPrepared && targetPane.Shell != "" {
+		// Already prepared
 		return
 	}
 
-	shellCommand := m.ExecPane.CurrentCommand
+	shellCommand := targetPane.CurrentCommand
 	var ps1Command string
 	switch shellCommand {
 	case "zsh":
@@ -50,39 +63,50 @@ func (m *Manager) PrepareExecPane() {
 	case "fish":
 		ps1Command = `function fish_prompt; set -l s $status; printf '%s@%s:%s[%s][%d]» ' $USER (hostname -s) (prompt_pwd) (date +"%H:%M") $s; end`
 	default:
-		errMsg := fmt.Sprintf("Shell '%s' in pane %s is recognized but not yet supported for PS1 modification.", shellCommand, m.ExecPane.Id)
+		errMsg := fmt.Sprintf("Shell '%s' in pane %s is recognized but not yet supported for PS1 modification.", shellCommand, targetPane.Id)
+		m.Println(errMsg)
 		logger.Info(errMsg)
 		return
 	}
 
-	system.TmuxSendCommandToPane(m.ExecPane.Id, ps1Command, true)
-	system.TmuxSendCommandToPane(m.ExecPane.Id, "C-l", false)
+	system.TmuxSendCommandToPane(targetPane.Id, ps1Command, true)
+	system.TmuxSendCommandToPane(targetPane.Id, "C-l", false)
+	// Refresh again to update the IsPrepared status
+	targetPane.Refresh(m.GetMaxCaptureLines())
 }
 
-func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
-	system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
+func (m *Manager) PrepareExecPane() {
+	if m.ExecPane == nil || m.ExecPane.Id == "" {
+		m.Println("No exec pane initialized to prepare.")
+		return
+	}
+	m.PreparePane(m.ExecPane)
+}
+
+func (m *Manager) ExecWaitCapture(command string, targetPane *system.TmuxPaneDetails) (CommandExecHistory, error) {
+	system.TmuxSendCommandToPane(targetPane.Id, command, true)
+	targetPane.Refresh(m.GetMaxCaptureLines())
 
 	m.Println("")
 
 	animChars := []string{"⋯", "⋱", "⋮", "⋰"}
 	animIndex := 0
-	for !strings.HasSuffix(m.ExecPane.LastLine, "]»") && m.Status != "" {
+	for !strings.HasSuffix(targetPane.LastLine, "]»") && m.Status != "" {
 		fmt.Printf("\r%s%s ", m.GetPrompt(), animChars[animIndex])
 		animIndex = (animIndex + 1) % len(animChars)
 		time.Sleep(500 * time.Millisecond)
-		m.ExecPane.Refresh(m.GetMaxCaptureLines())
+		targetPane.Refresh(m.GetMaxCaptureLines())
 	}
 	fmt.Print("\r\033[K")
 
-	m.parseExecPaneCommandHistory()
+	m.parseExecPaneCommandHistory(targetPane)
 	cmd := m.ExecHistory[len(m.ExecHistory)-1]
 	logger.Debug("Command: %s\nOutput: %s\nCode: %d\n", cmd.Command, cmd.Output, cmd.Code)
 	return cmd, nil
 }
 
-func (m *Manager) parseExecPaneCommandHistory() {
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
+func (m *Manager) parseExecPaneCommandHistory(targetPane *system.TmuxPaneDetails) {
+	targetPane.Refresh(m.GetMaxCaptureLines())
 
 	var history []CommandExecHistory
 
@@ -94,7 +118,7 @@ func (m *Manager) parseExecPaneCommandHistory() {
 	// ` ?` allows zero or one space after »
 	promptRegex := regexp.MustCompile(`.*\[(\d+)\]» ?(.*)$`)
 
-	scanner := bufio.NewScanner(strings.NewReader(m.ExecPane.Content))
+	scanner := bufio.NewScanner(strings.NewReader(targetPane.Content))
 
 	for scanner.Scan() {
 		line := scanner.Text()

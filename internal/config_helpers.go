@@ -8,6 +8,7 @@ import (
 
 // AllowedConfigKeys defines the list of configuration keys that users are allowed to modify
 var AllowedConfigKeys = []string{
+	"agentic_mode",
 	"max_capture_lines",
 	"max_context_size",
 	"wait_interval",
@@ -159,4 +160,13 @@ func maskAPIKey(key string) string {
 		return "****"
 	}
 	return key[:4] + "..." + key[len(key)-4:]
+}
+
+func (m *Manager) GetAgenticMode() bool {
+	if override, exists := m.SessionOverrides["agentic_mode"]; exists {
+		if val, ok := override.(bool); ok {
+			return val
+		}
+	}
+	return m.Config.AgenticMode
 }

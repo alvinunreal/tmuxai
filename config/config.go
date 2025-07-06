@@ -13,6 +13,7 @@ import (
 // Config holds the application configuration
 type Config struct {
 	Debug                 bool             `mapstructure:"debug"`
+	AgenticMode           bool             `mapstructure:"agentic_mode"`
 	MaxCaptureLines       int              `mapstructure:"max_capture_lines"`
 	MaxContextSize        int              `mapstructure:"max_context_size"`
 	WaitInterval          int              `mapstructure:"wait_interval"`
@@ -35,6 +36,7 @@ type OpenRouterConfig struct {
 // PromptsConfig holds customizable prompt templates
 type PromptsConfig struct {
 	BaseSystem            string `mapstructure:"base_system"`
+	Agentic               string `mapstructure:"agentic"`
 	ChatAssistant         string `mapstructure:"chat_assistant"`
 	ChatAssistantPrepared string `mapstructure:"chat_assistant_prepared"`
 	Watch                 string `mapstructure:"watch"`
@@ -44,6 +46,7 @@ type PromptsConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Debug:                 false,
+		AgenticMode:           false,
 		MaxCaptureLines:       200,
 		MaxContextSize:        20000,
 		WaitInterval:          5,

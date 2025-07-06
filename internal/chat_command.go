@@ -14,7 +14,7 @@ const helpMessage = `Available commands:
 - /info: Display system information
 - /clear: Clear the chat history
 - /reset: Reset the chat history
-- /prepare: Prepare the pane for TmuxAI automation
+- /prepare [pane_id]: Prepare a pane for advanced command execution. Defaults to the primary exec pane.
 - /watch <prompt>: Start watch mode
 - /squash: Summarize the chat history
 - /exit: Exit the application`
@@ -64,16 +64,47 @@ func (m *Manager) ProcessSubCommand(command string) {
 		return
 
 	case prefixMatch(commandPrefix, "/prepare"):
-		m.InitExecPane()
-		m.PrepareExecPane()
-		m.Messages = []ChatMessage{}
-		if m.ExecPane.IsPrepared {
-			m.Println("Exec pane prepared successfully")
-		}
-		fmt.Println(m.ExecPane.String())
-		m.parseExecPaneCommandHistory()
+		parts := strings.Fields(command)
+		var targetPane *system.TmuxPaneDetails
 
-		logger.Debug("Parsed exec history:")
+		if len(parts) > 1 {
+			// User specified a pane ID, e.g., /prepare %1
+			paneID := parts[1]
+			panes, _ := m.GetTmuxPanes()
+			found := false
+			for i, p := range panes {
+				if p.Id == paneID {
+					targetPane = &panes[i]
+					found = true
+					break
+				}
+			}
+			if !found {
+				m.Println(fmt.Sprintf("Error: Pane with ID %s not found.", paneID))
+				return
+			}
+		} else {
+			// No pane ID specified, use the default exec pane
+			if m.ExecPane == nil || m.ExecPane.Id == "" {
+				m.InitExecPane()
+			}
+			targetPane = m.ExecPane
+		}
+
+		if targetPane == nil || targetPane.Id == "" {
+			m.Println("Error: Could not determine a target pane to prepare.")
+			return
+		}
+
+		m.PreparePane(targetPane)
+
+		if targetPane.IsPrepared {
+			m.Println(fmt.Sprintf("Pane %s prepared successfully.", targetPane.Id))
+		}
+		fmt.Println(targetPane.String())
+		m.parseExecPaneCommandHistory(targetPane)
+
+		logger.Debug("Parsed exec history for pane %s:", targetPane.Id)
 		for _, history := range m.ExecHistory {
 			logger.Debug(fmt.Sprintf("Command: %s\nOutput: %s\nCode: %d\n", history.Command, history.Output, history.Code))
 		}
@@ -87,9 +118,18 @@ func (m *Manager) ProcessSubCommand(command string) {
 
 	case prefixMatch(commandPrefix, "/reset"):
 		m.Status = ""
+		m.WatchMode = false // Ensure watch mode is off on reset
 		m.Messages = []ChatMessage{}
 		system.TmuxClearPane(m.PaneId)
-		system.TmuxClearPane(m.ExecPane.Id)
+		// Clear all other panes as well
+		panes, _ := m.GetTmuxPanes()
+		for _, pane := range panes {
+			if pane.Id != m.PaneId {
+				system.TmuxClearPane(pane.Id)
+			}
+		}
+		// Re-initialize the exec pane after clearing
+		m.InitExecPane()
 		return
 
 	case prefixMatch(commandPrefix, "/exit"):
@@ -195,8 +235,9 @@ func (m *Manager) formatInfo() {
 	fmt.Println(formatter.FormatSection("Tmux Window Panes"))
 
 	panes, _ := m.GetTmuxPanes()
+	isAgentic := m.GetAgenticMode()
 	for _, pane := range panes {
 		pane.Refresh(m.GetMaxCaptureLines())
-		fmt.Println(pane.FormatInfo(formatter))
+		fmt.Println(pane.FormatInfo(formatter, isAgentic))
 	}
 }

@@ -52,7 +52,7 @@ func (p *TmuxPaneDetails) String() string {
 		fmt.Sprintf("Sub Shell: %s\n", formatBool(p.IsSubShell))
 }
 
-func (p *TmuxPaneDetails) FormatInfo(f *InfoFormatter) string {
+func (p *TmuxPaneDetails) FormatInfo(f *InfoFormatter, isAgentic bool) string {
 	var builder strings.Builder
 
 	cleanId := strings.ReplaceAll(p.Id, "%", "")
@@ -62,8 +62,14 @@ func (p *TmuxPaneDetails) FormatInfo(f *InfoFormatter) string {
 		paneTitle = fmt.Sprintf("%s: TmuxAI", cleanId)
 	case p.IsTmuxAiExecPane:
 		paneTitle = fmt.Sprintf("%s: TmuxAI Exec Pane", cleanId)
+	case p.IsPrepared:
+		paneTitle = fmt.Sprintf("%s: Prepared Exec Pane", cleanId)
 	default:
-		paneTitle = fmt.Sprintf("%s: Read Only", cleanId)
+		if isAgentic {
+			paneTitle = fmt.Sprintf("%s: Agentic Exec", cleanId)
+		} else {
+			paneTitle = fmt.Sprintf("%s: Read Only", cleanId)
+		}
 	}
 	builder.WriteString(f.HeaderColor.Sprintf("Pane %s", paneTitle))
 	builder.WriteString("\n")

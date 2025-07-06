@@ -16,29 +16,62 @@ func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
 		setField func(*AIResponse, string)
 	}
 	tags := []tagInfo{
-		{"TmuxSendKeys", true, false, func(r *AIResponse, v string) { r.SendKeys = append(r.SendKeys, v) }},
-		{"ExecCommand", true, false, func(r *AIResponse, v string) { r.ExecCommand = append(r.ExecCommand, v) }},
-		{"PasteMultilineContent", false, false, func(r *AIResponse, v string) { r.PasteMultilineContent = v }},
+		// All action tags are now handled separately below
 		{"RequestAccomplished", false, true, func(r *AIResponse, v string) { r.RequestAccomplished = isTrue(v) }},
 		{"ExecPaneSeemsBusy", false, true, func(r *AIResponse, v string) { r.ExecPaneSeemsBusy = isTrue(v) }},
 		{"WaitingForUserResponse", false, true, func(r *AIResponse, v string) { r.WaitingForUserResponse = isTrue(v) }},
 		{"NoComment", false, true, func(r *AIResponse, v string) { r.NoComment = isTrue(v) }},
+		{"CreateExecPane", false, true, func(r *AIResponse, v string) { r.CreateExecPane = isTrue(v) }},
 	}
 
 	clean := response
-	tagPattern := `(?s)<%s>(.*?)</%s>`
 	r := AIResponse{}
 	cleanForMsg := clean
+
+	// Generic regex for tags with optional pane_id
+	reWithPaneID := func(tagName string) *regexp.Regexp {
+		return regexp.MustCompile(fmt.Sprintf(`(?s)<%s(?: pane_id="([^"]*)")?>(.*?)</%s>`, tagName, tagName))
+	}
+
+	// Handle ExecCommand
+	reExec := reWithPaneID("ExecCommand")
+	execMatches := reExec.FindAllStringSubmatch(clean, -1)
+	for _, match := range execMatches {
+		if len(match) >= 3 {
+			r.ExecCommand = append(r.ExecCommand, ExecCommandInfo{PaneID: match[1], Command: html.UnescapeString(strings.TrimSpace(match[2]))})
+		}
+	}
+	cleanForMsg = reExec.ReplaceAllString(cleanForMsg, "")
+
+	// Handle TmuxSendKeys
+	reSendKeys := reWithPaneID("TmuxSendKeys")
+	sendKeysMatches := reSendKeys.FindAllStringSubmatch(clean, -1)
+	for _, match := range sendKeysMatches {
+		if len(match) >= 3 {
+			r.SendKeys = append(r.SendKeys, SendKeysInfo{PaneID: match[1], Keys: html.UnescapeString(match[2])})
+		}
+	}
+	cleanForMsg = reSendKeys.ReplaceAllString(cleanForMsg, "")
+
+	// Handle PasteMultilineContent
+	rePaste := reWithPaneID("PasteMultilineContent")
+	pasteMatches := rePaste.FindAllStringSubmatch(clean, -1)
+	for _, match := range pasteMatches {
+		if len(match) >= 3 {
+			r.PasteMultilineContent = append(r.PasteMultilineContent, PasteInfo{PaneID: match[1], Content: html.UnescapeString(strings.TrimSpace(match[2]))})
+		}
+	}
+	cleanForMsg = rePaste.ReplaceAllString(cleanForMsg, "")
+
+	// Handle the simple boolean tags
 	for _, t := range tags {
-		reTag := regexp.MustCompile(fmt.Sprintf(tagPattern, t.name, t.name))
+		reTag := regexp.MustCompile(fmt.Sprintf(`(?s)<%s>(.*?)</%s>`, t.name, t.name))
 		tagMatches := reTag.FindAllStringSubmatch(clean, -1)
 		for _, m := range tagMatches {
-			// m[0] is the full match, m[1] is the value
 			if len(m) < 2 {
-				continue // skip invalid match
+				continue
 			}
 			val := strings.TrimSpace(m[1])
-			// Decode XML entities for non-bool tags
 			if !t.isBool {
 				val = html.UnescapeString(val)
 			}
@@ -48,38 +81,13 @@ func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
 				t.setField(&r, val)
 			}
 		}
-		// For message: remove all tag blocks, including code/backtick wrappers
-		// Remove code block: ```xml\n<tag>...</tag>\n```, ```\n<tag>...</tag>\n```
-		cleanForMsg = regexp.MustCompile(fmt.Sprintf("(?s)```(?:xml)?\\s*<%s>.*?</%s>\\s*```", t.name, t.name)).ReplaceAllString(cleanForMsg, "")
-		// Remove single backtick-wrapped tags: `<Tag>...</Tag>`
-		cleanForMsg = regexp.MustCompile(fmt.Sprintf("`<%s>.*?</%s>`", t.name, t.name)).ReplaceAllString(cleanForMsg, "")
-		// Remove plain tag: <Tag>...</Tag>
+		// For message: remove all tag blocks
 		cleanForMsg = reTag.ReplaceAllString(cleanForMsg, "")
-	}
-
-	// Special handling: tags that may appear as <TagName> or ```<TagName>``` (no value)
-	// Set bool fields to true if such tag is present, even if no value
-	for _, t := range tags {
-		if !t.isBool {
-			continue
-		}
-		// Match <TagName> or ```<TagName>```
-		pat := fmt.Sprintf("(?s)(<%s>\\s*</%s>|<%s>\\s*|```<%s>```|<%s/>)", t.name, t.name, t.name, t.name, t.name)
-		if regexp.MustCompile(pat).MatchString(clean) {
-			t.setField(&r, "1")
-		}
 	}
 
 	// Message: trim, collapse multiple newlines
 	msg := strings.TrimSpace(cleanForMsg)
 	msg = collapseBlankLines(msg)
-	// Remove any leftover tag lines (e.g. <TagName>) that may not have been removed
-	for _, t := range tags {
-		// Remove lines that are just <TagName> or ```<TagName>```
-		reLeftover := regexp.MustCompile(fmt.Sprintf("(?m)^\\s*(<%s>\\s*|```<%s>```)?\\s*$", t.name, t.name))
-		msg = reLeftover.ReplaceAllString(msg, "")
-	}
-	msg = strings.TrimSpace(msg)
 	r.Message = msg
 
 	return r, nil

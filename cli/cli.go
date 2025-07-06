@@ -16,6 +16,7 @@ import (
 var (
 	initMessage  string
 	taskFileFlag string
+	agenticFlag  bool
 )
 
 var rootCmd = &cobra.Command{
@@ -34,6 +35,10 @@ var rootCmd = &cobra.Command{
 			logger.Error("Error loading configuration: %v", err)
 			fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
 			os.Exit(1)
+		}
+
+		if agenticFlag {
+			cfg.AgenticMode = true
 		}
 
 		if len(args) > 0 {
@@ -70,6 +75,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().StringVarP(&taskFileFlag, "file", "f", "", "Read request from specified file")
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
+	rootCmd.Flags().BoolVar(&agenticFlag, "agentic", false, "Enable agentic multi-pane features")
 }
 
 func Execute() error {

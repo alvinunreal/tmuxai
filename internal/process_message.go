@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alvinunreal/tmuxai/logger"
@@ -44,6 +45,8 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 	switch {
 	case m.WatchMode:
 		history = []ChatMessage{m.watchPrompt()}
+	case m.GetAgenticMode():
+		history = []ChatMessage{m.agenticPrompt()}
 	case m.ExecPane.IsPrepared:
 		history = []ChatMessage{m.chatAssistantPrompt(true)}
 	default:
@@ -112,6 +115,10 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		Timestamp: time.Now(),
 	}
 
+	if r.CreateExecPane {
+		m.CreateNewExecPane()
+	}
+
 	// did AI follow our guidelines?
 	guidelineError, validResponse := m.aiFollowedGuidelines(r)
 	if !validResponse {
@@ -134,22 +141,59 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 
 	// observe/prepared mode
 	for _, execCommand := range r.ExecCommand {
-		code, _ := system.HighlightCode("sh", execCommand)
+		var targetPane *system.TmuxPaneDetails
+		if execCommand.PaneID != "" {
+			// Find the pane details for this ID.
+			panes, _ := m.GetTmuxPanes()
+			found := false
+
+			// Normalize the pane ID from the AI, which might be missing the '%' prefix.
+			normalizedPaneID := execCommand.PaneID
+			if !strings.HasPrefix(normalizedPaneID, "%") {
+				normalizedPaneID = "%" + normalizedPaneID
+			}
+
+			for i, p := range panes {
+				if p.Id == normalizedPaneID { // Compare against the normalized ID
+					targetPane = &panes[i]
+					found = true
+					break
+				}
+			}
+			if !found {
+				// Use the original PaneID in the error message for clarity.
+				m.Println(fmt.Sprintf("Error: Could not find target pane with ID %s", execCommand.PaneID))
+				continue
+			}
+		} else {
+			// Default to the primary exec pane
+			targetPane = m.ExecPane
+		}
+
+		code, _ := system.HighlightCode("sh", execCommand.Command)
 		m.Println(code)
 
 		isSafe := false
-		command := execCommand
+		command := execCommand.Command
+		confirmPrompt := "Execute this command?"
+		if m.GetAgenticMode() {
+			confirmPrompt = fmt.Sprintf("Execute this command in pane %s?", targetPane.Id)
+		}
+
 		if m.GetExecConfirm() {
-			isSafe, command = m.confirmedToExec(execCommand, "Execute this command?", true)
+			isSafe, command = m.confirmedToExec(execCommand.Command, confirmPrompt, true)
 		} else {
 			isSafe = true
 		}
 		if isSafe {
-			m.Println("Executing command: " + command)
-			if m.ExecPane.IsPrepared {
-				m.ExecWaitCapture(command)
+			m.Println(fmt.Sprintf("Executing in pane %s: %s", targetPane.Id, command))
+			m.LastExecPaneID = targetPane.Id
+
+			targetPane.Refresh(m.GetMaxCaptureLines())
+			if targetPane.IsPrepared {
+				m.ExecWaitCapture(command, targetPane)
 			} else {
-				system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
+				system.TmuxSendCommandToPane(targetPane.Id, command, true)
 				time.Sleep(1 * time.Second)
 			}
 		} else {
@@ -160,40 +204,61 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 
 	// Process SendKeys
 	if len(r.SendKeys) > 0 {
-		// Show preview of all keys
-		keysPreview := "Keys to send:\n"
-		for i, sendKey := range r.SendKeys {
-			code, _ := system.HighlightCode("txt", sendKey)
-			if i == len(r.SendKeys)-1 {
-				keysPreview += code
-			} else {
-				keysPreview += code + "\n"
+		// Group keys by pane for confirmation
+		keysByPane := make(map[string][]string)
+		paneOrder := []string{} // Preserve order
+		for _, sk := range r.SendKeys {
+			paneID := sk.PaneID
+			if paneID == "" {
+				paneID = m.ExecPane.Id // Default to primary exec pane
 			}
-		}
-
-		m.Println(keysPreview)
-
-		// Determine confirmation message based on number of keys
-		confirmMessage := "Send this key?"
-		if len(r.SendKeys) > 1 {
-			confirmMessage = "Send all these keys?"
-		}
-
-		// Get confirmation if required
-		allConfirmed := true
-		if m.GetSendKeysConfirm() {
-			allConfirmed, _ = m.confirmedToExec("keys shown above", confirmMessage, true)
-			if !allConfirmed {
-				m.Status = ""
-				return false
+			if _, exists := keysByPane[paneID]; !exists {
+				paneOrder = append(paneOrder, paneID)
 			}
+			keysByPane[paneID] = append(keysByPane[paneID], sk.Keys)
 		}
 
-		// Send each key with delay
-		for _, sendKey := range r.SendKeys {
-			m.Println("Sending keys: " + sendKey)
-			system.TmuxSendCommandToPane(m.ExecPane.Id, sendKey, false)
-			time.Sleep(1 * time.Second)
+		// Confirm and execute for each pane
+		for _, paneID := range paneOrder {
+			keys := keysByPane[paneID]
+
+			// Normalize the pane ID from the AI before using it.
+			normalizedPaneID := paneID
+			if !strings.HasPrefix(normalizedPaneID, "%") {
+				normalizedPaneID = "%" + normalizedPaneID
+			}
+
+			keysPreview := fmt.Sprintf("Keys to send to pane %s:\n", paneID)
+			for i, key := range keys {
+				code, _ := system.HighlightCode("txt", key)
+				if i == len(keys)-1 {
+					keysPreview += code
+				} else {
+					keysPreview += code + "\n"
+				}
+			}
+			m.Println(keysPreview)
+
+			confirmMessage := fmt.Sprintf("Send these keys to pane %s?", paneID)
+			if len(keys) == 1 {
+				confirmMessage = fmt.Sprintf("Send this key to pane %s?", paneID)
+			}
+
+			allConfirmed := true
+			if m.GetSendKeysConfirm() {
+				allConfirmed, _ = m.confirmedToExec("keys shown above", confirmMessage, false) // No edit for keys
+				if !allConfirmed {
+					m.Status = ""
+					return false // Abort all further actions
+				}
+			}
+
+			// Send each key with delay
+			for _, sendKey := range keys {
+				m.Println(fmt.Sprintf("Sending to %s: %s", paneID, sendKey))
+				system.TmuxSendCommandToPane(normalizedPaneID, sendKey, false)
+				time.Sleep(1 * time.Second)
+			}
 		}
 	}
 
@@ -208,25 +273,38 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		}
 	}
 
-	// observe or prepared mode
-	if r.PasteMultilineContent != "" {
-		code, _ := system.HighlightCode("txt", r.PasteMultilineContent)
-		fmt.Println(code)
+	// Process PasteMultilineContent
+	if len(r.PasteMultilineContent) > 0 {
+		for _, pc := range r.PasteMultilineContent {
+			targetPaneID := pc.PaneID
+			if targetPaneID == "" {
+				targetPaneID = m.ExecPane.Id // Default to primary exec pane
+			}
 
-		isSafe := false
-		if m.GetPasteMultilineConfirm() {
-			isSafe, _ = m.confirmedToExec(r.PasteMultilineContent, "Paste multiline content?", false)
-		} else {
-			isSafe = true
-		}
+			// Normalize the pane ID from the AI before using it.
+			normalizedPaneID := targetPaneID
+			if !strings.HasPrefix(normalizedPaneID, "%") {
+				normalizedPaneID = "%" + normalizedPaneID
+			}
 
-		if isSafe {
-			m.Println("Pasting...")
-			system.TmuxSendCommandToPane(m.ExecPane.Id, r.PasteMultilineContent, true)
-			time.Sleep(1 * time.Second)
-		} else {
-			m.Status = ""
-			return false
+			code, _ := system.HighlightCode("txt", pc.Content)
+			m.Println(fmt.Sprintf("Content to paste into pane %s:", targetPaneID))
+			fmt.Println(code)
+
+			isSafe := false
+			if m.GetPasteMultilineConfirm() {
+				isSafe, _ = m.confirmedToExec(pc.Content, fmt.Sprintf("Paste this content into pane %s?", targetPaneID), false)
+			} else {
+				isSafe = true
+			}
+
+			if isSafe {
+				m.Println("Pasting...")
+				system.TmuxPasteToPane(normalizedPaneID, pc.Content)
+			} else {
+				m.Status = ""
+				return false
+			}
 		}
 	}
 
@@ -280,41 +358,54 @@ func (m *Manager) startWatchMode(desc string) {
 }
 
 func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
-	// Check if only one boolean is true in AI response
-	boolCount := 0
+	// Count state tags. Rule: Max 1 state tag.
+	stateTags := 0
 	if r.RequestAccomplished {
-		boolCount++
+		stateTags++
 	}
 	if r.ExecPaneSeemsBusy {
-		boolCount++
+		stateTags++
 	}
 	if r.WaitingForUserResponse {
-		boolCount++
+		stateTags++
 	}
 	if r.NoComment {
-		boolCount++
+		stateTags++
 	}
 
-	if boolCount > 1 {
-		return "You didn't follow the guidelines. Only one boolean flag should be set to true in your response. Pay attention!", false
+	if stateTags > 1 {
+		return "AI Error: Only one of <RequestAccomplished>, <ExecPaneSeemsBusy>, <WaitingForUserResponse>, or <NoComment> can be used at a time.", false
 	}
 
-	// Check if only one tag is used
-	tags := []int{len(r.ExecCommand), len(r.SendKeys), len(r.PasteMultilineContent)}
-	count := 0
-	for _, len := range tags {
-		if len > 0 {
-			count++
-		}
+	// Count action tags. Rule: Max 1 main action, can be combined with CreateExecPane.
+	mainActionTags := 0
+	if len(r.ExecCommand) > 0 {
+		mainActionTags++
+	}
+	if len(r.SendKeys) > 0 {
+		mainActionTags++
+	}
+	if len(r.PasteMultilineContent) > 0 {
+		mainActionTags++
 	}
 
-	if count > 1 {
-		return "You didn't follow the guidelines. You can only use one type of XML tag in your response. Pay attention!", false
+	if mainActionTags > 1 {
+		return "AI Error: Only one of <ExecCommand>, <TmuxSendKeys>, or <PasteMultilineContent> can be used at a time.", false
 	}
 
-	// watch mode has no xml tags, otherwise should be at least 1 xml tag in response
-	if !m.WatchMode && count+boolCount == 0 {
-		return "You didn't follow the guidelines. You must use at least one XML tag in your response. Pay attention!", false
+	// Rule: State tags cannot be mixed with any action tags (including CreateExecPane).
+	totalActionTags := mainActionTags
+	if r.CreateExecPane {
+		totalActionTags++
+	}
+
+	if stateTags > 0 && totalActionTags > 0 {
+		return "AI Error: State tags (like <RequestAccomplished>) cannot be combined with action tags (like <ExecCommand> or <CreateExecPane>).", false
+	}
+
+	// Rule: A response must contain at least one tag.
+	if stateTags == 0 && totalActionTags == 0 {
+		return "AI Error: The response must contain at least one valid XML tag.", false
 	}
 
 	return "", true

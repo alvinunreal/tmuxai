@@ -12,22 +12,38 @@ import (
 	"github.com/fatih/color"
 )
 
-type AIResponse struct {
-	Message                string
-	SendKeys               []string
-	ExecCommand            []string
-	PasteMultilineContent  string
-	RequestAccomplished    bool
-	ExecPaneSeemsBusy      bool
-	WaitingForUserResponse bool
-	NoComment              bool
-}
-
 // Parsed only when pane is prepared
 type CommandExecHistory struct {
 	Command string
 	Output  string
 	Code    int
+}
+
+type ExecCommandInfo struct {
+	Command string
+	PaneID  string
+}
+
+type SendKeysInfo struct {
+	Keys   string
+	PaneID string
+}
+
+type PasteInfo struct {
+	Content string
+	PaneID  string
+}
+
+type AIResponse struct {
+	Message                string
+	SendKeys               []SendKeysInfo
+	ExecCommand            []ExecCommandInfo
+	PasteMultilineContent  []PasteInfo
+	RequestAccomplished    bool
+	ExecPaneSeemsBusy      bool
+	WaitingForUserResponse bool
+	NoComment              bool
+	CreateExecPane         bool
 }
 
 // Manager represents the TmuxAI manager agent
@@ -42,6 +58,7 @@ type Manager struct {
 	WatchMode        bool
 	OS               string
 	SessionOverrides map[string]interface{} // session-only config overrides
+	LastExecPaneID   string
 }
 
 // NewManager creates a new manager agent
@@ -82,6 +99,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		ExecPane:         &system.TmuxPaneDetails{},
 		OS:               os,
 		SessionOverrides: make(map[string]interface{}),
+		LastExecPaneID:   "",
 	}
 
 	manager.InitExecPane()
@@ -140,23 +158,38 @@ func (m *Manager) GetPrompt() string {
 }
 
 func (ai *AIResponse) String() string {
+	var execCommands []string
+	for _, cmd := range ai.ExecCommand {
+		execCommands = append(execCommands, fmt.Sprintf("{Cmd: %s, PaneID: %s}", cmd.Command, cmd.PaneID))
+	}
+	var sendKeys []string
+	for _, sk := range ai.SendKeys {
+		sendKeys = append(sendKeys, fmt.Sprintf("{Keys: %s, PaneID: %s}", sk.Keys, sk.PaneID))
+	}
+	var pasteContent []string
+	for _, pc := range ai.PasteMultilineContent {
+		pasteContent = append(pasteContent, fmt.Sprintf("{Content: %s, PaneID: %s}", pc.Content, pc.PaneID))
+	}
+
 	return fmt.Sprintf(`
 	Message: %s
 	SendKeys: %v
 	ExecCommand: %v
-	PasteMultilineContent: %s
+	PasteMultilineContent: %v
 	RequestAccomplished: %v
 	ExecPaneSeemsBusy: %v
 	WaitingForUserResponse: %v
 	NoComment: %v
+	CreateExecPane: %v
 `,
 		ai.Message,
-		ai.SendKeys,
-		ai.ExecCommand,
-		ai.PasteMultilineContent,
+		sendKeys,
+		execCommands,
+		pasteContent,
 		ai.RequestAccomplished,
 		ai.ExecPaneSeemsBusy,
 		ai.WaitingForUserResponse,
 		ai.NoComment,
+		ai.CreateExecPane,
 	)
 }

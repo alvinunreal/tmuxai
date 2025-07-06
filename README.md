@@ -37,6 +37,7 @@
 - [TmuxAI Layout](#tmuxai-layout)
 - [Observe Mode](#observe-mode)
 - [Prepare Mode](#prepare-mode)
+- [Agentic Mode](#agentic-mode)
 - [Watch Mode](#watch-mode)
   - [Activating Watch Mode](#activating-watch-mode)
   - [Example Use Cases](#example-use-cases)
@@ -132,7 +133,7 @@ TmuxAI running per window and organizes your workspace using the following pane 
 
 2. **Exec Pane**: TmuxAI selects (or creates) a pane where commands can be executed.
 
-3. **Read-Only Panes**: All other panes in the current window serve as additional context. TmuxAI can read their content but does not interact with them.
+3. **Context Panes**: All other panes in the current window provide context. By default, these are read-only. When [Agentic Mode](#agentic-mode) is enabled, the AI can execute commands, send keystrokes, and paste content into these panes, turning your entire window into an interactive workspace.
 
 ## Observe Mode
 
@@ -195,6 +196,34 @@ TmuxAI » /prepare
 ```shell
 $ function fish_prompt; set -l s $status; printf '%s@%s:%s[%s][%d]» ' $USER (hostname -s) (prompt_pwd) (date +"%H:%M") $s; end
 username@hostname:~/r/tmuxai[21:05][0]»
+```
+
+## Agentic Mode
+
+Agentic Mode unlocks the full potential of TmuxAI, allowing it to interact with your entire tmux window as a comprehensive workspace. When enabled, the AI gains the following capabilities:
+
+-   **Create New Panes**: The AI can decide to create a new, clean pane for a specific task.
+-   **Targeted Execution**: The AI can execute commands, send keystrokes, or paste content into *any* pane by referencing its ID (e.g., `%1`, `%2`).
+-   **Parallel Tasking**: You can ask the AI to perform actions in multiple panes simultaneously.
+
+![Agentic Mode](https://tmuxai.dev/shots/demo-agentic.png)
+_Agentic mode with multiple panes, showing one as primary, one prepared, and others as agentic exec panes._
+
+### Enabling Agentic Mode
+
+You can enable Agentic Mode in two ways:
+
+#### For a Single Session
+Use the `--agentic` flag when starting the application:
+```bash
+tmuxai --agentic
+```
+
+#### Permanently
+Edit your `config.yaml` file located at `~/.config/tmuxai/config.yaml` and set `agentic_mode` to `true`:
+```yaml
+# ~/.config/tmuxai/config.yaml
+agentic_mode: true
 ```
 
 ## Watch Mode
@@ -283,21 +312,21 @@ TmuxAI » /squash
 
 ## Core Commands
 
-| Command                     | Description                                                      |
-| --------------------------- | ---------------------------------------------------------------- |
-| `/info`                     | Display system information, pane details, and context statistics |
-| `/clear`                    | Clear chat history.                                              |
-| `/reset`                    | Clear chat history and reset all panes.                          |
-| `/config`                   | View current configuration settings                              |
-| `/config set <key> <value>` | Override configuration for current session                       |
-| `/squash`                   | Manually trigger context summarization                           |
-| `/prepare`                  | Initialize Prepared Mode for the Exec Pane                       |
-| `/watch <description>`      | Enable Watch Mode with specified goal                            |
-| `/exit`                     | Exit TmuxAI                                                      |
+| Command                     | Description                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `/info`                     | Display system information, pane details, and context statistics. In agentic mode, available panes are labeled `Agentic Exec`. |
+| `/clear`                    | Clear chat history.                                                                                     |
+| `/reset`                    | Clear chat history and reset all panes.                                                                 |
+| `/config`                   | View current configuration settings.                                                                    |
+| `/config set <key> <value>` | Override configuration for current session.                                                             |
+| `/squash`                   | Manually trigger context summarization.                                                                 |
+| `/prepare [pane_id]`        | Prepare a pane for advanced command execution. Defaults to the primary exec pane.                       |
+| `/watch <description>`      | Enable Watch Mode with specified goal.                                                                  |
+| `/exit`                     | Exit TmuxAI.                                                                                            |
 
 ## Command-Line Usage
 
-You can start `tmuxai` with an initial message or task file from the command line:
+You can start `tmuxai` with an initial message, task file, or flags from the command line:
 
 - **Direct Message:**
 
@@ -308,6 +337,11 @@ You can start `tmuxai` with an initial message or task file from the command lin
 - **Task File:**
   ```sh
   tmuxai -f path/to/your_task.txt
+  ```
+
+- **Enable Agentic Mode:**
+  ```sh
+  tmuxai --agentic
   ```
 
 ## Configuration
