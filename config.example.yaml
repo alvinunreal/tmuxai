@@ -12,6 +12,13 @@ openrouter:
   model: google/gemini-2.5-flash-preview # default model
   base_url: https://openrouter.ai/api/v1 # default base url
 
+# Azure OpenAI configuration
+# azure_openai:
+#   api_key: <your-azure-openai-api-key>
+#   api_base: https://your-resource.openai.azure.com/
+#   api_version: 2025-04-01-preview
+#   deployment_name: gpt-4o
+
 # OpenAI example
 # openrouter:
 #   api_key: sk-XXXXXXXXX

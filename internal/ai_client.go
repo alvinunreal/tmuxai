@@ -15,9 +15,9 @@ import (
 	"github.com/alvinunreal/tmuxai/logger"
 )
 
-// AiClient represents an AI client for interacting with OpenRouter API
+// AiClient represents an AI client for interacting with OpenAI-compatible APIs including Azure OpenAI
 type AiClient struct {
-	config *config.OpenRouterConfig
+	config *config.Config
 	client *http.Client
 }
 
@@ -29,7 +29,7 @@ type Message struct {
 
 // ChatCompletionRequest represents a request to the chat completion API
 type ChatCompletionRequest struct {
-	Model    string    `json:"model"`
+	Model    string    `json:"model,omitempty"`
 	Messages []Message `json:"messages"`
 }
 
@@ -47,7 +47,7 @@ type ChatCompletionResponse struct {
 	Choices []ChatCompletionChoice `json:"choices"`
 }
 
-func NewAiClient(cfg *config.OpenRouterConfig) *AiClient {
+func NewAiClient(cfg *config.Config) *AiClient {
 	return &AiClient{
 		config: cfg,
 		client: &http.Client{},
@@ -94,15 +94,36 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 		Messages: messages,
 	}
 
+	// determine endpoint and headers based on configuration
+	var url string
+	var apiKeyHeader string
+	var apiKey string
+
+	if c.config.AzureOpenAI.APIKey != "" {
+		// Use Azure OpenAI endpoint
+		base := strings.TrimSuffix(c.config.AzureOpenAI.APIBase, "/")
+		url = fmt.Sprintf("%s/openai/deployments/%s/chat/completions?api-version=%s",
+			base,
+			c.config.AzureOpenAI.DeploymentName,
+			c.config.AzureOpenAI.APIVersion)
+		apiKeyHeader = "api-key"
+		apiKey = c.config.AzureOpenAI.APIKey
+
+		// Azure endpoint doesn't expect model in body
+		reqBody.Model = ""
+	} else {
+		// default OpenRouter/OpenAI compatible endpoint
+		baseURL := strings.TrimSuffix(c.config.OpenRouter.BaseURL, "/")
+		url = baseURL + "/chat/completions"
+		apiKeyHeader = "Authorization"
+		apiKey = "Bearer " + c.config.OpenRouter.APIKey
+	}
+
 	reqJSON, err := json.Marshal(reqBody)
 	if err != nil {
 		logger.Error("Failed to marshal request: %v", err)
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
-
-	// Remove trailing slash from BaseURL if present: https://github.com/alvinunreal/tmuxai/issues/13
-	baseURL := strings.TrimSuffix(c.config.BaseURL, "/")
-	url := baseURL + "/chat/completions"
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqJSON))
 	if err != nil {
@@ -112,7 +133,7 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+	req.Header.Set(apiKeyHeader, apiKey)
 
 	req.Header.Set("HTTP-Referer", "https://github.com/alvinunreal/tmuxai")
 	req.Header.Set("X-Title", "TmuxAI")

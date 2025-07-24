@@ -327,6 +327,10 @@ export TMUXAI_DEBUG=true
 export TMUXAI_MAX_CAPTURE_LINES=300
 export TMUXAI_OPENROUTER_API_KEY="your-api-key-here"
 export TMUXAI_OPENROUTER_MODEL="..."
+export TMUXAI_AZURE_OPENAI_API_KEY="your-azure-api-key"
+export TMUXAI_AZURE_OPENAI_API_BASE="https://your-resource.openai.azure.com/"
+export TMUXAI_AZURE_OPENAI_API_VERSION="2025-04-01-preview"
+export TMUXAI_AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o"
 ```
 
 You can also use environment variables directly within your configuration file values. The application will automatically expand these variables when loading the configuration:
@@ -391,6 +395,16 @@ openrouter:
   api_key: api-key
   model: gemma3:1b
   base_url: http://localhost:11434/v1
+```
+
+For Azure OpenAI:
+
+```yaml
+azure_openai:
+  api_key: "your-azure-openai-key"
+  api_base: "https://your-resource.openai.azure.com/"
+  api_version: "2025-04-01-preview"
+  deployment_name: "gpt-4o"
 ```
 
 _Prompts are currently tuned for Gemini 2.5 by default; behavior with other models may vary._
