@@ -46,9 +46,9 @@ type Manager struct {
 
 // NewManager creates a new manager agent
 func NewManager(cfg *config.Config) (*Manager, error) {
-	if cfg.OpenRouter.APIKey == "" {
-		fmt.Println("OpenRouter API key is required. Set it in the config file or as an environment variable: TMUXAI_OPENROUTER_API_KEY")
-		return nil, fmt.Errorf("OpenRouter API key is required")
+	if cfg.OpenRouter.APIKey == "" && cfg.AzureOpenAI.APIKey == "" {
+		fmt.Println("An API key is required. Set OpenRouter or Azure OpenAI credentials in the config file or environment variables.")
+		return nil, fmt.Errorf("API key required")
 	}
 
 	paneId, err := system.TmuxCurrentPaneId()
@@ -71,7 +71,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		os.Exit(0)
 	}
 
-	aiClient := NewAiClient(&cfg.OpenRouter)
+	aiClient := NewAiClient(cfg)
 	os := system.GetOSDetails()
 
 	manager := &Manager{
