@@ -34,15 +34,14 @@ func (m *Manager) InitExecPane() {
 	m.ExecPane = &availablePane
 }
 
-func (m *Manager) PrepareExecPane() {
+func (m *Manager) PrepareExecPaneWithShell(shell string) {
 	m.ExecPane.Refresh(m.GetMaxCaptureLines())
 	if m.ExecPane.IsPrepared && m.ExecPane.Shell != "" {
 		return
 	}
 
-	shellCommand := m.ExecPane.CurrentCommand
 	var ps1Command string
-	switch shellCommand {
+	switch shell {
 	case "zsh":
 		ps1Command = `export PROMPT='%n@%m:%~[%T][%?]» '`
 	case "bash":
@@ -50,13 +49,17 @@ func (m *Manager) PrepareExecPane() {
 	case "fish":
 		ps1Command = `function fish_prompt; set -l s $status; printf '%s@%s:%s[%s][%d]» ' $USER (hostname -s) (prompt_pwd) (date +"%H:%M") $s; end`
 	default:
-		errMsg := fmt.Sprintf("Shell '%s' in pane %s is recognized but not yet supported for PS1 modification.", shellCommand, m.ExecPane.Id)
+		errMsg := fmt.Sprintf("Shell '%s' in pane %s is recognized but not yet supported for PS1 modification.", shell, m.ExecPane.Id)
 		logger.Info(errMsg)
 		return
 	}
 
 	_ = system.TmuxSendCommandToPane(m.ExecPane.Id, ps1Command, true)
 	_ = system.TmuxSendCommandToPane(m.ExecPane.Id, "C-l", false)
+}
+
+func (m *Manager) PrepareExecPane() {
+	m.PrepareExecPaneWithShell(m.ExecPane.CurrentCommand)
 }
 
 func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {

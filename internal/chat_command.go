@@ -64,8 +64,26 @@ func (m *Manager) ProcessSubCommand(command string) {
 		return
 
 	case prefixMatch(commandPrefix, "/prepare"):
+		supportedShells := []string{"bash", "zsh", "fish"}
 		m.InitExecPane()
-		m.PrepareExecPane()
+		if len(parts) > 1 {
+			shell := parts[1]
+			isSupported := false
+			for _, supportedShell := range supportedShells {
+				if shell == supportedShell {
+					isSupported = true
+					break
+				}
+			}
+
+			if !isSupported {
+				m.Println(fmt.Sprintf("Shell '%s' is not supported. Supported shells are: %s", shell, strings.Join(supportedShells, ", ")))
+				return
+			}
+			m.PrepareExecPaneWithShell(shell)
+		} else {
+			m.PrepareExecPane()
+		}
 		m.Messages = []ChatMessage{}
 		if m.ExecPane.IsPrepared {
 			m.Println("Exec pane prepared successfully")

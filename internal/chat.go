@@ -177,6 +177,13 @@ func (c *CLIInterface) newCompleter() *completion.CmdCompletionOrList2 {
 					return AllowedConfigKeys, AllowedConfigKeys
 				}
 			}
+
+			// Handle /prepare subcommands
+			if len(field) > 0 && field[0] == "/prepare" {
+				if len(field) == 1 || (len(field) == 2 && !strings.HasSuffix(field[1], " ")) {
+					return []string{"bash", "zsh", "fish"}, []string{"bash", "zsh", "fish"}
+				}
+			}
 			return nil, nil
 		},
 	}

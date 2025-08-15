@@ -190,6 +190,12 @@ To activate Prepare Mode, simply use:
 TmuxAI » /prepare
 ```
 
+By default, TmuxAI will attempt to detect the shell running in the execution pane. If you need to specify the shell manually, you can provide it as an argument:
+
+```
+TmuxAI » /prepare bash
+```
+
 **Prepared Fish Example:**
 
 ```shell
@@ -291,7 +297,7 @@ TmuxAI » /squash
 | `/config`                   | View current configuration settings                              |
 | `/config set <key> <value>` | Override configuration for current session                       |
 | `/squash`                   | Manually trigger context summarization                           |
-| `/prepare`                  | Initialize Prepared Mode for the Exec Pane                       |
+| `/prepare [shell]`          | Initialize Prepared Mode for the Exec Pane (e.g., bash, zsh)     |
 | `/watch <description>`      | Enable Watch Mode with specified goal                            |
 | `/exit`                     | Exit TmuxAI                                                      |
 
