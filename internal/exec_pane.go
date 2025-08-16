@@ -77,13 +77,28 @@ func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
 	fmt.Print("\r\033[K")
 
 	m.parseExecPaneCommandHistory()
+	if len(m.ExecHistory) == 0 {
+		return CommandExecHistory{
+			Command: command,
+			Output:  "No command history parsed",
+			Code:    -1,
+		}, fmt.Errorf("failed to parse command history from exec pane")
+	}
 	cmd := m.ExecHistory[len(m.ExecHistory)-1]
 	logger.Debug("Command: %s\nOutput: %s\nCode: %d\n", cmd.Command, cmd.Output, cmd.Code)
 	return cmd, nil
 }
 
 func (m *Manager) parseExecPaneCommandHistory() {
-	m.ExecPane.Refresh(m.GetMaxCaptureLines())
+	m.parseExecPaneCommandHistoryWithContent("")
+}
+
+func (m *Manager) parseExecPaneCommandHistoryWithContent(testContent string) {
+	if testContent == "" {
+		m.ExecPane.Refresh(m.GetMaxCaptureLines())
+	} else {
+		m.ExecPane.Content = testContent
+	}
 
 	var history []CommandExecHistory
 
