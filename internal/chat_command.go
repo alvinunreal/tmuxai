@@ -82,14 +82,14 @@ func (m *Manager) ProcessSubCommand(command string) {
 
 	case prefixMatch(commandPrefix, "/clear"):
 		m.Messages = []ChatMessage{}
-		system.TmuxClearPane(m.PaneId)
+		_ = system.TmuxClearPane(m.PaneId)
 		return
 
 	case prefixMatch(commandPrefix, "/reset"):
 		m.Status = ""
 		m.Messages = []ChatMessage{}
-		system.TmuxClearPane(m.PaneId)
-		system.TmuxClearPane(m.ExecPane.Id)
+		_ = system.TmuxClearPane(m.PaneId)
+		_ = system.TmuxClearPane(m.ExecPane.Id)
 		return
 
 	case prefixMatch(commandPrefix, "/exit"):

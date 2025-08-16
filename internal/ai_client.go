@@ -150,7 +150,7 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 		logger.Error("Failed to send request: %v", err)
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read the response
 	body, err := io.ReadAll(resp.Body)
@@ -194,7 +194,7 @@ func debugChatMessages(chatMessages []ChatMessage, response string) {
 
 	debugDir := fmt.Sprintf("%s/debug", configDir)
 	if _, err := os.Stat(debugDir); os.IsNotExist(err) {
-		os.Mkdir(debugDir, 0755)
+		_ = os.Mkdir(debugDir, 0755)
 	}
 
 	debugFileName := fmt.Sprintf("%s/debug-%s.txt", debugDir, timestamp)
@@ -204,9 +204,9 @@ func debugChatMessages(chatMessages []ChatMessage, response string) {
 		logger.Error("Failed to create debug file: %v", err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
-	file.WriteString("==================    SENT CHAT MESSAGES ==================\n\n")
+	_, _ = file.WriteString("==================    SENT CHAT MESSAGES ==================\n\n")
 
 	for i, msg := range chatMessages {
 		role := "assistant"
@@ -218,11 +218,11 @@ func debugChatMessages(chatMessages []ChatMessage, response string) {
 		}
 		timeStr := msg.Timestamp.Format(time.RFC3339)
 
-		file.WriteString(fmt.Sprintf("Message %d: Role=%s, Time=%s\n", i+1, role, timeStr))
-		file.WriteString(fmt.Sprintf("Content:\n%s\n\n", msg.Content))
+		_, _ = fmt.Fprintf(file, "Message %d: Role=%s, Time=%s\n", i+1, role, timeStr)
+		_, _ = fmt.Fprintf(file, "Content:\n%s\n\n", msg.Content)
 	}
 
-	file.WriteString("==================    RECEIVED RESPONSE ==================\n\n")
-	file.WriteString(response)
-	file.WriteString("\n\n==================    END DEBUG ==================\n")
+	_, _ = file.WriteString("==================    RECEIVED RESPONSE ==================\n\n")
+	_, _ = file.WriteString(response)
+	_, _ = file.WriteString("\n\n==================    END DEBUG ==================\n")
 }

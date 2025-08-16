@@ -64,10 +64,10 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		}
 		args := strings.Join(os.Args[1:], " ")
 
-		system.TmuxSendCommandToPane(paneId, "tmuxai "+args, true)
+		_ = system.TmuxSendCommandToPane(paneId, "tmuxai "+args, true)
 		// shell initialization may take some time
 		time.Sleep(1 * time.Second)
-		system.TmuxSendCommandToPane(paneId, "Enter", false)
+		_ = system.TmuxSendCommandToPane(paneId, "Enter", false)
 		err = system.TmuxAttachSession(paneId)
 		if err != nil {
 			return nil, fmt.Errorf("system.TmuxAttachSession failed: %w", err)

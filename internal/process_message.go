@@ -147,9 +147,9 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		if isSafe {
 			m.Println("Executing command: " + command)
 			if m.ExecPane.IsPrepared {
-				m.ExecWaitCapture(command)
+				_, _ = m.ExecWaitCapture(command)
 			} else {
-				system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
+				_ = system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
 				time.Sleep(1 * time.Second)
 			}
 		} else {
@@ -180,7 +180,7 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		}
 
 		// Get confirmation if required
-		allConfirmed := true
+		var allConfirmed bool
 		if m.GetSendKeysConfirm() {
 			allConfirmed, _ = m.confirmedToExec("keys shown above", confirmMessage, true)
 			if !allConfirmed {
@@ -192,7 +192,7 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		// Send each key with delay
 		for _, sendKey := range r.SendKeys {
 			m.Println("Sending keys: " + sendKey)
-			system.TmuxSendCommandToPane(m.ExecPane.Id, sendKey, false)
+			_ = system.TmuxSendCommandToPane(m.ExecPane.Id, sendKey, false)
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -222,7 +222,7 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 
 		if isSafe {
 			m.Println("Pasting...")
-			system.TmuxSendCommandToPane(m.ExecPane.Id, r.PasteMultilineContent, true)
+			_ = system.TmuxSendCommandToPane(m.ExecPane.Id, r.PasteMultilineContent, true)
 			time.Sleep(1 * time.Second)
 		} else {
 			m.Status = ""

@@ -31,12 +31,12 @@ func (m *MockAiClient) ChatCompletion(ctx context.Context, messages []Message, m
 	return args.String(0), args.Error(1)
 }
 
-// Test: ProcessUserMessage with empty status returns false immediately
+// Test: Pressing ctrl+c should cancel message processing
 func TestProcessUserMessage_EmptyStatus(t *testing.T) {
 	cfg := &config.Config{
 		Debug: false,
 	}
-	
+
 	manager := &Manager{
 		Config:   cfg,
 		Status:   "", // Empty status
@@ -47,26 +47,26 @@ func TestProcessUserMessage_EmptyStatus(t *testing.T) {
 	manager.confirmedToExec = func(command string, prompt string, edit bool) (bool, string) {
 		return true, command
 	}
-	
+
 	manager.getTmuxPanesInXml = func(config *config.Config) string {
 		return "<tmux>mock pane content</tmux>"
 	}
 
 	result := manager.ProcessUserMessage(context.Background(), "test message")
-	
+
 	assert.False(t, result, "ProcessUserMessage should return false when status is empty")
 }
 
-// Test: ProcessUserMessage with context squash requirement
+// Test: Context squash should trigger when max context size is exceeded
 func TestProcessUserMessage_ContextSquash(t *testing.T) {
 	cfg := &config.Config{
-		Debug:        false,
+		Debug:          false,
 		MaxContextSize: 100, // Very small to trigger squash
 		OpenRouter: config.OpenRouterConfig{
 			Model: "test-model",
 		},
 	}
-	
+
 	manager := &Manager{
 		Config:   cfg,
 		Status:   "running",
@@ -82,7 +82,7 @@ func TestProcessUserMessage_ContextSquash(t *testing.T) {
 	manager.confirmedToExec = func(command string, prompt string, edit bool) (bool, string) {
 		return true, command
 	}
-	
+
 	manager.getTmuxPanesInXml = func(config *config.Config) string {
 		return "<tmux>mock pane content</tmux>"
 	}
@@ -99,7 +99,7 @@ func TestProcessUserMessage_ContextSquash(t *testing.T) {
 	assert.True(t, manager.needSquash(), "Should need squash with many messages")
 }
 
-// Test: AI guidelines validation with multiple boolean flags should fail
+// Test: AI guidelines validation should fail when multiple boolean flags are set
 func TestProcessUserMessage_AIGuidelinesValidation(t *testing.T) {
 	manager := &Manager{
 		WatchMode: false,
@@ -143,7 +143,7 @@ func TestProcessUserMessage_AIGuidelinesValidation(t *testing.T) {
 	assert.True(t, valid3, "Should pass validation with correct format")
 }
 
-// Test: ProcessUserMessage with WaitingForUserResponse sets status correctly
+// Test: If AI requests user input, should set status to waiting
 func TestProcessUserMessage_WaitingForUserResponse(t *testing.T) {
 	manager := &Manager{
 		Status:   "running",
@@ -162,19 +162,19 @@ func TestProcessUserMessage_WaitingForUserResponse(t *testing.T) {
 	}
 
 	assert.Equal(t, "waiting", manager.Status, "Status should be set to 'waiting' when WaitingForUserResponse is true")
-	
+
 	// Test that aiFollowedGuidelines accepts this valid response
 	_, valid := manager.aiFollowedGuidelines(response)
 	assert.True(t, valid, "WaitingForUserResponse should be valid according to guidelines")
 }
 
-// Test: ExecCommand processing with confirmation
+// Test: If AI requests to execute a command, should confirm and send it to the exec pane
 func TestProcessUserMessage_ExecCommandWithConfirmation(t *testing.T) {
 	cfg := &config.Config{
-		Debug: false,
+		Debug:       false,
 		ExecConfirm: true, // Require confirmation for exec commands
 	}
-	
+
 	manager := &Manager{
 		Config:   cfg,
 		Status:   "running",
@@ -189,7 +189,7 @@ func TestProcessUserMessage_ExecCommandWithConfirmation(t *testing.T) {
 	// Track if confirmation was called and approved
 	confirmationCalled := false
 	commandExecuted := ""
-	
+
 	manager.confirmedToExec = func(command string, prompt string, edit bool) (bool, string) {
 		confirmationCalled = true
 		assert.Equal(t, "echo hello", command, "Should ask confirmation for the right command")
@@ -200,7 +200,7 @@ func TestProcessUserMessage_ExecCommandWithConfirmation(t *testing.T) {
 	// Mock tmux command execution by capturing what would be sent
 	originalTmuxSend := system.TmuxSendCommandToPane
 	defer func() { system.TmuxSendCommandToPane = originalTmuxSend }()
-	
+
 	system.TmuxSendCommandToPane = func(paneId string, command string, enter bool) error {
 		commandExecuted = command
 		assert.Equal(t, "test-pane", paneId, "Should send command to correct pane")
@@ -227,7 +227,7 @@ func TestProcessUserMessage_ExecCommandWithConfirmation(t *testing.T) {
 			if manager.ExecPane.IsPrepared {
 				// Would call m.ExecWaitCapture(command)
 			} else {
-				system.TmuxSendCommandToPane(manager.ExecPane.Id, command, true)
+				_ = system.TmuxSendCommandToPane(manager.ExecPane.Id, command, true)
 			}
 		}
 	}
@@ -236,13 +236,13 @@ func TestProcessUserMessage_ExecCommandWithConfirmation(t *testing.T) {
 	assert.Equal(t, "echo hello", commandExecuted, "Command should have been executed")
 }
 
-// Test: ExecCommand rejection clears status and returns false
+// Test: If AI requests to execute a command, should reject it if confirmation fails
 func TestProcessUserMessage_ExecCommandRejection(t *testing.T) {
 	cfg := &config.Config{
-		Debug: false,
+		Debug:       false,
 		ExecConfirm: true, // Require confirmation for exec commands
 	}
-	
+
 	manager := &Manager{
 		Config:   cfg,
 		Status:   "running",
@@ -257,17 +257,17 @@ func TestProcessUserMessage_ExecCommandRejection(t *testing.T) {
 	// Track if confirmation was called
 	confirmationCalled := false
 	commandExecuted := false
-	
+
 	manager.confirmedToExec = func(command string, prompt string, edit bool) (bool, string) {
 		confirmationCalled = true
-		assert.Equal(t, "rm -rf /", command, "Should ask confirmation for the dangerous command")
+		assert.Equal(t, "echo danger", command, "Should ask confirmation for the dangerous command")
 		return false, command // User rejects the command
 	}
 
 	// Mock tmux command execution to track if it was called
 	originalTmuxSend := system.TmuxSendCommandToPane
 	defer func() { system.TmuxSendCommandToPane = originalTmuxSend }()
-	
+
 	system.TmuxSendCommandToPane = func(paneId string, command string, enter bool) error {
 		commandExecuted = true
 		return nil
@@ -275,7 +275,7 @@ func TestProcessUserMessage_ExecCommandRejection(t *testing.T) {
 
 	// Test the ExecCommand processing logic that should result in rejection
 	response := AIResponse{
-		ExecCommand: []string{"rm -rf /"},
+		ExecCommand: []string{"echo danger"},
 	}
 
 	// Simulate the ExecCommand processing loop from ProcessUserMessage
@@ -292,7 +292,7 @@ func TestProcessUserMessage_ExecCommandRejection(t *testing.T) {
 			if manager.ExecPane.IsPrepared {
 				// Would call m.ExecWaitCapture(command)
 			} else {
-				system.TmuxSendCommandToPane(manager.ExecPane.Id, command, true)
+				_ = system.TmuxSendCommandToPane(manager.ExecPane.Id, command, true)
 			}
 		} else {
 			manager.Status = ""
@@ -307,7 +307,7 @@ func TestProcessUserMessage_ExecCommandRejection(t *testing.T) {
 	assert.Equal(t, "", manager.Status, "Status should be empty after rejection")
 }
 
-// Test: RequestAccomplished clears status and returns true
+// Test: If AI finishes the task, should clear status and return true
 func TestProcessUserMessage_RequestAccomplished(t *testing.T) {
 	manager := &Manager{
 		Status:   "running",
@@ -329,19 +329,19 @@ func TestProcessUserMessage_RequestAccomplished(t *testing.T) {
 
 	assert.True(t, result, "Should return true when RequestAccomplished")
 	assert.Equal(t, "", manager.Status, "Status should be cleared when request is accomplished")
-	
+
 	// Verify this is a valid response according to guidelines
 	_, valid := manager.aiFollowedGuidelines(response)
 	assert.True(t, valid, "RequestAccomplished should be valid according to guidelines")
 }
 
-// Test: SendKeys processing with confirmation
+// Test: Sending multiple keys to the exec pane with confirmation
 func TestProcessUserMessage_SendKeysProcessing(t *testing.T) {
 	cfg := &config.Config{
-		Debug: false,
+		Debug:           false,
 		SendKeysConfirm: true, // Require confirmation for send keys
 	}
-	
+
 	manager := &Manager{
 		Config:   cfg,
 		Status:   "running",
@@ -356,7 +356,7 @@ func TestProcessUserMessage_SendKeysProcessing(t *testing.T) {
 	// Track confirmations and keys sent
 	confirmationCalled := false
 	keysSent := []string{}
-	
+
 	manager.confirmedToExec = func(command string, prompt string, edit bool) (bool, string) {
 		confirmationCalled = true
 		assert.Equal(t, "keys shown above", command, "Should show generic description for keys")
@@ -367,7 +367,7 @@ func TestProcessUserMessage_SendKeysProcessing(t *testing.T) {
 	// Mock tmux command execution to capture keys being sent
 	originalTmuxSend := system.TmuxSendCommandToPane
 	defer func() { system.TmuxSendCommandToPane = originalTmuxSend }()
-	
+
 	system.TmuxSendCommandToPane = func(paneId string, command string, enter bool) error {
 		keysSent = append(keysSent, command)
 		assert.Equal(t, "test-pane", paneId, "Should send keys to correct pane")
@@ -398,14 +398,14 @@ func TestProcessUserMessage_SendKeysProcessing(t *testing.T) {
 		if allConfirmed {
 			// Send each key with delay (without the actual delay in test)
 			for _, sendKey := range response.SendKeys {
-				system.TmuxSendCommandToPane(manager.ExecPane.Id, sendKey, false)
+				_ = system.TmuxSendCommandToPane(manager.ExecPane.Id, sendKey, false)
 			}
 		}
 	}
 
 	assert.True(t, confirmationCalled, "Confirmation should have been called")
 	assert.Equal(t, []string{"ctrl+c", "ctrl+d", "exit"}, keysSent, "All keys should have been sent in order")
-	
+
 	// Verify this is a valid response according to guidelines
 	_, valid := manager.aiFollowedGuidelines(response)
 	assert.True(t, valid, "SendKeys should be valid according to guidelines")
@@ -431,26 +431,26 @@ func TestProcessUserMessage_WatchModeNoComment(t *testing.T) {
 	}
 
 	assert.False(t, result, "Should return false for NoComment in watch mode")
-	
+
 	// Verify this is a valid response according to guidelines when in watch mode
 	_, valid := manager.aiFollowedGuidelines(response)
 	assert.True(t, valid, "NoComment should be valid according to guidelines in watch mode")
-	
+
 	// Test that NoComment is valid even outside watch mode according to current logic
 	manager.WatchMode = false
 	response2 := AIResponse{
 		NoComment: true,
 	}
-	
+
 	// NoComment alone is actually valid even when not in watch mode (boolCount=1 satisfies count+boolCount > 0)
 	_, valid2 := manager.aiFollowedGuidelines(response2)
 	assert.True(t, valid2, "NoComment alone should be valid according to current guidelines logic")
-	
+
 	// Test truly invalid case: no boolean flags and no XML tags when not in watch mode
 	response3 := AIResponse{
 		Message: "Just a message with nothing else",
 	}
-	
+
 	_, valid3 := manager.aiFollowedGuidelines(response3)
 	assert.False(t, valid3, "Empty response (no flags, no XML tags) should fail validation when not in watch mode")
 }

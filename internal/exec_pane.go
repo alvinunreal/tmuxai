@@ -28,7 +28,7 @@ func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
 func (m *Manager) InitExecPane() {
 	availablePane := m.GetAvailablePane()
 	if availablePane.Id == "" {
-		system.TmuxCreateNewPane(m.PaneId)
+		_, _ = system.TmuxCreateNewPane(m.PaneId)
 		availablePane = m.GetAvailablePane()
 	}
 	m.ExecPane = &availablePane
@@ -55,12 +55,12 @@ func (m *Manager) PrepareExecPane() {
 		return
 	}
 
-	system.TmuxSendCommandToPane(m.ExecPane.Id, ps1Command, true)
-	system.TmuxSendCommandToPane(m.ExecPane.Id, "C-l", false)
+	_ = system.TmuxSendCommandToPane(m.ExecPane.Id, ps1Command, true)
+	_ = system.TmuxSendCommandToPane(m.ExecPane.Id, "C-l", false)
 }
 
 func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
-	system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
+	_ = system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
 	m.ExecPane.Refresh(m.GetMaxCaptureLines())
 
 	m.Println("")
@@ -100,7 +100,7 @@ func (m *Manager) parseExecPaneCommandHistory() {
 		line := scanner.Text()
 		match := promptRegex.FindStringSubmatch(line)
 
-		if match != nil && len(match) >= 2 { // We need at least the status code match[1]
+		if len(match) >= 2 { // We need at least the status code match[1]
 			// --- Found a prompt line ---
 			// This prompt line *terminates* the previous command block
 			// and provides its status code. It might also start a new command block.
@@ -132,10 +132,6 @@ func (m *Manager) parseExecPaneCommandHistory() {
 				// Reset for the next block
 				outputBuilder.Reset()
 				currentCommand = nil // Mark as no active command temporarily
-			} else {
-				// Optional: Handle status code on the very first prompt if needed.
-				// Currently, the status on the first prompt is ignored as there's
-				// no *previous* command within the parsed text to assign it to.
 			}
 
 			// 2. If this prompt line ALSO contains a command, start the NEW block
@@ -145,10 +141,6 @@ func (m *Manager) parseExecPaneCommandHistory() {
 					Code:    -1, // Default/Unknown: Status code is determined by the *next* prompt
 					// Output will be collected in outputBuilder starting from the next line
 				}
-			} else {
-				// This prompt line only indicates the end status of the previous command
-				// (like the final "[i] [~/r/tmuxai][16:56][2]»" line).
-				// No new command starts here, so currentCommand remains nil.
 			}
 
 		} else {

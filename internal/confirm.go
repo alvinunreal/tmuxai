@@ -36,7 +36,7 @@ func (m *Manager) confirmedToExecFn(command string, prompt string, edit bool) (b
 		fmt.Printf("Error initializing readline: %v\n", err)
 		return false, ""
 	}
-	defer rl.Close()
+	defer func() { _ = rl.Close() }()
 
 	confirmInput, err := rl.Readline()
 	if err != nil {
@@ -71,7 +71,7 @@ func (m *Manager) confirmedToExecFn(command string, prompt string, edit bool) (b
 			fmt.Printf("Error initializing readline for edit: %v\n", editErr)
 			return false, ""
 		}
-		defer editRl.Close()
+		defer func() { _ = editRl.Close() }()
 
 		// Use ReadlineWithDefault to prefill the command
 		editedCommand, editErr := editRl.ReadlineWithDefault(command)

@@ -21,7 +21,7 @@ func TestAzureOpenAIEndpoint(t *testing.T) {
 			t.Errorf("missing api-key header")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
 	}))
 	defer server.Close()
 

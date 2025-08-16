@@ -101,7 +101,7 @@ func Load() (*Config, error) {
 	// Automatically bind all config keys to environment variables
 	configType := reflect.TypeOf(*config)
 	for _, key := range EnumerateConfigKeys(configType, "") {
-		viper.BindEnv(key)
+		_ = viper.BindEnv(key)
 	}
 
 	viper.AutomaticEnv()
@@ -177,9 +177,10 @@ func TryInferType(key, value string) any {
 		if key == fullKey {
 			switch field.Type.Kind() {
 			case reflect.Bool:
-				if value == "true" {
+				switch value {
+				case "true":
 					typedValue = true
-				} else if value == "false" {
+				case "false":
 					typedValue = false
 				}
 			case reflect.Int, reflect.Int64, reflect.Int32:
@@ -205,9 +206,10 @@ func TryInferType(key, value string) any {
 					if ntag == nestedKey {
 						switch nf.Type.Kind() {
 						case reflect.Bool:
-							if value == "true" {
+							switch value {
+							case "true":
 								typedValue = true
-							} else if value == "false" {
+							case "false":
 								typedValue = false
 							}
 						case reflect.Int, reflect.Int64, reflect.Int32:

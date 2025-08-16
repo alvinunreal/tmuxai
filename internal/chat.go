@@ -94,7 +94,7 @@ func (c *CLIInterface) Start(initMessage string) error {
 				historyLines = append(historyLines, history.At(i))
 			}
 			historyData := strings.Join(historyLines, "\n")
-			os.WriteFile(historyFilePath, []byte(historyData), 0644)
+			_ = os.WriteFile(historyFilePath, []byte(historyData), 0644)
 		}
 
 		// Process the input (preserving multiline content)

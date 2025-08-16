@@ -19,7 +19,7 @@ func (m *Manager) Countdown(seconds int) {
 		fmt.Println("Error opening keyboard:", err)
 		return
 	}
-	defer keyboard.Close()
+	defer func() { _ = keyboard.Close() }()
 
 	// Create a channel for keyboard events
 	keyChan := make(chan keyboard.Key, 10)
@@ -52,7 +52,6 @@ func (m *Manager) Countdown(seconds int) {
 				// Just continue execution without exiting the function
 				remaining = 0 // Set remaining to 0 to end the countdown loop
 				renderCountdown(remaining, seconds, paused, highlightColor, dimColor, pauseColor)
-				break
 			case keyboard.KeyCtrlC: // Ctrl+C
 				m.Status = ""
 				m.WatchMode = false
