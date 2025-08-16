@@ -9,7 +9,7 @@ import (
 	"github.com/alvinunreal/tmuxai/logger"
 )
 
-func TmuxSendCommandToPane(paneId string, command string, autoenter bool) error {
+var TmuxSendCommandToPane = func(paneId string, command string, autoenter bool) error {
 	lines := strings.Split(command, "\n")
 	for i, line := range lines {
 

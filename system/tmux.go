@@ -29,7 +29,7 @@ func TmuxCreateNewPane(target string) (string, error) {
 }
 
 // TmuxPanesDetails gets details for all panes in a target window
-func TmuxPanesDetails(target string) ([]TmuxPaneDetails, error) {
+var TmuxPanesDetails = func(target string) ([]TmuxPaneDetails, error) {
 	cmd := exec.Command("tmux", "list-panes", "-t", target, "-F", "#{pane_id},#{pane_active},#{pane_pid},#{pane_current_command},#{history_size},#{history_limit}")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -93,7 +93,7 @@ func TmuxPanesDetails(target string) ([]TmuxPaneDetails, error) {
 }
 
 // TmuxCapturePane gets the content of a specific pane by ID
-func TmuxCapturePane(paneId string, maxLines int) (string, error) {
+var TmuxCapturePane = func(paneId string, maxLines int) (string, error) {
 	cmd := exec.Command("tmux", "capture-pane", "-p", "-t", paneId, "-S", fmt.Sprintf("-%d", maxLines))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -134,7 +134,7 @@ func TmuxCurrentWindowTarget() (string, error) {
 	return target, nil
 }
 
-func TmuxCurrentPaneId() (string, error) {
+var TmuxCurrentPaneId = func() (string, error) {
 	tmuxPane := os.Getenv("TMUX_PANE")
 	if tmuxPane == "" {
 		return "", fmt.Errorf("TMUX_PANE environment variable not set")

@@ -27,7 +27,7 @@ func (m *Manager) GetTmuxPanes() ([]system.TmuxPaneDetails, error) {
 	return currentPanes, nil
 }
 
-func (m *Manager) GetTmuxPanesInXml(config *config.Config) string {
+func (m *Manager) getTmuxPanesInXmlFn(config *config.Config) string {
 	currentTmuxWindow := strings.Builder{}
 	currentTmuxWindow.WriteString("<current_tmux_window_state>\n")
 	panes, _ := m.GetTmuxPanes()
