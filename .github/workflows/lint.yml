@@ -1,8 +1,8 @@
-name: K9s Lint
+name: Lint
 
 on:
   pull_request:
-    branches: [master]
+    branches: [main]
 
 jobs:
   golangci:

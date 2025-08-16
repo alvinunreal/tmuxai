@@ -1,16 +1,16 @@
-name: K9s Test
+name: Test
 
 on:
   workflow_dispatch:
     push:
     branches:
-      - master
+      - main
     tags:
       - rc*
       - v*
   pull_request:
     branches:
-      - master
+      - main
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,6 +28,4 @@ jobs:
         run: go env -w CGO_ENABLED=0
 
       - name: Run Tests
-        run: make test
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: go test ./...
