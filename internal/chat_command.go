@@ -79,7 +79,6 @@ func (m *Manager) ProcessSubCommand(command string) {
 						break
 					}
 				}
-
 				if !isSupported {
 					m.Println(fmt.Sprintf("Shell '%s' is not supported. Supported shells are: %s", shell, strings.Join(supportedShells, ", ")))
 					return

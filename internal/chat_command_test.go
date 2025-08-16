@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/alvinunreal/tmuxai/config"
@@ -12,7 +13,7 @@ import (
 func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 	manager := &Manager{
 		Config:           &config.Config{MaxCaptureLines: 1000},
-		SessionOverrides: make(map[string]interface{}),
+		SessionOverrides: make(map[string]any),
 		Messages:         []ChatMessage{},
 		ExecPane: &system.TmuxPaneDetails{
 			Id:         "test-pane",
@@ -23,9 +24,13 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 	// Mock system functions to prevent actual tmux calls
 	originalTmuxSend := system.TmuxSendCommandToPane
 	originalTmuxCapture := system.TmuxCapturePane
+	originalTmuxCurrentPaneId := system.TmuxCurrentPaneId
+	originalTmuxPanesDetails := system.TmuxPanesDetails
 	defer func() {
 		system.TmuxSendCommandToPane = originalTmuxSend
 		system.TmuxCapturePane = originalTmuxCapture
+		system.TmuxCurrentPaneId = originalTmuxCurrentPaneId
+		system.TmuxPanesDetails = originalTmuxPanesDetails
 	}()
 
 	commandsSent := []string{}
@@ -38,10 +43,19 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 		return "", nil
 	}
 
+	// Mock the system functions used by GetTmuxPanes to return the test pane
+	system.TmuxCurrentPaneId = func() (string, error) {
+		return "main-pane", nil
+	}
+	system.TmuxPanesDetails = func(windowTarget string) ([]system.TmuxPaneDetails, error) {
+		// Return the test pane as the only available pane
+		return []system.TmuxPaneDetails{*manager.ExecPane}, nil
+	}
+
 	// Test case 1: /prepare with valid shell on subshell (should work and send commands)
 	commandsSent = []string{} // Reset
 	manager.ProcessSubCommand("/prepare bash")
-	
+
 	assert.Len(t, commandsSent, 2, "Should send PS1 command and clear command for bash")
 	assert.Contains(t, commandsSent[0], "PS1=", "Should send bash PS1 command")
 	assert.Equal(t, "C-l", commandsSent[1], "Should send clear screen command")
@@ -49,7 +63,7 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 	// Test case 2: /prepare with zsh on subshell
 	commandsSent = []string{} // Reset
 	manager.ProcessSubCommand("/prepare zsh")
-	
+
 	assert.Len(t, commandsSent, 2, "Should send PROMPT command and clear command for zsh")
 	assert.Contains(t, commandsSent[0], "PROMPT=", "Should send zsh PROMPT command")
 	assert.Equal(t, "C-l", commandsSent[1], "Should send clear screen command")
@@ -57,7 +71,7 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 	// Test case 3: /prepare with fish on subshell
 	commandsSent = []string{} // Reset
 	manager.ProcessSubCommand("/prepare fish")
-	
+
 	assert.Len(t, commandsSent, 2, "Should send fish_prompt function and clear command for fish")
 	assert.Contains(t, commandsSent[0], "fish_prompt", "Should send fish prompt function")
 	assert.Equal(t, "C-l", commandsSent[1], "Should send clear screen command")
@@ -65,7 +79,8 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 	// Test case 4: /prepare without shell specification on subshell (should not send commands, just print warning)
 	commandsSent = []string{} // Reset
 	manager.ProcessSubCommand("/prepare")
-	
+
+	fmt.Println(commandsSent)
 	assert.Len(t, commandsSent, 0, "Should not send commands when no shell specified on subshell (should show warning instead)")
 }
 
@@ -73,21 +88,25 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 func TestProcessSubCommand_PrepareNormalShell(t *testing.T) {
 	manager := &Manager{
 		Config:           &config.Config{MaxCaptureLines: 1000},
-		SessionOverrides: make(map[string]interface{}),
+		SessionOverrides: make(map[string]any),
 		Messages:         []ChatMessage{},
 		ExecPane: &system.TmuxPaneDetails{
-			Id:              "test-pane",
-			IsSubShell:      false, // This is NOT a subshell
-			CurrentCommand:  "bash", // Simulated shell detection
+			Id:             "test-pane",
+			IsSubShell:     false,    // This is NOT a subshell
+			CurrentCommand: "unknown", // Unsupported shell - should not send commands
 		},
 	}
 
 	// Mock system functions to prevent actual tmux calls
 	originalTmuxSend := system.TmuxSendCommandToPane
 	originalTmuxCapture := system.TmuxCapturePane
+	originalTmuxCurrentPaneId := system.TmuxCurrentPaneId
+	originalTmuxPanesDetails := system.TmuxPanesDetails
 	defer func() {
 		system.TmuxSendCommandToPane = originalTmuxSend
 		system.TmuxCapturePane = originalTmuxCapture
+		system.TmuxCurrentPaneId = originalTmuxCurrentPaneId
+		system.TmuxPanesDetails = originalTmuxPanesDetails
 	}()
 
 	commandsSent := []string{}
@@ -100,16 +119,25 @@ func TestProcessSubCommand_PrepareNormalShell(t *testing.T) {
 		return "", nil
 	}
 
+	// Mock the system functions used by GetTmuxPanes to return the test pane
+	system.TmuxCurrentPaneId = func() (string, error) {
+		return "main-pane", nil
+	}
+	system.TmuxPanesDetails = func(windowTarget string) ([]system.TmuxPaneDetails, error) {
+		// Return the test pane as the only available pane
+		return []system.TmuxPaneDetails{*manager.ExecPane}, nil
+	}
+
 	// Test case 1: /prepare without shell specification when CurrentCommand is not a shell (should not send commands)
 	commandsSent = []string{} // Reset
 	manager.ProcessSubCommand("/prepare")
-	
+
 	assert.Len(t, commandsSent, 0, "Should not send commands when CurrentCommand is not a supported shell")
 
 	// Test case 2: /prepare with explicit shell on normal shell (should work)
 	commandsSent = []string{} // Reset
 	manager.ProcessSubCommand("/prepare zsh")
-	
+
 	assert.Len(t, commandsSent, 2, "Should send commands when explicitly specifying shell on normal pane")
 	assert.Contains(t, commandsSent[0], "PROMPT=", "Should send zsh PROMPT command")
 	assert.Equal(t, "C-l", commandsSent[1], "Should send clear screen command")

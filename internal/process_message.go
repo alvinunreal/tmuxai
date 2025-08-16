@@ -169,6 +169,9 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 			} else {
 				keysPreview += code + "\n"
 			}
+			if m.Status == "" {
+				return false
+			}
 		}
 
 		m.Println(keysPreview)
