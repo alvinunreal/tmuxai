@@ -66,7 +66,7 @@ func GetProcessArgs(pid int) string {
 	return cmdOutput
 }
 
-func HighlightCode(language string, code string) (string, error) {
+var HighlightCode = func(language string, code string) (string, error) {
 	// Get the lexer for the specified language
 	lexer := lexers.Get(language)
 	if lexer == nil {

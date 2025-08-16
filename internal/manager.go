@@ -42,6 +42,10 @@ type Manager struct {
 	WatchMode        bool
 	OS               string
 	SessionOverrides map[string]interface{} // session-only config overrides
+
+	// Functions for mocking
+	confirmedToExec  func(command string, prompt string, edit bool) (bool, string)
+	getTmuxPanesInXml func(config *config.Config) string
 }
 
 // NewManager creates a new manager agent
@@ -83,6 +87,9 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		OS:               os,
 		SessionOverrides: make(map[string]interface{}),
 	}
+
+	manager.confirmedToExec = manager.confirmedToExecFn
+	manager.getTmuxPanesInXml = manager.getTmuxPanesInXmlFn
 
 	manager.InitExecPane()
 	return manager, nil

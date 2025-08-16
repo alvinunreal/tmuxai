@@ -28,7 +28,7 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		return false
 	}
 
-	currentTmuxWindow := m.GetTmuxPanesInXml(m.Config)
+	currentTmuxWindow := m.getTmuxPanesInXml(m.Config)
 	execPaneEnv := ""
 	if !m.ExecPane.IsSubShell {
 		execPaneEnv = fmt.Sprintf("Keep in mind, you are working within the shell: %s and OS: %s", m.ExecPane.Shell, m.ExecPane.OS)
