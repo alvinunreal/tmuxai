@@ -300,7 +300,12 @@ func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
 	}
 
 	// Check if only one tag is used
-	tags := []int{len(r.ExecCommand), len(r.SendKeys), len(r.PasteMultilineContent)}
+	tags := []int{len(r.ExecCommand), len(r.SendKeys)}
+	if r.PasteMultilineContent != "" {
+		tags = append(tags, 1)
+	} else {
+		tags = append(tags, 0)
+	}
 	count := 0
 	for _, len := range tags {
 		if len > 0 {
