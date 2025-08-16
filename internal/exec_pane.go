@@ -64,6 +64,10 @@ func (m *Manager) PrepareExecPane() {
 
 func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
 	_ = system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
+
+	// wait for keys to be sent, duo to sometimes ssh latency
+	time.Sleep(500 * time.Millisecond)
+
 	m.ExecPane.Refresh(m.GetMaxCaptureLines())
 
 	animChars := []string{"⋯", "⋱", "⋮", "⋰"}
@@ -78,11 +82,8 @@ func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
 
 	m.parseExecPaneCommandHistory()
 	if len(m.ExecHistory) == 0 {
-		return CommandExecHistory{
-			Command: command,
-			Output:  "No command history parsed",
-			Code:    -1,
-		}, fmt.Errorf("failed to parse command history from exec pane")
+		logger.Error("Failed to parse command history from exec pane")
+		return CommandExecHistory{}, fmt.Errorf("failed to parse command history from exec pane")
 	}
 	cmd := m.ExecHistory[len(m.ExecHistory)-1]
 	logger.Debug("Command: %s\nOutput: %s\nCode: %d\n", cmd.Command, cmd.Output, cmd.Code)
