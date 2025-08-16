@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/alvinunreal/tmuxai/config"
 	"github.com/alvinunreal/tmuxai/logger"
@@ -66,28 +67,55 @@ func (m *Manager) ProcessSubCommand(command string) {
 	case prefixMatch(commandPrefix, "/prepare"):
 		supportedShells := []string{"bash", "zsh", "fish"}
 		m.InitExecPane()
-		if len(parts) > 1 {
-			shell := parts[1]
-			isSupported := false
-			for _, supportedShell := range supportedShells {
-				if shell == supportedShell {
-					isSupported = true
-					break
-				}
-			}
 
-			if !isSupported {
-				m.Println(fmt.Sprintf("Shell '%s' is not supported. Supported shells are: %s", shell, strings.Join(supportedShells, ", ")))
+		// Check if exec pane is a subshell
+		if m.ExecPane.IsSubShell {
+			if len(parts) > 1 {
+				shell := parts[1]
+				isSupported := false
+				for _, supportedShell := range supportedShells {
+					if shell == supportedShell {
+						isSupported = true
+						break
+					}
+				}
+
+				if !isSupported {
+					m.Println(fmt.Sprintf("Shell '%s' is not supported. Supported shells are: %s", shell, strings.Join(supportedShells, ", ")))
+					return
+				}
+				m.PrepareExecPaneWithShell(shell)
+			} else {
+				m.Println("Shell detection is not supported on subshells.")
+				m.Println("Please specify the shell manually: /prepare bash, /prepare zsh, or /prepare fish")
 				return
 			}
-			m.PrepareExecPaneWithShell(shell)
 		} else {
-			m.PrepareExecPane()
+			if len(parts) > 1 {
+				shell := parts[1]
+				isSupported := false
+				for _, supportedShell := range supportedShells {
+					if shell == supportedShell {
+						isSupported = true
+						break
+					}
+				}
+
+				if !isSupported {
+					m.Println(fmt.Sprintf("Shell '%s' is not supported. Supported shells are: %s", shell, strings.Join(supportedShells, ", ")))
+					return
+				}
+				m.PrepareExecPaneWithShell(shell)
+			} else {
+				m.PrepareExecPane()
+			}
 		}
+
+		// for latency over ssh connections
+		time.Sleep(500 * time.Millisecond)
+		m.ExecPane.Refresh(m.GetMaxCaptureLines())
 		m.Messages = []ChatMessage{}
-		if m.ExecPane.IsPrepared {
-			m.Println("Exec pane prepared successfully")
-		}
+
 		fmt.Println(m.ExecPane.String())
 		m.parseExecPaneCommandHistory()
 
