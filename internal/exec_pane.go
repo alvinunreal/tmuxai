@@ -66,8 +66,6 @@ func (m *Manager) ExecWaitCapture(command string) (CommandExecHistory, error) {
 	_ = system.TmuxSendCommandToPane(m.ExecPane.Id, command, true)
 	m.ExecPane.Refresh(m.GetMaxCaptureLines())
 
-	m.Println("")
-
 	animChars := []string{"⋯", "⋱", "⋮", "⋰"}
 	animIndex := 0
 	for !strings.HasSuffix(m.ExecPane.LastLine, "]»") && m.Status != "" {
