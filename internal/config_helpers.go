@@ -15,6 +15,7 @@ var AllowedConfigKeys = []string{
 	"paste_multiline_confirm",
 	"exec_confirm",
 	"openrouter.model",
+	"github_copilot.model",
 }
 
 // GetMaxCaptureLines returns the max capture lines value with session override if present
@@ -147,8 +148,9 @@ func formatConfigValue(sb *strings.Builder, prefix string, val reflect.Value, ov
 		var valueStr string
 		switch field.Kind() {
 		case reflect.String:
-			// Mask API keys for security
-			if strings.Contains(strings.ToLower(fieldType.Name), "apikey") {
+			// Mask API keys and tokens for security
+			if strings.Contains(strings.ToLower(fieldType.Name), "apikey") || 
+			   strings.Contains(strings.ToLower(fieldType.Name), "token") {
 				valueStr = maskAPIKey(field.String())
 			} else {
 				valueStr = field.String()
