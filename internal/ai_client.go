@@ -111,6 +111,12 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 
 		// Azure endpoint doesn't expect model in body
 		reqBody.Model = ""
+	} else if c.config.GitHubCopilot.Token != "" {
+		// Use GitHub Copilot endpoint
+		baseURL := strings.TrimSuffix(c.config.GitHubCopilot.BaseURL, "/")
+		url = baseURL + "/copilot/chat/completions"
+		apiKeyHeader = "Authorization"
+		apiKey = "Bearer " + c.config.GitHubCopilot.Token
 	} else {
 		// default OpenRouter/OpenAI compatible endpoint
 		baseURL := strings.TrimSuffix(c.config.OpenRouter.BaseURL, "/")
@@ -134,6 +140,13 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(apiKeyHeader, apiKey)
+
+	// GitHub Copilot specific headers
+	if c.config.GitHubCopilot.Token != "" {
+		req.Header.Set("Copilot-Integration-Id", "tmuxai")
+		req.Header.Set("Copilot-Integration-Version", "1.0.0")
+		req.Header.Set("User-Agent", "TmuxAI/1.0.0")
+	}
 
 	req.Header.Set("HTTP-Referer", "https://github.com/alvinunreal/tmuxai")
 	req.Header.Set("X-Title", "TmuxAI")
