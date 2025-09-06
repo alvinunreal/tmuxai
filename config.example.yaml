@@ -1,4 +1,4 @@
-max_context_size: 20000 # Maximum context size in tokens, reaching 80% triggers squashing
+max_context_size: 100000 # Maximum context size in tokens, reaching 80% triggers squashing
 max_capture_lines: 200 # Maximum number of lines to capture during each message
 wait_interval: 5 # Wait interval when exec pane is considered busy (used in observe and watch modes)
 

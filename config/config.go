@@ -54,7 +54,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		Debug:                 false,
 		MaxCaptureLines:       200,
-		MaxContextSize:        20000,
+		MaxContextSize:        100000,
 		WaitInterval:          5,
 		SendKeysConfirm:       true,
 		PasteMultilineConfirm: true,

@@ -272,12 +272,12 @@ Context
 ────────
 
 Messages            15
-Context Size~       16500 tokens
+Context Size~       82500 tokens
                     ████████░░ 82.5%
-Max Size            20000 tokens
+Max Size            100000 tokens
 ```
 
-This example shows that the context is at 82.5% capacity (16,500 tokens out of 20,000). When the context size reaches 80% of the configured maximum (`max_context_size` in your config), TmuxAI automatically triggers squashing.
+This example shows that the context is at 82.5% capacity (82,500 tokens out of 100,000). When the context size reaches 80% of the configured maximum (`max_context_size` in your config), TmuxAI automatically triggers squashing.
 
 ### Manual Squashing
 
