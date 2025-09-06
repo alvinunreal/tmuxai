@@ -19,6 +19,12 @@ openrouter:
 #   api_version: 2025-04-01-preview
 #   deployment_name: gpt-4o
 
+# GitHub Copilot configuration
+# github_copilot:
+#   token: ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+#   model: gpt-4o # available models: gpt-4o, gpt-4, gpt-3.5-turbo
+#   base_url: https://api.github.com # default GitHub API endpoint
+
 # OpenAI example
 # openrouter:
 #   api_key: sk-XXXXXXXXX

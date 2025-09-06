@@ -75,6 +75,27 @@ func (m *Manager) GetExecConfirm() bool {
 }
 
 func (m *Manager) GetOpenRouterModel() string {
+	return m.GetAIModel()
+}
+
+func (m *Manager) GetAIModel() string {
+	// Check for GitHub Copilot configuration first
+	if m.Config.GitHubCopilot.Token != "" {
+		if override, exists := m.SessionOverrides["github_copilot.model"]; exists {
+			if val, ok := override.(string); ok {
+				return val
+			}
+		}
+		return m.Config.GitHubCopilot.Model
+	}
+	
+	// Check for Azure OpenAI configuration
+	if m.Config.AzureOpenAI.APIKey != "" {
+		// Azure uses deployment name instead of model
+		return m.Config.AzureOpenAI.DeploymentName
+	}
+	
+	// Default to OpenRouter model
 	if override, exists := m.SessionOverrides["openrouter.model"]; exists {
 		if val, ok := override.(string); ok {
 			return val
