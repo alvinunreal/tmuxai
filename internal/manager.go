@@ -12,6 +12,45 @@ import (
 	"github.com/fatih/color"
 )
 
+// TodoItem represents a single TODO item
+type TodoItem struct {
+	ID          int       `json:"id"`
+	Description string    `json:"description"`
+	Status      string    `json:"status"` // "pending", "in_progress", "completed"
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// TodoList represents a collection of TODO items
+type TodoList struct {
+	ID        int        `json:"id"`
+	Title     string     `json:"title"`
+	Items     []TodoItem `json:"items"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+// GetProgress returns completion statistics for the TODO list
+func (tl *TodoList) GetProgress() (completed, total int) {
+	total = len(tl.Items)
+	for _, item := range tl.Items {
+		if item.Status == "completed" {
+			completed++
+		}
+	}
+	return
+}
+
+// GetCurrentItem returns the first non-completed TODO item, or nil if all are done
+func (tl *TodoList) GetCurrentItem() *TodoItem {
+	for i := range tl.Items {
+		if tl.Items[i].Status != "completed" {
+			return &tl.Items[i]
+		}
+	}
+	return nil
+}
+
 type AIResponse struct {
 	Message                string
 	SendKeys               []string
@@ -21,6 +60,11 @@ type AIResponse struct {
 	ExecPaneSeemsBusy      bool
 	WaitingForUserResponse bool
 	NoComment              bool
+	// TODO-related fields
+	CreateTodoList         []string `json:"create_todo_list"` // List of TODO items to create
+	UpdateTodoStatus       string   `json:"update_todo_status"` // "pending", "in_progress", "completed"
+	UpdateTodoID           int      `json:"update_todo_id"` // ID of TODO item to update
+	TodoCompleted          bool     `json:"todo_completed"` // Mark current TODO as completed
 }
 
 // Parsed only when pane is prepared
@@ -42,6 +86,10 @@ type Manager struct {
 	WatchMode        bool
 	OS               string
 	SessionOverrides map[string]interface{} // session-only config overrides
+	
+	// TODO tracking
+	CurrentTodoList  *TodoList `json:"current_todo_list,omitempty"`
+	TodoHistory      []TodoList `json:"todo_history,omitempty"`
 
 	// Functions for mocking
 	confirmedToExec  func(command string, prompt string, edit bool) (bool, string)
@@ -156,6 +204,10 @@ func (ai *AIResponse) String() string {
 	ExecPaneSeemsBusy: %v
 	WaitingForUserResponse: %v
 	NoComment: %v
+	CreateTodoList: %v
+	UpdateTodoStatus: %s
+	UpdateTodoID: %d
+	TodoCompleted: %v
 `,
 		ai.Message,
 		ai.SendKeys,
@@ -165,5 +217,107 @@ func (ai *AIResponse) String() string {
 		ai.ExecPaneSeemsBusy,
 		ai.WaitingForUserResponse,
 		ai.NoComment,
+		ai.CreateTodoList,
+		ai.UpdateTodoStatus,
+		ai.UpdateTodoID,
+		ai.TodoCompleted,
 	)
+}
+
+// CreateTodoList creates a new TODO list for the current task
+func (m *Manager) CreateTodoList(title string, items []string) *TodoList {
+	todoList := &TodoList{
+		ID:        len(m.TodoHistory) + 1,
+		Title:     title,
+		Items:     make([]TodoItem, 0, len(items)),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	for i, item := range items {
+		todoItem := TodoItem{
+			ID:          i + 1,
+			Description: item,
+			Status:      "pending",
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+		todoList.Items = append(todoList.Items, todoItem)
+	}
+
+	m.CurrentTodoList = todoList
+	return todoList
+}
+
+// UpdateTodoItem updates the status of a specific TODO item
+func (m *Manager) UpdateTodoItem(itemID int, status string) bool {
+	if m.CurrentTodoList == nil {
+		return false
+	}
+
+	for i := range m.CurrentTodoList.Items {
+		if m.CurrentTodoList.Items[i].ID == itemID {
+			m.CurrentTodoList.Items[i].Status = status
+			m.CurrentTodoList.Items[i].UpdatedAt = time.Now()
+			m.CurrentTodoList.UpdatedAt = time.Now()
+			return true
+		}
+	}
+	return false
+}
+
+// MarkCurrentTodoCompleted marks the current active TODO item as completed
+func (m *Manager) MarkCurrentTodoCompleted() bool {
+	if m.CurrentTodoList == nil {
+		return false
+	}
+
+	currentItem := m.CurrentTodoList.GetCurrentItem()
+	if currentItem == nil {
+		return false
+	}
+
+	return m.UpdateTodoItem(currentItem.ID, "completed")
+}
+
+// CompleteTodoList marks the todo list as completed and moves it to history
+func (m *Manager) CompleteTodoList() {
+	if m.CurrentTodoList != nil {
+		m.TodoHistory = append(m.TodoHistory, *m.CurrentTodoList)
+		m.CurrentTodoList = nil
+	}
+}
+
+// FormatTodoList formats the TODO list for display in the chat pane
+func (m *Manager) FormatTodoList() string {
+	if m.CurrentTodoList == nil {
+		return ""
+	}
+
+	var builder strings.Builder
+	completed, total := m.CurrentTodoList.GetProgress()
+	
+	// Title with progress
+	title := color.New(color.FgCyan, color.Bold).Sprintf("📋 %s", m.CurrentTodoList.Title)
+	progress := color.New(color.FgWhite).Sprintf(" (%d/%d)", completed, total)
+	builder.WriteString(title + progress + "\n")
+
+	// TODO items
+	for _, item := range m.CurrentTodoList.Items {
+		var checkbox, status string
+		switch item.Status {
+		case "completed":
+			checkbox = color.New(color.FgGreen).Sprint("☑")
+			status = color.New(color.FgGreen).Sprint(item.Description)
+		case "in_progress":
+			checkbox = color.New(color.FgYellow).Sprint("🔄")
+			status = color.New(color.FgYellow).Sprint(item.Description)
+		default: // pending
+			checkbox = color.New(color.FgWhite).Sprint("☐")
+			status = color.New(color.FgWhite).Sprint(item.Description)
+		}
+		builder.WriteString(fmt.Sprintf("  %s %s\n", checkbox, status))
+	}
+
+	return builder.String()
 }

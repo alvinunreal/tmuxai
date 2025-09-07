@@ -126,6 +126,9 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		fmt.Println(system.Cosmetics(r.Message))
 	}
 
+	// Handle TODO operations
+	m.processTodoOperations(r)
+
 	// Don't append to history if AI is waiting for the pane or is watch mode no comment
 	if r.ExecPaneSeemsBusy || r.NoComment {
 	} else {
@@ -297,14 +300,23 @@ func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
 	if r.NoComment {
 		boolCount++
 	}
+	if r.TodoCompleted {
+		boolCount++
+	}
 
 	if boolCount > 1 {
 		return "You didn't follow the guidelines. Only one boolean flag should be set to true in your response. Pay attention!", false
 	}
 
-	// Check if only one tag is used
-	tags := []int{len(r.ExecCommand), len(r.SendKeys)}
+	// Check if only one tag type is used (including TODO operations)
+	tags := []int{len(r.ExecCommand), len(r.SendKeys), len(r.CreateTodoList)}
 	if r.PasteMultilineContent != "" {
+		tags = append(tags, 1)
+	} else {
+		tags = append(tags, 0)
+	}
+	// Count UpdateTodoStatus operations
+	if r.UpdateTodoStatus != "" && r.UpdateTodoID > 0 {
 		tags = append(tags, 1)
 	} else {
 		tags = append(tags, 0)
@@ -326,4 +338,50 @@ func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
 	}
 
 	return "", true
+}
+
+// processTodoOperations handles all TODO-related operations from AI response
+func (m *Manager) processTodoOperations(r AIResponse) {
+	// Create new TODO list if AI requests it
+	if len(r.CreateTodoList) > 0 {
+		title := "Task Breakdown"
+		if m.CurrentTodoList != nil {
+			// Move current list to history if exists
+			m.CompleteTodoList()
+		}
+		todoList := m.CreateTodoList(title, r.CreateTodoList)
+		m.Println(m.FormatTodoList())
+		
+		// Mark first item as in_progress
+		if len(todoList.Items) > 0 {
+			m.UpdateTodoItem(1, "in_progress")
+		}
+		return
+	}
+
+	// Update specific TODO item status
+	if r.UpdateTodoStatus != "" && r.UpdateTodoID > 0 {
+		if m.UpdateTodoItem(r.UpdateTodoID, r.UpdateTodoStatus) {
+			m.Println(m.FormatTodoList())
+		}
+		return
+	}
+
+	// Mark current TODO as completed
+	if r.TodoCompleted {
+		if m.MarkCurrentTodoCompleted() {
+			// Check if all todos are completed
+			if completed, total := m.CurrentTodoList.GetProgress(); completed == total {
+				m.Println("✅ All TODO items completed!")
+				m.CompleteTodoList()
+			} else {
+				// Mark next item as in_progress
+				if nextItem := m.CurrentTodoList.GetCurrentItem(); nextItem != nil {
+					m.UpdateTodoItem(nextItem.ID, "in_progress")
+				}
+				m.Println(m.FormatTodoList())
+			}
+		}
+		return
+	}
 }

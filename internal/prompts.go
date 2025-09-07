@@ -53,6 +53,12 @@ You have access to the following XML tags to control the tmux pane:
 <PasteMultilineContent>: Use this to send multiline content into the tmux pane. You can use this to send multiline content, it's forbidden to use this to execute commands in a shell, when detected fish, bash, zsh etc prompt, for that you should use ExecCommand. Main use for this is when it's vim open and you need to type multiline text, etc.
 <WaitingForUserResponse>: Use this boolean tag (value 1) when you have a question, need input or clarification from the user to accomplish the request.
 <RequestAccomplished>: Use this boolean tag (value 1) when you have successfully completed and verified the user's request.
+
+TODO LIST MANAGEMENT:
+<CreateTodoList>: Use this to break down complex tasks into TODO items. Each tag creates one TODO item. Use multiple tags to create multiple items. Only create TODO lists when the task is complex enough to benefit from step-by-step tracking.
+<TodoCompleted>: Use this boolean tag (value 1) to mark the current TODO item as completed and move to the next item.
+<UpdateTodoStatus>: Use with <UpdateTodoID> to update specific TODO item status ("pending", "in_progress", "completed").
+<UpdateTodoID>: Use with <UpdateTodoStatus> to specify which TODO item to update (use the item's ID number).
 `)
 
 	if !prepared {
@@ -76,7 +82,15 @@ Avoid creating files, command output files, intermediate files unless necessary.
 There is no need to use echo to print information content. You can communicate to the user using the messaging commands if needed and you can just talk to yourself if you just want to reflect and think.
 Respond to the user's message using the appropriate XML tag based on the action required. Include a brief explanation of what you're doing, followed by the XML tag.
 
-When generating your response you will be PUNISHED if you don't follow those 3 rules:
+COMPLEXITY ASSESSMENT & TODO CREATION:
+Before responding, assess task complexity and decide if a TODO list would help:
+- Create TODO lists for tasks requiring 3+ distinct steps
+- Create TODO lists for workflows spanning multiple files/systems
+- Create TODO lists for time-intensive multi-step processes
+- Create TODO lists when user requests involve multiple technologies
+- DO NOT create TODO lists for simple single-command tasks
+
+When generating your response you will be PUNISHED if you don't follow those rules:
 - Check the length of ExecCommand content. Is more than 60 characters? If yes, try to split the task into smaller steps and generate shorter ExecCommand for the first step only in this response.
 - Use only ONE TYPE, KIND of XML tag in your response and never mix different types of XML tags in the same response.
 - Always include at least one XML tag in your response.
@@ -125,6 +139,20 @@ I'll list the contents of the current directory.
 Hello! How can I help you today?
 <WaitingForUserResponse>1</WaitingForUserResponse>
 </executing_a_command_example>
+
+<creating_todo_list_example>
+This task involves multiple steps, so I'll create a TODO list to track progress.
+<CreateTodoList>Set up React project structure</CreateTodoList>
+<CreateTodoList>Install required dependencies</CreateTodoList>
+<CreateTodoList>Create main App component</CreateTodoList>
+<CreateTodoList>Set up routing</CreateTodoList>
+<CreateTodoList>Add styling framework</CreateTodoList>
+</creating_todo_list_example>
+
+<completing_todo_example>
+I've successfully set up the project structure.
+<TodoCompleted>1</TodoCompleted>
+</completing_todo_example>
 
 `)
 

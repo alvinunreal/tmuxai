@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -23,6 +24,14 @@ func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
 		{"ExecPaneSeemsBusy", false, true, func(r *AIResponse, v string) { r.ExecPaneSeemsBusy = isTrue(v) }},
 		{"WaitingForUserResponse", false, true, func(r *AIResponse, v string) { r.WaitingForUserResponse = isTrue(v) }},
 		{"NoComment", false, true, func(r *AIResponse, v string) { r.NoComment = isTrue(v) }},
+		{"CreateTodoList", true, false, func(r *AIResponse, v string) { r.CreateTodoList = append(r.CreateTodoList, v) }},
+		{"UpdateTodoStatus", false, false, func(r *AIResponse, v string) { r.UpdateTodoStatus = v }},
+		{"UpdateTodoID", false, false, func(r *AIResponse, v string) { 
+			if id, err := strconv.Atoi(v); err == nil {
+				r.UpdateTodoID = id
+			}
+		}},
+		{"TodoCompleted", false, true, func(r *AIResponse, v string) { r.TodoCompleted = isTrue(v) }},
 	}
 
 	clean := response
