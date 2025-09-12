@@ -413,6 +413,39 @@ azure_openai:
   deployment_name: "gpt-4o"
 ```
 
+For GitHub Copilot:
+
+```yaml
+github_copilot:
+  token: "ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+  model: "gpt-4o"
+  base_url: "https://api.github.com"
+```
+
+#### Setting up GitHub Copilot
+
+To use GitHub Copilot with TmuxAI, you'll need:
+
+1. **A GitHub Copilot subscription** - GitHub Copilot requires an active subscription
+2. **A GitHub Personal Access Token** with the appropriate scopes:
+   - Go to GitHub Settings > Developer settings > Personal access tokens
+   - Create a new token with the `copilot` scope (or `read:user` for basic access)
+3. **Configure the token** in your TmuxAI configuration:
+
+```bash
+export TMUXAI_GITHUB_COPILOT_TOKEN="ghp_your_token_here"
+```
+
+Or add it to your `~/.config/tmuxai/config.yaml`:
+
+```yaml
+github_copilot:
+  token: "ghp_your_token_here"
+  model: "gpt-4o"
+```
+
+Available models for GitHub Copilot include `gpt-4o`, `gpt-4`, and `gpt-3.5-turbo`. The model selection will depend on your Copilot subscription tier.
+
 _Prompts are currently tuned for Gemini 2.5 by default; behavior with other models may vary._
 
 ## Contributing

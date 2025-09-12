@@ -15,6 +15,7 @@ var AllowedConfigKeys = []string{
 	"paste_multiline_confirm",
 	"exec_confirm",
 	"openrouter.model",
+	"github_copilot.model",
 }
 
 // GetMaxCaptureLines returns the max capture lines value with session override if present
@@ -75,6 +76,27 @@ func (m *Manager) GetExecConfirm() bool {
 }
 
 func (m *Manager) GetOpenRouterModel() string {
+	return m.GetAIModel()
+}
+
+func (m *Manager) GetAIModel() string {
+	// Check for GitHub Copilot configuration first
+	if m.Config.GitHubCopilot.Token != "" {
+		if override, exists := m.SessionOverrides["github_copilot.model"]; exists {
+			if val, ok := override.(string); ok {
+				return val
+			}
+		}
+		return m.Config.GitHubCopilot.Model
+	}
+	
+	// Check for Azure OpenAI configuration
+	if m.Config.AzureOpenAI.APIKey != "" {
+		// Azure uses deployment name instead of model
+		return m.Config.AzureOpenAI.DeploymentName
+	}
+	
+	// Default to OpenRouter model
 	if override, exists := m.SessionOverrides["openrouter.model"]; exists {
 		if val, ok := override.(string); ok {
 			return val
@@ -126,8 +148,9 @@ func formatConfigValue(sb *strings.Builder, prefix string, val reflect.Value, ov
 		var valueStr string
 		switch field.Kind() {
 		case reflect.String:
-			// Mask API keys for security
-			if strings.Contains(strings.ToLower(fieldType.Name), "apikey") {
+			// Mask API keys and tokens for security
+			if strings.Contains(strings.ToLower(fieldType.Name), "apikey") || 
+			   strings.Contains(strings.ToLower(fieldType.Name), "token") {
 				valueStr = maskAPIKey(field.String())
 			} else {
 				valueStr = field.String()
