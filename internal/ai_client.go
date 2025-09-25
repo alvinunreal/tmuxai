@@ -15,10 +15,11 @@ import (
 	"github.com/alvinunreal/tmuxai/logger"
 )
 
-// AiClient represents an AI client for interacting with OpenAI-compatible APIs including Azure OpenAI
+// AiClient represents an AI client for interacting with OpenAI-compatible APIs including Azure OpenAI and Copilot
 type AiClient struct {
-	config *config.Config
-	client *http.Client
+	config      *config.Config
+	client      *http.Client
+	copilotAuth *CopilotAuth
 }
 
 // Message represents a chat message
@@ -49,9 +50,14 @@ type ChatCompletionResponse struct {
 
 func NewAiClient(cfg *config.Config) *AiClient {
 	return &AiClient{
-		config: cfg,
-		client: &http.Client{},
+		config:      cfg,
+		client:      &http.Client{},
 	}
+}
+
+// SetCopilotAuth sets the CopilotAuth instance to use
+func (c *AiClient) SetCopilotAuth(auth *CopilotAuth) {
+	c.copilotAuth = auth
 }
 
 // GetResponseFromChatMessages gets a response from the AI based on chat messages
@@ -98,6 +104,41 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 	var url string
 	var apiKeyHeader string
 	var apiKey string
+	var additionalHeaders map[string]string
+
+	// Check provider priority: Copilot -> Azure -> OpenRouter
+	if c.config.Copilot.Enabled && c.copilotAuth != nil {
+		logger.Debug("Copilot enabled, checking authentication...")
+		if c.copilotAuth.IsAuthenticated() {
+			logger.Debug("Copilot authenticated, getting API token...")
+			// Use GitHub Copilot endpoint
+			copilotToken, err := c.copilotAuth.GetCopilotAPIToken()
+			if err != nil {
+				logger.Error("Failed to get Copilot token: %v", err)
+				// Don't fall back, return the actual error
+				return "", fmt.Errorf("failed to get Copilot API token: %w", err)
+			}
+			url = "https://api.githubcopilot.com/chat/completions"
+			apiKeyHeader = "Authorization"
+			apiKey = "Bearer " + copilotToken
+			additionalHeaders = map[string]string{
+				"User-Agent":             "GithubCopilot/1.155.0",
+				"Editor-Plugin-Version":  "copilot/1.155.0",
+				"Editor-Version":         "vscode/1.85.1",
+				"Copilot-Integration-Id": "vscode-chat",
+			}
+			// Use Copilot model if specified, otherwise use default
+			if c.config.Copilot.Model != "" {
+				reqBody.Model = c.config.Copilot.Model
+			}
+			logger.Debug("Using GitHub Copilot with model: %s", reqBody.Model)
+			goto sendRequest
+		} else {
+			logger.Debug("Copilot not authenticated")
+		}
+	} else {
+		logger.Debug("Copilot not enabled or copilotAuth is nil: enabled=%v, copilotAuth=%v", c.config.Copilot.Enabled, c.copilotAuth != nil)
+	}
 
 	if c.config.AzureOpenAI.APIKey != "" {
 		// Use Azure OpenAI endpoint
@@ -111,13 +152,17 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 
 		// Azure endpoint doesn't expect model in body
 		reqBody.Model = ""
-	} else {
+	} else if c.config.OpenRouter.APIKey != "" {
 		// default OpenRouter/OpenAI compatible endpoint
 		baseURL := strings.TrimSuffix(c.config.OpenRouter.BaseURL, "/")
 		url = baseURL + "/chat/completions"
 		apiKeyHeader = "Authorization"
 		apiKey = "Bearer " + c.config.OpenRouter.APIKey
+	} else {
+		return "", fmt.Errorf("no API provider configured")
 	}
+
+sendRequest:
 
 	reqJSON, err := json.Marshal(reqBody)
 	if err != nil {
@@ -137,6 +182,11 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 
 	req.Header.Set("HTTP-Referer", "https://github.com/alvinunreal/tmuxai")
 	req.Header.Set("X-Title", "TmuxAI")
+
+	// Add any additional headers (e.g., for Copilot)
+	for k, v := range additionalHeaders {
+		req.Header.Set(k, v)
+	}
 
 	// Log the request details for debugging before sending
 	logger.Debug("Sending API request to: %s with model: %s", url, model)

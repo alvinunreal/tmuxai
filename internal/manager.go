@@ -34,6 +34,7 @@ type CommandExecHistory struct {
 type Manager struct {
 	Config           *config.Config
 	AiClient         *AiClient
+	CopilotAuth      *CopilotAuth
 	Status           string // running, waiting, done
 	PaneId           string
 	ExecPane         *system.TmuxPaneDetails
@@ -50,10 +51,7 @@ type Manager struct {
 
 // NewManager creates a new manager agent
 func NewManager(cfg *config.Config) (*Manager, error) {
-	if cfg.OpenRouter.APIKey == "" && cfg.AzureOpenAI.APIKey == "" {
-		fmt.Println("An API key is required. Set OpenRouter or Azure OpenAI credentials in the config file or environment variables.")
-		return nil, fmt.Errorf("API key required")
-	}
+	// Allow starting without API key - we'll check later when needed
 
 	paneId, err := system.TmuxCurrentPaneId()
 	if err != nil {
@@ -76,11 +74,17 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	}
 
 	aiClient := NewAiClient(cfg)
+	copilotAuth := NewCopilotAuth(cfg)
+
+	// Share the same CopilotAuth instance with AiClient
+	aiClient.SetCopilotAuth(copilotAuth)
+
 	os := system.GetOSDetails()
 
 	manager := &Manager{
 		Config:           cfg,
 		AiClient:         aiClient,
+		CopilotAuth:      copilotAuth,
 		PaneId:           paneId,
 		Messages:         []ChatMessage{},
 		ExecPane:         &system.TmuxPaneDetails{},
@@ -93,6 +97,35 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 
 	manager.InitExecPane()
 	return manager, nil
+}
+
+// HasConfiguredProvider checks if any API provider is configured
+func (m *Manager) HasConfiguredProvider() bool {
+	// Check Copilot first (highest priority)
+	if m.Config.Copilot.Enabled && m.CopilotAuth != nil && m.CopilotAuth.IsAuthenticated() {
+		return true
+	}
+	// Check Azure OpenAI
+	if m.Config.AzureOpenAI.APIKey != "" {
+		return true
+	}
+	// Check OpenRouter
+	if m.Config.OpenRouter.APIKey != "" {
+		return true
+	}
+	return false
+}
+
+// ShowProviderSetupInstructions shows instructions for setting up an API provider
+func (m *Manager) ShowProviderSetupInstructions() {
+	m.Println("\nNo API provider configured. Please configure one:\n")
+	m.Println("• GitHub Copilot (recommended):")
+	m.Println("  /copilot login\n")
+	m.Println("• OpenRouter:")
+	m.Println("  export TMUXAI_OPENROUTER_API_KEY=\"your-key\"\n")
+	m.Println("• Azure OpenAI:")
+	m.Println("  Set credentials in ~/.config/tmuxai/config.yaml\n")
+	m.Println("Run /help for more information.")
 }
 
 // Start starts the manager agent

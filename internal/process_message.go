@@ -13,6 +13,12 @@ import (
 // Main function to process regular user messages
 // Returns true if the request was accomplished and no further processing should happen
 func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
+	// Check if any provider is configured
+	if !m.HasConfiguredProvider() {
+		m.ShowProviderSetupInstructions()
+		return false
+	}
+
 	// Check if context management is needed before sending
 	if m.needSquash() {
 		m.Println("Exceeded context size, squashing history...")

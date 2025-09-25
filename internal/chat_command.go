@@ -3,6 +3,8 @@ package internal
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -18,6 +20,10 @@ const helpMessage = `Available commands:
 - /prepare: Prepare the pane for TmuxAI automation
 - /watch <prompt>: Start watch mode
 - /squash: Summarize the chat history
+- /copilot login: Authenticate with GitHub Copilot
+- /copilot logout: Remove Copilot authentication
+- /copilot status: Show Copilot authentication status
+- /copilot models: List available Copilot models
 - /exit: Exit the application`
 
 var commands = []string{
@@ -30,6 +36,7 @@ var commands = []string{
 	"/prepare",
 	"/config",
 	"/squash",
+	"/copilot",
 }
 
 // checks if the given content is a command
@@ -163,6 +170,10 @@ Watch for: ` + watchDesc
 		m.Println("Usage: /watch <description>")
 		return
 
+	case prefixMatch(commandPrefix, "/copilot"):
+		m.processCopilotCommand(parts)
+		return
+
 	case prefixMatch(commandPrefix, "/config"):
 		// Helper function to check if a key is allowed
 		isKeyAllowed := func(key string) bool {
@@ -244,4 +255,153 @@ func (m *Manager) formatInfo() {
 		pane.Refresh(m.GetMaxCaptureLines())
 		fmt.Println(pane.FormatInfo(formatter))
 	}
+}
+
+// processCopilotCommand handles /copilot subcommands
+func (m *Manager) processCopilotCommand(parts []string) {
+	if len(parts) < 2 {
+		m.Println("Usage: /copilot <login|logout|status|models>")
+		return
+	}
+
+	subcommand := parts[1]
+	switch subcommand {
+	case "login":
+		m.copilotLogin()
+	case "logout":
+		m.copilotLogout()
+	case "status":
+		m.copilotStatus()
+	case "models":
+		m.copilotListModels()
+	default:
+		m.Println(fmt.Sprintf("Unknown copilot command: %s", subcommand))
+		m.Println("Available commands: login, logout, status, models")
+	}
+}
+
+// copilotLogin handles the Copilot authentication flow
+func (m *Manager) copilotLogin() {
+	// Request device code
+	deviceCode, err := m.CopilotAuth.RequestDeviceCode()
+	if err != nil {
+		m.Println(fmt.Sprintf("Failed to request device code: %v", err))
+		return
+	}
+
+	// Show instructions in a single formatted message
+	authMessage := fmt.Sprintf(`
+GitHub Copilot Authentication
+
+1. Copy your one-time code: %s
+
+2. Visit GitHub to authorize: %s
+
+Waiting for authentication...
+`, deviceCode.UserCode, deviceCode.VerificationURI)
+
+	m.Println(authMessage)
+
+	// Try to open the browser automatically
+	openBrowser(deviceCode.VerificationURI)
+
+	// Start polling in background
+	go func() {
+		interval := time.Duration(deviceCode.Interval) * time.Second
+		maxAttempts := deviceCode.ExpiresIn / deviceCode.Interval
+
+		for i := 0; i < maxAttempts; i++ {
+			time.Sleep(interval)
+
+			tokenResp, err := m.CopilotAuth.PollForAccessToken(deviceCode)
+			if err != nil {
+				fmt.Printf("\nAuthentication failed: %v\n", err)
+				return
+			}
+
+			if tokenResp != nil {
+				// Save the token
+				if err := m.CopilotAuth.SaveAuthToken(tokenResp.AccessToken); err != nil {
+					fmt.Printf("\nFailed to save auth token: %v\n", err)
+					return
+				}
+
+				// Use fmt.Println to avoid the prompt prefix in async context
+				fmt.Println("\n✓ Authentication successful!")
+				fmt.Println("You can now use GitHub Copilot models.")
+				fmt.Println() // Extra line for clarity
+				return
+			}
+		}
+
+		fmt.Println("\nAuthentication timed out. Please try again.")
+	}()
+}
+
+// copilotLogout removes the stored authentication
+func (m *Manager) copilotLogout() {
+	if err := m.CopilotAuth.RemoveAuthToken(); err != nil {
+		m.Println(fmt.Sprintf("Failed to logout: %v", err))
+		return
+	}
+	m.Println("Successfully logged out of GitHub Copilot.")
+}
+
+// copilotStatus shows the current authentication status
+func (m *Manager) copilotStatus() {
+	if m.CopilotAuth.IsAuthenticated() {
+		m.Println("✓ Authenticated with GitHub Copilot")
+
+		// Try to get current model from config
+		model := m.Config.Copilot.Model
+		if model == "" {
+			model = "gpt-4o"
+		}
+		m.Println(fmt.Sprintf("Current model: %s", model))
+	} else {
+		m.Println("✗ Not authenticated with GitHub Copilot")
+		m.Println("Run '/copilot login' to authenticate")
+	}
+}
+
+// copilotListModels lists available Copilot models
+func (m *Manager) copilotListModels() {
+	if !m.CopilotAuth.IsAuthenticated() {
+		m.Println("Not authenticated. Run '/copilot login' first.")
+		return
+	}
+
+	models, err := m.CopilotAuth.ListModels()
+	if err != nil {
+		m.Println(fmt.Sprintf("Failed to list models: %v", err))
+		return
+	}
+
+	m.Println("\nAvailable GitHub Copilot models:")
+	for _, model := range models {
+		prefix := "  "
+		if model == m.Config.Copilot.Model {
+			prefix = "→ "
+		}
+		m.Println(fmt.Sprintf("%s%s", prefix, model))
+	}
+}
+
+// openBrowser tries to open a URL in the default browser
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		return
+	}
+
+	// Run in background, ignore errors (browser might not be available in SSH sessions)
+	go cmd.Run()
 }
