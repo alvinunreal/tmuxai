@@ -8,6 +8,7 @@ import (
 
 	"github.com/alvinunreal/tmuxai/config"
 	"github.com/alvinunreal/tmuxai/logger"
+	"github.com/alvinunreal/tmuxai/session"
 	"github.com/alvinunreal/tmuxai/system"
 	"github.com/fatih/color"
 )
@@ -23,6 +24,7 @@ type AIResponse struct {
 	NoComment              bool
 }
 
+// CommandExecHistory represents a command execution history entry
 // Parsed only when pane is prepared
 type CommandExecHistory struct {
 	Command string
@@ -42,6 +44,10 @@ type Manager struct {
 	WatchMode        bool
 	OS               string
 	SessionOverrides map[string]interface{} // session-only config overrides
+	sessionStore     *session.FileStore
+	currentSession   *session.Session
+	autoSaveTicker   *time.Ticker
+	autoSaveStop     chan bool
 
 	// Functions for mocking
 	confirmedToExec  func(command string, prompt string, edit bool) (bool, string)
@@ -78,6 +84,14 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	aiClient := NewAiClient(cfg)
 	os := system.GetOSDetails()
 
+	// Initialize session store
+	sessionStore, err := session.NewFileStore()
+	if err != nil {
+		logger.Error("Failed to initialize session store: %v", err)
+		// Continue without session support
+		sessionStore = nil
+	}
+
 	manager := &Manager{
 		Config:           cfg,
 		AiClient:         aiClient,
@@ -86,12 +100,18 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		ExecPane:         &system.TmuxPaneDetails{},
 		OS:               os,
 		SessionOverrides: make(map[string]interface{}),
+		sessionStore:     sessionStore,
+		autoSaveStop:     make(chan bool),
 	}
 
 	manager.confirmedToExec = manager.confirmedToExecFn
 	manager.getTmuxPanesInXml = manager.getTmuxPanesInXmlFn
 
 	manager.InitExecPane()
+
+	// Start auto-save mechanism
+	manager.startAutoSave()
+
 	return manager, nil
 }
 
@@ -166,4 +186,161 @@ func (ai *AIResponse) String() string {
 		ai.WaitingForUserResponse,
 		ai.NoComment,
 	)
+}
+
+// Session management methods
+
+func (m *Manager) startAutoSave() {
+	if m.sessionStore == nil {
+		return
+	}
+
+	m.autoSaveTicker = time.NewTicker(30 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-m.autoSaveTicker.C:
+				if m.currentSession != nil {
+					m.saveCurrentSession()
+				}
+			case <-m.autoSaveStop:
+				return
+			}
+		}
+	}()
+}
+
+func (m *Manager) stopAutoSave() {
+	if m.autoSaveTicker != nil {
+		m.autoSaveTicker.Stop()
+		m.autoSaveStop <- true
+	}
+}
+
+func (m *Manager) saveCurrentSession() {
+	if m.sessionStore == nil || m.currentSession == nil {
+		return
+	}
+
+	// Convert internal types to session types
+	sessionMessages := make([]session.ChatMessage, len(m.Messages))
+	for i, msg := range m.Messages {
+		sessionMessages[i] = session.ChatMessage{
+			Content:   msg.Content,
+			FromUser:  msg.FromUser,
+			Timestamp: msg.Timestamp,
+		}
+	}
+
+	sessionExecHistory := make([]session.CommandExecHistory, len(m.ExecHistory))
+	for i, hist := range m.ExecHistory {
+		sessionExecHistory[i] = session.CommandExecHistory{
+			Command: hist.Command,
+			Output:  hist.Output,
+			Code:    hist.Code,
+		}
+	}
+
+	m.currentSession.Messages = sessionMessages
+	m.currentSession.ExecHistory = sessionExecHistory
+
+	// Generate summary if needed
+	if m.currentSession.Summary == "" && len(m.Messages) > 0 {
+		m.currentSession.Summary = m.generateSessionSummary()
+	}
+
+	if err := m.sessionStore.Save(m.currentSession); err != nil {
+		logger.Error("Failed to save session: %v", err)
+	}
+}
+
+func (m *Manager) generateSessionSummary() string {
+	if len(m.Messages) == 0 {
+		return "Empty session"
+	}
+
+	// Take first user message as summary (max 100 chars)
+	for _, msg := range m.Messages {
+		if msg.FromUser {
+			content := msg.Content
+			if len(content) > 100 {
+				content = content[:97] + "..."
+			}
+			return content
+		}
+	}
+
+	// Fallback to first message
+	content := m.Messages[0].Content
+	if len(content) > 100 {
+		content = content[:97] + "..."
+	}
+	return content
+}
+
+func (m *Manager) LoadSession(sessionID string) error {
+	if m.sessionStore == nil {
+		return fmt.Errorf("session store not initialized")
+	}
+
+	loadedSession, err := m.sessionStore.Load(sessionID)
+	if err != nil {
+		return err
+	}
+
+	// Convert session types to internal types
+	m.Messages = make([]ChatMessage, len(loadedSession.Messages))
+	for i, msg := range loadedSession.Messages {
+		m.Messages[i] = ChatMessage{
+			Content:   msg.Content,
+			FromUser:  msg.FromUser,
+			Timestamp: msg.Timestamp,
+		}
+	}
+
+	m.ExecHistory = make([]CommandExecHistory, len(loadedSession.ExecHistory))
+	for i, hist := range loadedSession.ExecHistory {
+		m.ExecHistory[i] = CommandExecHistory{
+			Command: hist.Command,
+			Output:  hist.Output,
+			Code:    hist.Code,
+		}
+	}
+
+	m.currentSession = loadedSession
+	m.sessionStore.SetCurrent(sessionID)
+
+	return nil
+}
+
+func (m *Manager) CreateNewSession(name string) {
+	if m.sessionStore == nil {
+		return
+	}
+
+	m.currentSession = &session.Session{
+		ID:        fmt.Sprintf("%d", time.Now().Unix()),
+		Name:      name,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	m.Messages = []ChatMessage{}
+	m.ExecHistory = []CommandExecHistory{}
+}
+
+func (m *Manager) ListSessions(limit int) ([]session.SessionSummary, error) {
+	if m.sessionStore == nil {
+		return nil, fmt.Errorf("session store not initialized")
+	}
+
+	return m.sessionStore.List(limit)
+}
+
+func (m *Manager) DeleteSession(sessionID string) error {
+	if m.sessionStore == nil {
+		return fmt.Errorf("session store not initialized")
+	}
+
+	return m.sessionStore.Delete(sessionID)
 }

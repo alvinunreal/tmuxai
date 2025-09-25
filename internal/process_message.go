@@ -130,6 +130,10 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 	if r.ExecPaneSeemsBusy || r.NoComment {
 	} else {
 		m.Messages = append(m.Messages, currentMessage, responseMsg)
+		// Auto-save if session exists
+		if m.currentSession != nil {
+			m.saveCurrentSession()
+		}
 	}
 
 	// observe/prepared mode

@@ -37,6 +37,41 @@ func NewCLIInterface(manager *Manager) *CLIInterface {
 
 // Start starts the CLI interface
 func (c *CLIInterface) Start(initMessage string) error {
+	// Check for recent sessions and offer to resume
+	if initMessage == "" {
+		if sessions, err := c.manager.ListSessions(5); err == nil && len(sessions) > 0 {
+			fmt.Println("\nRecent sessions:")
+			for i, s := range sessions {
+				timeStr := s.UpdatedAt.Format("Jan 2 15:04")
+				summary := s.Summary
+				if len(summary) > 50 {
+					summary = summary[:47] + "..."
+				}
+				fmt.Printf("%d. %s - %s (%s)\n", i+1, s.Name, timeStr, summary)
+			}
+			fmt.Println("\nEnter session number to resume, or press Enter for new session:")
+
+			var choice string
+			fmt.Scanln(&choice)
+
+			if choice != "" {
+				if num := 0; fmt.Sscanf(choice, "%d", &num) == 1 && num > 0 && num <= len(sessions) {
+					sessionID := sessions[num-1].ID
+					if err := c.manager.LoadSession(sessionID); err == nil {
+						fmt.Printf("Resumed session: %s\n", sessions[num-1].Name)
+					} else {
+						fmt.Printf("Failed to load session: %v\n", err)
+					}
+				}
+			}
+		}
+	}
+
+	// Create new session if none loaded
+	if c.manager.currentSession == nil {
+		c.manager.CreateNewSession("New session")
+	}
+
 	c.printWelcomeMessage()
 
 	// Initialize history

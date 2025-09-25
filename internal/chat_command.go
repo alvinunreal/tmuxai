@@ -18,6 +18,11 @@ const helpMessage = `Available commands:
 - /prepare: Prepare the pane for TmuxAI automation
 - /watch <prompt>: Start watch mode
 - /squash: Summarize the chat history
+- /sessions: List recent sessions
+- /session load <id>: Load a specific session
+- /session save [name]: Save current session with optional name
+- /session new: Start a new session
+- /session delete <id>: Delete a session
 - /exit: Exit the application`
 
 var commands = []string{
@@ -30,6 +35,8 @@ var commands = []string{
 	"/prepare",
 	"/config",
 	"/squash",
+	"/sessions",
+	"/session",
 }
 
 // checks if the given content is a command
@@ -162,6 +169,89 @@ Watch for: ` + watchDesc
 		}
 		m.Println("Usage: /watch <description>")
 		return
+
+	case prefixMatch(commandPrefix, "/sessions"):
+		sessions, err := m.ListSessions(10)
+		if err != nil {
+			m.Println(fmt.Sprintf("Error listing sessions: %v", err))
+			return
+		}
+		if len(sessions) == 0 {
+			m.Println("No sessions found")
+			return
+		}
+		m.Println("Recent sessions:")
+		for i, s := range sessions {
+			timeStr := s.UpdatedAt.Format("Jan 2 15:04")
+			summary := s.Summary
+			if len(summary) > 50 {
+				summary = summary[:47] + "..."
+			}
+			m.Println(fmt.Sprintf("%d. [%s] %s - %s (%s)", i+1, s.ID, s.Name, timeStr, summary))
+		}
+		return
+
+	case prefixMatch(commandPrefix, "/session"):
+		if len(parts) < 2 {
+			m.Println("Usage: /session <load|save|new|delete> [args]")
+			return
+		}
+
+		subcommand := parts[1]
+		switch subcommand {
+		case "load":
+			if len(parts) < 3 {
+				m.Println("Usage: /session load <id>")
+				return
+			}
+			sessionID := parts[2]
+			if err := m.LoadSession(sessionID); err != nil {
+				m.Println(fmt.Sprintf("Error loading session: %v", err))
+				return
+			}
+			m.Println(fmt.Sprintf("Loaded session %s", sessionID))
+			return
+
+		case "save":
+			name := "Unnamed session"
+			if len(parts) > 2 {
+				name = strings.Join(parts[2:], " ")
+			}
+			if m.currentSession == nil {
+				m.CreateNewSession(name)
+			} else {
+				m.currentSession.Name = name
+			}
+			m.saveCurrentSession()
+			m.Println(fmt.Sprintf("Session saved: %s", name))
+			return
+
+		case "new":
+			name := "New session"
+			if len(parts) > 2 {
+				name = strings.Join(parts[2:], " ")
+			}
+			m.CreateNewSession(name)
+			m.Println(fmt.Sprintf("Started new session: %s", name))
+			return
+
+		case "delete":
+			if len(parts) < 3 {
+				m.Println("Usage: /session delete <id>")
+				return
+			}
+			sessionID := parts[2]
+			if err := m.DeleteSession(sessionID); err != nil {
+				m.Println(fmt.Sprintf("Error deleting session: %v", err))
+				return
+			}
+			m.Println(fmt.Sprintf("Deleted session %s", sessionID))
+			return
+
+		default:
+			m.Println("Unknown subcommand. Use: load, save, new, or delete")
+			return
+		}
 
 	case prefixMatch(commandPrefix, "/config"):
 		// Helper function to check if a key is allowed
