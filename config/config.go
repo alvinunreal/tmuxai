@@ -23,6 +23,7 @@ type Config struct {
 	BlacklistPatterns     []string          `mapstructure:"blacklist_patterns"`
 	OpenRouter            OpenRouterConfig  `mapstructure:"openrouter"`
 	AzureOpenAI           AzureOpenAIConfig `mapstructure:"azure_openai"`
+	Copilot               CopilotConfig     `mapstructure:"copilot"`
 	Prompts               PromptsConfig     `mapstructure:"prompts"`
 }
 
@@ -39,6 +40,12 @@ type AzureOpenAIConfig struct {
 	APIBase        string `mapstructure:"api_base"`
 	APIVersion     string `mapstructure:"api_version"`
 	DeploymentName string `mapstructure:"deployment_name"`
+}
+
+// CopilotConfig holds GitHub Copilot configuration
+type CopilotConfig struct {
+	Enabled bool   `mapstructure:"enabled"`
+	Model   string `mapstructure:"model"`
 }
 
 // PromptsConfig holds customizable prompt templates
@@ -66,6 +73,10 @@ func DefaultConfig() *Config {
 			Model:   "google/gemini-2.5-flash-preview",
 		},
 		AzureOpenAI: AzureOpenAIConfig{},
+		Copilot: CopilotConfig{
+			Enabled: true,
+			Model:   "gpt-4o",
+		},
 		Prompts: PromptsConfig{
 			BaseSystem:    ``,
 			ChatAssistant: ``,
