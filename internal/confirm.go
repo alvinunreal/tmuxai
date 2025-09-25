@@ -88,15 +88,18 @@ func (m *Manager) confirmedToExecFn(command string, prompt string, edit bool) (b
 			fmt.Printf("Error creating temporary file: %v\n", err)
 			return false, ""
 		}
-		defer os.Remove(tmpFile.Name())
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 		// Write the command to the temporary file
 		if _, err := tmpFile.WriteString(command); err != nil {
 			fmt.Printf("Error writing to temporary file: %v\n", err)
-			tmpFile.Close()
+			_ = tmpFile.Close()
 			return false, ""
 		}
-		tmpFile.Close()
+		if err := tmpFile.Close(); err != nil {
+			fmt.Printf("Error closing temporary file: %v\n", err)
+			return false, ""
+		}
 
 		// Open the editor
 		cmd := exec.Command(editor, tmpFile.Name())
