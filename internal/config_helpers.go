@@ -15,6 +15,7 @@ var AllowedConfigKeys = []string{
 	"paste_multiline_confirm",
 	"exec_confirm",
 	"openrouter.model",
+	"openai.model",
 }
 
 // GetMaxCaptureLines returns the max capture lines value with session override if present
@@ -81,6 +82,33 @@ func (m *Manager) GetOpenRouterModel() string {
 		}
 	}
 	return m.Config.OpenRouter.Model
+}
+
+// GetOpenAIModel returns the OpenAI model value with session override if present
+func (m *Manager) GetOpenAIModel() string {
+	if override, exists := m.SessionOverrides["openai.model"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.OpenAI.Model
+}
+
+// GetModel returns the appropriate model based on configuration priority
+// Priority: OpenAI > Azure > OpenRouter
+func (m *Manager) GetModel() string {
+	// If OpenAI is configured, use OpenAI model
+	if m.Config.OpenAI.APIKey != "" && m.Config.OpenAI.Model != "" {
+		return m.GetOpenAIModel()
+	}
+
+	// If Azure is configured, use Azure deployment name
+	if m.Config.AzureOpenAI.APIKey != "" {
+		return m.Config.AzureOpenAI.DeploymentName
+	}
+
+	// Default to OpenRouter
+	return m.GetOpenRouterModel()
 }
 
 // FormatConfig returns a nicely formatted string of all config values with session overrides applied

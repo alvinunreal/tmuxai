@@ -108,11 +108,25 @@ sudo mv ./tmuxai /usr/local/bin/
 
 After installing TmuxAI, you need to configure your API key to start using it:
 
-1. **Set the API Key**  
-   TmuxAI uses the OpenRouter endpoint by default. Set your API key by adding the following to your shell configuration (e.g., `~/.bashrc`, `~/.zshrc`):
+1. **Set the API Key**
+   TmuxAI supports multiple AI providers. Choose one of the following:
 
+   **OpenAI (Recommended for new models like GPT-5):**
    ```bash
-   export TMUXAI_OPENROUTER_API_KEY="your-api-key-here"
+   export TMUXAI_OPENAI_API_KEY="your-openai-api-key-here"
+   export TMUXAI_OPENAI_MODEL="gpt-5"
+   ```
+
+   **OpenRouter (Default):**
+   ```bash
+   export TMUXAI_OPENROUTER_API_KEY="your-openrouter-api-key-here"
+   ```
+
+   **Azure OpenAI:**
+   ```bash
+   export TMUXAI_AZURE_OPENAI_API_KEY="your-azure-api-key-here"
+   export TMUXAI_AZURE_OPENAI_API_BASE="https://your-resource.openai.azure.com/"
+   export TMUXAI_AZURE_OPENAI_DEPLOYMENT_NAME="your-deployment"
    ```
 
 2. **Start TmuxAI**
@@ -120,6 +134,8 @@ After installing TmuxAI, you need to configure your API key to start using it:
    ```bash
    tmuxai
    ```
+
+   **Provider Priority:** If multiple API keys are configured, TmuxAI will use them in this order: OpenAI → Azure OpenAI → OpenRouter.
 
 ## TmuxAI Layout
 
@@ -331,8 +347,16 @@ All configuration options can also be set via environment variables, which take 
 # Examples
 export TMUXAI_DEBUG=true
 export TMUXAI_MAX_CAPTURE_LINES=300
-export TMUXAI_OPENROUTER_API_KEY="your-api-key-here"
+
+# OpenAI (Responses API)
+export TMUXAI_OPENAI_API_KEY="your-openai-api-key-here"
+export TMUXAI_OPENAI_MODEL="gpt-5"
+
+# OpenRouter (Chat Completions API)
+export TMUXAI_OPENROUTER_API_KEY="your-openrouter-api-key-here"
 export TMUXAI_OPENROUTER_MODEL="..."
+
+# Azure OpenAI (Chat Completions API)
 export TMUXAI_AZURE_OPENAI_API_KEY="your-azure-api-key"
 export TMUXAI_AZURE_OPENAI_API_BASE="https://your-resource.openai.azure.com/"
 export TMUXAI_AZURE_OPENAI_API_VERSION="2025-04-01-preview"
@@ -343,8 +367,12 @@ You can also use environment variables directly within your configuration file v
 
 ```yaml
 # Example config.yaml with environment variable expansion
-openrouter:
+openai:
   api_key: "${OPENAI_API_KEY}"
+  model: "gpt-5"
+
+openrouter:
+  api_key: "${OPENROUTER_API_KEY}"
   base_url: https://api.openai.com/v1
 ```
 
@@ -358,6 +386,7 @@ TmuxAI » /config
 
 # Override a configuration value for this session
 TmuxAI » /config set max_capture_lines 300
+TmuxAI » /config set openai.model gpt-5
 TmuxAI » /config set openrouter.model gpt-4o-mini
 ```
 
@@ -365,9 +394,29 @@ These changes will persist only for the current session and won't modify your co
 
 ### Using Other AI Providers
 
-OpenRouter is OpenAI API-compatible, so you can direct TmuxAI at OpenAI or any other OpenAI API-compatible endpoint by customizing the `base_url`.
+TmuxAI supports multiple AI providers with different API formats:
 
-For OpenAI:
+#### OpenAI (Responses API)
+
+For the best experience with new OpenAI models like GPT-5, use the dedicated OpenAI configuration:
+
+```yaml
+openai:
+  api_key: "your-openai-api-key"
+  model: "gpt-5"
+  base_url: "https://api.openai.com/v1"  # Optional, defaults to this
+```
+
+**Benefits of OpenAI Responses API:**
+- Better performance with reasoning models
+- Built-in tools (web search, file search, computer use, code interpreter)
+- Lower costs due to improved cache utilization
+- Stateful context management
+- Future-proofed for upcoming models
+
+#### OpenRouter (Chat Completions API)
+
+OpenRouter is OpenAI API-compatible, so you can direct TmuxAI at OpenAI or any other OpenAI API-compatible endpoint by customizing the `base_url`:
 
 ```yaml
 openrouter:
@@ -403,7 +452,9 @@ openrouter:
   base_url: http://localhost:11434/v1
 ```
 
-For Azure OpenAI:
+#### Azure OpenAI (Chat Completions API)
+
+For Azure OpenAI deployments:
 
 ```yaml
 azure_openai:
@@ -412,6 +463,16 @@ azure_openai:
   api_version: "2025-04-01-preview"
   deployment_name: "gpt-4o"
 ```
+
+#### Provider Selection
+
+TmuxAI automatically selects the AI provider based on configuration priority:
+
+1. **OpenAI** (Responses API) - If `openai.api_key` is configured
+2. **Azure OpenAI** (Chat Completions) - If `azure_openai.api_key` is configured
+3. **OpenRouter** (Chat Completions) - Default fallback
+
+You can override the provider at runtime by setting the appropriate API key and model configuration.
 
 _Prompts are currently tuned for Gemini 2.5 by default; behavior with other models may vary._
 

@@ -54,7 +54,7 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 
 	sending := append(history, currentMessage)
 
-	response, err := m.AiClient.GetResponseFromChatMessages(ctx, sending, m.GetOpenRouterModel())
+	response, err := m.AiClient.GetResponseFromChatMessages(ctx, sending, m.GetModel())
 	if err != nil {
 		s.Stop()
 		m.Status = ""

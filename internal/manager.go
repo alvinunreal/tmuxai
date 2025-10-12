@@ -50,8 +50,8 @@ type Manager struct {
 
 // NewManager creates a new manager agent
 func NewManager(cfg *config.Config) (*Manager, error) {
-	if cfg.OpenRouter.APIKey == "" && cfg.AzureOpenAI.APIKey == "" {
-		fmt.Println("An API key is required. Set OpenRouter or Azure OpenAI credentials in the config file or environment variables.")
+	if cfg.OpenRouter.APIKey == "" && cfg.AzureOpenAI.APIKey == "" && cfg.OpenAI.APIKey == "" {
+		fmt.Println("An API key is required. Set OpenAI, OpenRouter, or Azure OpenAI credentials in the config file or environment variables.")
 		return nil, fmt.Errorf("API key required")
 	}
 

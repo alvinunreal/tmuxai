@@ -6,36 +6,55 @@ send_keys_confirm: true # Confirm before executing send keys
 paste_multiline_confirm: true # Confirm before pasting multiline content
 exec_confirm: true # Confirm before executing commands
 
-# Not only OpenRouter, you can use any OpenAI compatible API
+# OpenAI Responses API (recommended for new models like GPT-5)
+# openai:
+#   api_key: sk-XXXXXXXXX
+#   model: gpt-5
+#   base_url: https://api.openai.com/v1  # Optional, defaults to this
+
+# OpenRouter Chat Completions API (default, supports many models)
 openrouter:
   api_key: sk-or-v1-XXXXXXXXX
   model: google/gemini-2.5-flash-preview # default model
   base_url: https://openrouter.ai/api/v1 # default base url
 
-# Azure OpenAI configuration
+# Azure OpenAI Chat Completions API
 # azure_openai:
 #   api_key: <your-azure-openai-api-key>
 #   api_base: https://your-resource.openai.azure.com/
 #   api_version: 2025-04-01-preview
 #   deployment_name: gpt-4o
 
-# OpenAI example
-# openrouter:
-#   api_key: sk-XXXXXXXXX
-#   model: o4-mini-2025-04-16
-#   base_url: https://api.openai.com/v1
+# Provider Priority:
+# 1. OpenAI (if api_key is configured) - Uses Responses API
+# 2. Azure OpenAI (if api_key is configured) - Uses Chat Completions API
+# 3. OpenRouter (default fallback) - Uses Chat Completions API
 
-# Anthropic example
+# Additional OpenRouter Examples (uses Chat Completions API)
+
+# Anthropic Claude via OpenRouter
 # openrouter:
 #   api_key: sk-proj-XXX
-#   model:
-#   base_url: https://api.anthropic.com/v1
+#   model: anthropic/claude-3.5-sonnet
+#   base_url: https://openrouter.ai/api/v1
 
-# Local Ollama example
+# Direct OpenAI via OpenRouter (Chat Completions API)
+# openrouter:
+#   api_key: sk-XXXXXXXXX
+#   model: openai/o4-mini-2025-04-16
+#   base_url: https://openrouter.ai/api/v1
+
+# Local Ollama via OpenRouter
 # openrouter:
 #   api_key: api-key
-#   model: gemma3:1b
-#   base_url: http://localhost:11434/v1
+#   model: ollama/gemma3:1b
+#   base_url: https://openrouter.ai/api/v1
+
+# Direct connection to other providers (using OpenRouter config but different base_url)
+# openrouter:
+#   api_key: sk-proj-XXX
+#   model: claude-3-5-sonnet-20241022
+#   base_url: https://api.anthropic.com/v1
 
 debug: false # Set to true to log full AI messages sent and received. Dest: ~/.config/tmuxai/debug/
 

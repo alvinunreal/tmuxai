@@ -22,12 +22,20 @@ type Config struct {
 	WhitelistPatterns     []string          `mapstructure:"whitelist_patterns"`
 	BlacklistPatterns     []string          `mapstructure:"blacklist_patterns"`
 	OpenRouter            OpenRouterConfig  `mapstructure:"openrouter"`
+	OpenAI                OpenAIConfig      `mapstructure:"openai"`
 	AzureOpenAI           AzureOpenAIConfig `mapstructure:"azure_openai"`
 	Prompts               PromptsConfig     `mapstructure:"prompts"`
 }
 
 // OpenRouterConfig holds OpenRouter API configuration
 type OpenRouterConfig struct {
+	APIKey  string `mapstructure:"api_key"`
+	Model   string `mapstructure:"model"`
+	BaseURL string `mapstructure:"base_url"`
+}
+
+// OpenAIConfig holds OpenAI API configuration
+type OpenAIConfig struct {
 	APIKey  string `mapstructure:"api_key"`
 	Model   string `mapstructure:"model"`
 	BaseURL string `mapstructure:"base_url"`
@@ -64,6 +72,9 @@ func DefaultConfig() *Config {
 		OpenRouter: OpenRouterConfig{
 			BaseURL: "https://openrouter.ai/api/v1",
 			Model:   "google/gemini-2.5-flash-preview",
+		},
+		OpenAI: OpenAIConfig{
+			BaseURL: "https://api.openai.com/v1",
 		},
 		AzureOpenAI: AzureOpenAIConfig{},
 		Prompts: PromptsConfig{
