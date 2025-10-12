@@ -15,6 +15,16 @@ import (
 	"github.com/alvinunreal/tmuxai/logger"
 )
 
+// Model constants for models that require the /v1/responses endpoint
+const (
+	ModelGPT5Codex  = "gpt-5-codex"
+	ModelO1         = "o1"
+	ModelO1Mini     = "o1-mini"
+	ModelO1Preview  = "o1-preview"
+	PrefixO1Dash    = "o1-"
+	PrefixO1Underscore = "o1_"
+)
+
 // AiClient represents an AI client for interacting with OpenAI-compatible APIs including Azure OpenAI
 type AiClient struct {
 	config *config.Config
@@ -75,6 +85,15 @@ func NewAiClient(cfg *config.Config) *AiClient {
 }
 
 // requiresResponsesAPI checks if a model requires the /v1/responses endpoint instead of /v1/chat/completions
+//
+// OpenAI's newer reasoning models (o1 series, gpt-5-codex) only support the /v1/responses API.
+// This function uses:
+// - Exact matching: for specific model versions (e.g., "o1", "o1-mini", "gpt-5-codex")
+// - Prefix matching: for model families with delimiter check to avoid false positives
+//   (e.g., "o1-2024-12-17" matches but "gpt-4-o1-turbo" does not)
+//
+// When adding new models to this list, ensure they don't create false positives with
+// existing model names. Test with the TestRequiresResponsesAPI test suite.
 func requiresResponsesAPI(model string) bool {
 	// Models that only work with /v1/responses endpoint
 	// Using exact matching and prefix matching to avoid false positives
@@ -82,10 +101,10 @@ func requiresResponsesAPI(model string) bool {
 
 	// Exact matches for full model names
 	exactMatches := []string{
-		"gpt-5-codex",
-		"o1",
-		"o1-mini",
-		"o1-preview",
+		ModelGPT5Codex,
+		ModelO1,
+		ModelO1Mini,
+		ModelO1Preview,
 	}
 
 	for _, m := range exactMatches {
@@ -97,8 +116,8 @@ func requiresResponsesAPI(model string) bool {
 	// Prefix matches for model families (with delimiter after prefix to avoid false positives)
 	// e.g., "o1-2024-12-17" matches but "gpt-4-o1-turbo" does not
 	prefixMatches := []string{
-		"o1-",
-		"o1_",
+		PrefixO1Dash,
+		PrefixO1Underscore,
 	}
 
 	for _, prefix := range prefixMatches {
@@ -173,6 +192,10 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 			Messages: messages,
 		}
 		reqJSON, err = json.Marshal(reqBody)
+		if err != nil {
+			logger.Error("Failed to marshal request: %v", err)
+			return "", fmt.Errorf("failed to marshal request: %w", err)
+		}
 	} else {
 		// default OpenRouter/OpenAI compatible endpoint
 		baseURL := strings.TrimSuffix(c.config.OpenRouter.BaseURL, "/")
@@ -187,6 +210,10 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 				Messages: messages,
 			}
 			reqJSON, err = json.Marshal(reqBody)
+			if err != nil {
+				logger.Error("Failed to marshal request: %v", err)
+				return "", fmt.Errorf("failed to marshal request: %w", err)
+			}
 			logger.Debug("Using /responses endpoint for model: %s", model)
 		} else {
 			// Use standard /chat/completions endpoint
@@ -196,12 +223,11 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 				Messages: messages,
 			}
 			reqJSON, err = json.Marshal(reqBody)
+			if err != nil {
+				logger.Error("Failed to marshal request: %v", err)
+				return "", fmt.Errorf("failed to marshal request: %w", err)
+			}
 		}
-	}
-
-	if err != nil {
-		logger.Error("Failed to marshal request: %v", err)
-		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqJSON))

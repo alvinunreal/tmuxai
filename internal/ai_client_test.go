@@ -293,6 +293,36 @@ func TestErrorHandling(t *testing.T) {
 			t.Errorf("expected 'no completion choices returned' error, got: %v", err)
 		}
 	})
+
+	t.Run("malformed JSON response from responses API", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Verify we're hitting the responses endpoint
+			if r.URL.Path != "/responses" {
+				t.Errorf("expected /responses endpoint, got: %s", r.URL.Path)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{invalid json for responses api`))
+		}))
+		defer server.Close()
+
+		cfg := &config.Config{
+			OpenRouter: config.OpenRouterConfig{
+				APIKey:  "test-key",
+				BaseURL: server.URL,
+			},
+		}
+
+		client := NewAiClient(cfg)
+		msg := []Message{{Role: "user", Content: "test"}}
+		// Use "o1" to trigger responses API endpoint
+		_, err := client.ChatCompletion(context.Background(), msg, "o1")
+		if err == nil {
+			t.Error("expected error for malformed JSON from responses API, got nil")
+		}
+		if err != nil && !contains(err.Error(), "failed to unmarshal") {
+			t.Errorf("expected 'failed to unmarshal' error, got: %v", err)
+		}
+	})
 }
 
 // Helper function to check if a string contains a substring
