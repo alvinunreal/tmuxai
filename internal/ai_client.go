@@ -77,19 +77,36 @@ func NewAiClient(cfg *config.Config) *AiClient {
 // requiresResponsesAPI checks if a model requires the /v1/responses endpoint instead of /v1/chat/completions
 func requiresResponsesAPI(model string) bool {
 	// Models that only work with /v1/responses endpoint
-	responsesOnlyModels := []string{
+	// Using exact matching and prefix matching to avoid false positives
+	modelLower := strings.ToLower(model)
+
+	// Exact matches for full model names
+	exactMatches := []string{
 		"gpt-5-codex",
-		"o1",      // OpenAI o1 models
+		"o1",
 		"o1-mini",
 		"o1-preview",
 	}
 
-	modelLower := strings.ToLower(model)
-	for _, m := range responsesOnlyModels {
-		if strings.Contains(modelLower, strings.ToLower(m)) {
+	for _, m := range exactMatches {
+		if modelLower == strings.ToLower(m) {
 			return true
 		}
 	}
+
+	// Prefix matches for model families (with delimiter after prefix to avoid false positives)
+	// e.g., "o1-2024-12-17" matches but "gpt-4-o1-turbo" does not
+	prefixMatches := []string{
+		"o1-",
+		"o1_",
+	}
+
+	for _, prefix := range prefixMatches {
+		if strings.HasPrefix(modelLower, prefix) {
+			return true
+		}
+	}
+
 	return false
 }
 
