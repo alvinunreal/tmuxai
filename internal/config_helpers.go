@@ -15,7 +15,13 @@ var AllowedConfigKeys = []string{
 	"paste_multiline_confirm",
 	"exec_confirm",
 	"openrouter.model",
+	"openai.api_key",
 	"openai.model",
+	"openai.base_url",
+	"azure_openai.api_key",
+	"azure_openai.deployment_name",
+	"azure_openai.api_base",
+	"azure_openai.api_version",
 }
 
 // GetMaxCaptureLines returns the max capture lines value with session override if present
@@ -94,17 +100,67 @@ func (m *Manager) GetOpenAIModel() string {
 	return m.Config.OpenAI.Model
 }
 
+// GetOpenAIAPIKey returns the OpenAI API key value with session override if present
+func (m *Manager) GetOpenAIAPIKey() string {
+	if override, exists := m.SessionOverrides["openai.api_key"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.OpenAI.APIKey
+}
+
+// GetOpenAIBaseURL returns the OpenAI base URL value with session override if present
+func (m *Manager) GetOpenAIBaseURL() string {
+	if override, exists := m.SessionOverrides["openai.base_url"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.OpenAI.BaseURL
+}
+
+// GetAzureOpenAIAPIKey returns the Azure OpenAI API key value with session override if present
+func (m *Manager) GetAzureOpenAIAPIKey() string {
+	if override, exists := m.SessionOverrides["azure_openai.api_key"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.AzureOpenAI.APIKey
+}
+
+// GetAzureOpenAIDeploymentName returns the Azure OpenAI deployment name value with session override if present
+func (m *Manager) GetAzureOpenAIDeploymentName() string {
+	if override, exists := m.SessionOverrides["azure_openai.deployment_name"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.AzureOpenAI.DeploymentName
+}
+
 // GetModel returns the appropriate model based on configuration priority
 // Priority: OpenAI > Azure > OpenRouter
 func (m *Manager) GetModel() string {
 	// If OpenAI is configured, use OpenAI model
-	if m.Config.OpenAI.APIKey != "" && m.Config.OpenAI.Model != "" {
-		return m.GetOpenAIModel()
+	if m.GetOpenAIAPIKey() != "" {
+		model := m.GetOpenAIModel()
+		if model != "" {
+			return model
+		}
+		// Default model for OpenAI if not specified
+		return "gpt-5-codex"
 	}
 
 	// If Azure is configured, use Azure deployment name
-	if m.Config.AzureOpenAI.APIKey != "" {
-		return m.Config.AzureOpenAI.DeploymentName
+	if m.GetAzureOpenAIAPIKey() != "" {
+		deployment := m.GetAzureOpenAIDeploymentName()
+		if deployment != "" {
+			return deployment
+		}
+		// Default deployment for Azure if not specified
+		return "gpt-4o"
 	}
 
 	// Default to OpenRouter

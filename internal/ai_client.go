@@ -117,8 +117,8 @@ func NewAiClient(cfg *config.Config) *AiClient {
 
 // determineAPIType determines which API to use based on the model and configuration
 func (c *AiClient) determineAPIType(model string) string {
-	// If OpenAI API key is configured and model is configured for OpenAI, use Responses API
-	if c.config.OpenAI.APIKey != "" && c.config.OpenAI.Model == model {
+	// If OpenAI API key is configured, use Responses API
+	if c.config.OpenAI.APIKey != "" {
 		return "responses"
 	}
 
@@ -297,7 +297,8 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 		if len(messages) > 1 {
 			input = messages[1:]
 		} else {
-			input = []Message{}
+			// Only system message provided, no user input
+			return "", fmt.Errorf("only system message provided, no user message to process")
 		}
 	} else {
 		input = messages
@@ -307,7 +308,7 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 		Model:        model,
 		Input:        input,
 		Instructions: instructions,
-		Store:        true, // Enable statefulness by default
+		Store:        false, // Default to stateless for better control over API usage and costs
 	}
 
 	// Use OpenAI configuration
@@ -389,7 +390,7 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 	for _, item := range response.Output {
 		if item.Type == "message" && item.Status == "completed" {
 			for _, content := range item.Content {
-				if content.Type == "output_text" && content.Text != "" {
+				if (content.Type == "output_text" || content.Type == "text") && content.Text != "" {
 					logger.Debug("Received Responses API response from output items (%d characters): %s", len(content.Text), content.Text)
 					return content.Text, nil
 				}

@@ -90,7 +90,7 @@ func TestOpenAIResponsesEndpointWithSystemMessage(t *testing.T) {
 			t.Errorf("missing Authorization header")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"output":[{"type":"message","status":"completed","content":[{"type":"output_text","text":"ok with system instruction"}]}],"output_text":"ok with system instruction"}`))
+		_, _ = w.Write([]byte(`{"output":[{"type":"message","status":"completed","content":[{"type":"text","text":"ok with system instruction"}]}],"output_text":"ok with system instruction"}`))
 	}))
 	defer server.Close()
 
@@ -98,7 +98,7 @@ func TestOpenAIResponsesEndpointWithSystemMessage(t *testing.T) {
 		OpenRouter: config.OpenRouterConfig{},
 		OpenAI: config.OpenAIConfig{
 			APIKey:  "test-key",
-			Model:   "gpt-5",
+			Model:   "gpt-5-codex",
 			BaseURL: server.URL,
 		},
 		AzureOpenAI: config.AzureOpenAIConfig{},
@@ -109,7 +109,7 @@ func TestOpenAIResponsesEndpointWithSystemMessage(t *testing.T) {
 		{Role: "system", Content: "You are a helpful assistant"},
 		{Role: "user", Content: "hi"},
 	}
-	resp, err := client.Response(context.Background(), msg, "gpt-5")
+	resp, err := client.Response(context.Background(), msg, "gpt-5-codex")
 	if err != nil {
 		t.Fatalf("Response error: %v", err)
 	}
@@ -126,17 +126,23 @@ func TestDetermineAPIType(t *testing.T) {
 		},
 		OpenAI: config.OpenAIConfig{
 			APIKey: "openai-key",
-			Model:  "gpt-5",
+			Model:  "gpt-5-codex",
 		},
 		AzureOpenAI: config.AzureOpenAIConfig{},
 	}
 
 	client := NewAiClient(cfg)
 
-	// Test OpenAI API type (highest priority)
-	apiType := client.determineAPIType("gpt-5")
+	// Test OpenAI API type (highest priority) - should work with any model when OpenAI key is present
+	apiType := client.determineAPIType("gpt-5-codex")
 	if apiType != "responses" {
 		t.Errorf("expected 'responses', got %s", apiType)
+	}
+
+	// Test that OpenAI is selected regardless of model when API key is present
+	apiType = client.determineAPIType("any-model")
+	if apiType != "responses" {
+		t.Errorf("expected 'responses' for any model when OpenAI key is present, got %s", apiType)
 	}
 
 	// Test Azure API type
@@ -155,4 +161,86 @@ func TestDetermineAPIType(t *testing.T) {
 	if apiType != "openrouter" {
 		t.Errorf("expected 'openrouter', got %s", apiType)
 	}
+}
+
+func TestSessionOverrides(t *testing.T) {
+	cfg := &config.Config{
+		OpenRouter: config.OpenRouterConfig{
+			APIKey: "original-openrouter-key",
+			Model:  "original-openrouter-model",
+		},
+		OpenAI: config.OpenAIConfig{
+			APIKey: "original-openai-key",
+			Model:  "original-openai-model",
+		},
+		AzureOpenAI: config.AzureOpenAIConfig{
+			APIKey:         "original-azure-key",
+			DeploymentName: "original-deployment",
+		},
+	}
+
+	manager := &Manager{
+		Config:           cfg,
+		SessionOverrides: make(map[string]interface{}),
+	}
+
+	// Test that original values are returned without overrides
+	if manager.GetOpenAIAPIKey() != "original-openai-key" {
+		t.Errorf("expected original OpenAI API key, got %s", manager.GetOpenAIAPIKey())
+	}
+	if manager.GetOpenAIModel() != "original-openai-model" {
+		t.Errorf("expected original OpenAI model, got %s", manager.GetOpenAIModel())
+	}
+
+	// Test session overrides for OpenAI
+	manager.SessionOverrides["openai.api_key"] = "override-openai-key"
+	manager.SessionOverrides["openai.model"] = "override-openai-model"
+	manager.SessionOverrides["openai.base_url"] = "https://override.example.com"
+
+	if manager.GetOpenAIAPIKey() != "override-openai-key" {
+		t.Errorf("expected overridden OpenAI API key, got %s", manager.GetOpenAIAPIKey())
+	}
+	if manager.GetOpenAIModel() != "override-openai-model" {
+		t.Errorf("expected overridden OpenAI model, got %s", manager.GetOpenAIModel())
+	}
+	if manager.GetOpenAIBaseURL() != "https://override.example.com" {
+		t.Errorf("expected overridden OpenAI base URL, got %s", manager.GetOpenAIBaseURL())
+	}
+
+	// Test session overrides for Azure
+	manager.SessionOverrides["azure_openai.api_key"] = "override-azure-key"
+	manager.SessionOverrides["azure_openai.deployment_name"] = "override-deployment"
+
+	if manager.GetAzureOpenAIAPIKey() != "override-azure-key" {
+		t.Errorf("expected overridden Azure API key, got %s", manager.GetAzureOpenAIAPIKey())
+	}
+	if manager.GetAzureOpenAIDeploymentName() != "override-deployment" {
+		t.Errorf("expected overridden Azure deployment, got %s", manager.GetAzureOpenAIDeploymentName())
+	}
+
+	// Test that GetModel() respects session overrides
+	// With OpenAI override
+	if manager.GetModel() != "override-openai-model" {
+		t.Errorf("expected overridden OpenAI model from GetModel(), got %s", manager.GetModel())
+	}
+
+	// Test clearing OpenAI config entirely to fall back to Azure
+	originalOpenAIKey := manager.Config.OpenAI.APIKey
+	manager.Config.OpenAI.APIKey = "" // Clear original OpenAI API key
+	delete(manager.SessionOverrides, "openai.api_key")
+	if manager.GetModel() != "override-deployment" {
+		t.Errorf("expected overridden Azure deployment from GetModel(), got %s", manager.GetModel())
+	}
+
+	// Clear Azure config entirely to fall back to OpenRouter
+	originalAzureKey := manager.Config.AzureOpenAI.APIKey
+	manager.Config.AzureOpenAI.APIKey = "" // Clear original Azure API key
+	delete(manager.SessionOverrides, "azure_openai.api_key")
+	if manager.GetModel() != "original-openrouter-model" {
+		t.Errorf("expected original OpenRouter model from GetModel(), got %s", manager.GetModel())
+	}
+
+	// Restore original config for other tests
+	manager.Config.OpenAI.APIKey = originalOpenAIKey
+	manager.Config.AzureOpenAI.APIKey = originalAzureKey
 }

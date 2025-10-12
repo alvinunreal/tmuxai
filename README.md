@@ -111,10 +111,10 @@ After installing TmuxAI, you need to configure your API key to start using it:
 1. **Set the API Key**
    TmuxAI supports multiple AI providers. Choose one of the following:
 
-   **OpenAI (Recommended for new models like GPT-5):**
+   **OpenAI:**
    ```bash
    export TMUXAI_OPENAI_API_KEY="your-openai-api-key-here"
-   export TMUXAI_OPENAI_MODEL="gpt-5"
+   export TMUXAI_OPENAI_MODEL="gpt-5-codex"
    ```
 
    **OpenRouter (Default):**
@@ -350,11 +350,13 @@ export TMUXAI_MAX_CAPTURE_LINES=300
 
 # OpenAI (Responses API)
 export TMUXAI_OPENAI_API_KEY="your-openai-api-key-here"
-export TMUXAI_OPENAI_MODEL="gpt-5"
+export TMUXAI_OPENAI_MODEL="gpt-5-codex"
+export TMUXAI_OPENAI_BASE_URL="https://api.openai.com/v1"  # Optional
 
 # OpenRouter (Chat Completions API)
 export TMUXAI_OPENROUTER_API_KEY="your-openrouter-api-key-here"
 export TMUXAI_OPENROUTER_MODEL="..."
+export TMUXAI_OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"  # Optional
 
 # Azure OpenAI (Chat Completions API)
 export TMUXAI_AZURE_OPENAI_API_KEY="your-azure-api-key"
@@ -386,7 +388,9 @@ TmuxAI » /config
 
 # Override a configuration value for this session
 TmuxAI » /config set max_capture_lines 300
-TmuxAI » /config set openai.model gpt-5
+TmuxAI » /config set openai.model gpt-5-codex
+TmuxAI » /config set openai.api_key "your-api-key"
+TmuxAI » /config set openai.base_url "https://api.openai.com/v1"
 TmuxAI » /config set openrouter.model gpt-4o-mini
 ```
 
@@ -403,16 +407,9 @@ For the best experience with new OpenAI models like GPT-5, use the dedicated Ope
 ```yaml
 openai:
   api_key: "your-openai-api-key"
-  model: "gpt-5"
+  model: "gpt-5-codex"
   base_url: "https://api.openai.com/v1"  # Optional, defaults to this
 ```
-
-**Benefits of OpenAI Responses API:**
-- Better performance with reasoning models
-- Built-in tools (web search, file search, computer use, code interpreter)
-- Lower costs due to improved cache utilization
-- Stateful context management
-- Future-proofed for upcoming models
 
 #### OpenRouter (Chat Completions API)
 
