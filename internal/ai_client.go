@@ -47,11 +47,50 @@ type ChatCompletionResponse struct {
 	Choices []ChatCompletionChoice `json:"choices"`
 }
 
+// ResponsesRequest represents a request to the /v1/responses API (used by models like gpt-5-codex)
+type ResponsesRequest struct {
+	Model    string    `json:"model,omitempty"`
+	Messages []Message `json:"messages"`
+}
+
+// ResponseChoice represents a choice in the responses API response
+type ResponseChoice struct {
+	Index   int     `json:"index"`
+	Message Message `json:"message"`
+}
+
+// ResponsesResponse represents a response from the /v1/responses API
+type ResponsesResponse struct {
+	ID      string           `json:"id"`
+	Object  string           `json:"object"`
+	Created int64            `json:"created"`
+	Choices []ResponseChoice `json:"choices"`
+}
+
 func NewAiClient(cfg *config.Config) *AiClient {
 	return &AiClient{
 		config: cfg,
 		client: &http.Client{},
 	}
+}
+
+// requiresResponsesAPI checks if a model requires the /v1/responses endpoint instead of /v1/chat/completions
+func requiresResponsesAPI(model string) bool {
+	// Models that only work with /v1/responses endpoint
+	responsesOnlyModels := []string{
+		"gpt-5-codex",
+		"o1",      // OpenAI o1 models
+		"o1-mini",
+		"o1-preview",
+	}
+
+	modelLower := strings.ToLower(model)
+	for _, m := range responsesOnlyModels {
+		if strings.Contains(modelLower, strings.ToLower(m)) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetResponseFromChatMessages gets a response from the AI based on chat messages
@@ -89,19 +128,21 @@ func (c *AiClient) GetResponseFromChatMessages(ctx context.Context, chatMessages
 
 // ChatCompletion sends a chat completion request to the OpenRouter API
 func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model string) (string, error) {
-	reqBody := ChatCompletionRequest{
-		Model:    model,
-		Messages: messages,
-	}
+	// Check if this model requires the /responses endpoint
+	useResponsesAPI := requiresResponsesAPI(model)
 
 	// determine endpoint and headers based on configuration
 	var url string
 	var apiKeyHeader string
 	var apiKey string
+	var reqJSON []byte
+	var err error
 
 	if c.config.AzureOpenAI.APIKey != "" {
 		// Use Azure OpenAI endpoint
 		base := strings.TrimSuffix(c.config.AzureOpenAI.APIBase, "/")
+
+		// Azure doesn't use /responses endpoint, always use chat/completions
 		url = fmt.Sprintf("%s/openai/deployments/%s/chat/completions?api-version=%s",
 			base,
 			c.config.AzureOpenAI.DeploymentName,
@@ -110,16 +151,37 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 		apiKey = c.config.AzureOpenAI.APIKey
 
 		// Azure endpoint doesn't expect model in body
-		reqBody.Model = ""
+		reqBody := ChatCompletionRequest{
+			Model:    "",
+			Messages: messages,
+		}
+		reqJSON, err = json.Marshal(reqBody)
 	} else {
 		// default OpenRouter/OpenAI compatible endpoint
 		baseURL := strings.TrimSuffix(c.config.OpenRouter.BaseURL, "/")
-		url = baseURL + "/chat/completions"
 		apiKeyHeader = "Authorization"
 		apiKey = "Bearer " + c.config.OpenRouter.APIKey
+
+		if useResponsesAPI {
+			// Use /v1/responses endpoint for models like gpt-5-codex
+			url = baseURL + "/responses"
+			reqBody := ResponsesRequest{
+				Model:    model,
+				Messages: messages,
+			}
+			reqJSON, err = json.Marshal(reqBody)
+			logger.Debug("Using /responses endpoint for model: %s", model)
+		} else {
+			// Use standard /chat/completions endpoint
+			url = baseURL + "/chat/completions"
+			reqBody := ChatCompletionRequest{
+				Model:    model,
+				Messages: messages,
+			}
+			reqJSON, err = json.Marshal(reqBody)
+		}
 	}
 
-	reqJSON, err := json.Marshal(reqBody)
 	if err != nil {
 		logger.Error("Failed to marshal request: %v", err)
 		return "", fmt.Errorf("failed to marshal request: %w", err)
@@ -168,23 +230,41 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 		return "", fmt.Errorf("API returned error: %s", body)
 	}
 
-	// Parse the response
-	var completionResp ChatCompletionResponse
-	if err := json.Unmarshal(body, &completionResp); err != nil {
-		logger.Error("Failed to unmarshal response: %v, body: %s", err, body)
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+	// Parse the response based on which endpoint was used
+	var responseContent string
+	if useResponsesAPI {
+		// Parse /responses endpoint response
+		var responsesResp ResponsesResponse
+		if err := json.Unmarshal(body, &responsesResp); err != nil {
+			logger.Error("Failed to unmarshal responses API response: %v, body: %s", err, body)
+			return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+
+		if len(responsesResp.Choices) > 0 {
+			responseContent = responsesResp.Choices[0].Message.Content
+		} else {
+			logger.Error("No choices returned from responses API. Raw response: %s", string(body))
+			return "", fmt.Errorf("no completion choices returned (model: %s, status: %d)", model, resp.StatusCode)
+		}
+	} else {
+		// Parse /chat/completions endpoint response
+		var completionResp ChatCompletionResponse
+		if err := json.Unmarshal(body, &completionResp); err != nil {
+			logger.Error("Failed to unmarshal chat completion response: %v, body: %s", err, body)
+			return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+
+		if len(completionResp.Choices) > 0 {
+			responseContent = completionResp.Choices[0].Message.Content
+		} else {
+			logger.Error("No completion choices returned. Raw response: %s", string(body))
+			return "", fmt.Errorf("no completion choices returned (model: %s, status: %d)", model, resp.StatusCode)
+		}
 	}
 
 	// Return the response content
-	if len(completionResp.Choices) > 0 {
-		responseContent := completionResp.Choices[0].Message.Content
-		logger.Debug("Received AI response (%d characters): %s", len(responseContent), responseContent)
-		return responseContent, nil
-	}
-
-	// Enhanced error for no completion choices
-	logger.Error("No completion choices returned. Raw response: %s", string(body))
-	return "", fmt.Errorf("no completion choices returned (model: %s, status: %d)", model, resp.StatusCode)
+	logger.Debug("Received AI response (%d characters): %s", len(responseContent), responseContent)
+	return responseContent, nil
 }
 
 func debugChatMessages(chatMessages []ChatMessage, response string) {
