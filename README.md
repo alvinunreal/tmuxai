@@ -33,7 +33,7 @@
   - [Quick Install](#quick-install)
   - [Homebrew](#homebrew)
   - [Manual Download](#manual-download)
-  - [Install from Master (Latest Development Version)](#install-from-master-latest-development-version)
+  - [Install from Main (Latest Development Version)](#install-from-main-latest-development-version)
 - [Post-Installation Setup](#post-installation-setup)
 - [TmuxAI Layout](#tmuxai-layout)
 - [Observe Mode](#observe-mode)
@@ -105,29 +105,15 @@ chmod +x ./tmuxai
 sudo mv ./tmuxai /usr/local/bin/
 ```
 
-### Install from Master (Latest Development Version)
+### Install from Main
 
-To install the latest development version directly from the master branch:
-
-```bash
-# Clone the repository
-git clone https://github.com/alvinunreal/tmuxai.git
-cd tmuxai
-
-# Build from source (requires Go)
-go build -o tmuxai
-
-# Move to your PATH
-sudo mv ./tmuxai /usr/local/bin/
-```
-
-Alternatively, you can install directly using Go:
+To install the latest development version directly from the main branch:
 
 ```bash
 go install github.com/alvinunreal/tmuxai@master
 ```
 
-**Note:** The master branch contains the latest features and fixes but may be less stable than official releases.
+**Note:** The main branch contains the latest features and fixes but may be less stable than official releases.
 
 ## Post-Installation Setup
 
