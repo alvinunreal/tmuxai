@@ -51,10 +51,6 @@ type Manager struct {
 
 // NewManager creates a new manager agent
 func NewManager(cfg *config.Config) (*Manager, error) {
-	if cfg.OpenRouter.APIKey == "" && cfg.AzureOpenAI.APIKey == "" && cfg.OpenAI.APIKey == "" {
-		fmt.Println("An API key is required. Set OpenAI, OpenRouter, or Azure OpenAI credentials in the config file or environment variables.")
-		return nil, fmt.Errorf("API key required")
-	}
 
 	paneId, err := system.TmuxCurrentPaneId()
 	if err != nil {
@@ -89,6 +85,9 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		SessionOverrides: make(map[string]interface{}),
 		LoadedKBs:        make(map[string]string),
 	}
+
+	// Set the config manager in the AI client
+	aiClient.SetConfigManager(manager)
 
 	manager.confirmedToExec = manager.confirmedToExecFn
 	manager.getTmuxPanesInXml = manager.getTmuxPanesInXmlFn
@@ -128,6 +127,7 @@ func (m *Manager) GetPrompt() string {
 	tmuxaiColor := color.New(color.FgGreen, color.Bold)
 	arrowColor := color.New(color.FgYellow, color.Bold)
 	stateColor := color.New(color.FgMagenta, color.Bold)
+	modelColor := color.New(color.FgCyan, color.Bold)
 
 	var stateSymbol string
 	switch m.Status {
@@ -145,6 +145,23 @@ func (m *Manager) GetPrompt() string {
 	}
 
 	prompt := tmuxaiColor.Sprint("TmuxAI")
+
+	// Show current model if it's not the default or first available model
+	currentModel := m.GetModelsDefault()
+	availableModels := m.GetAvailableModels()
+	if len(availableModels) > 0 {
+		// Get the "expected" model (configured default or first available)
+		expectedModel := m.Config.DefaultModel
+		if expectedModel == "" && len(availableModels) > 0 {
+			expectedModel = availableModels[0] // First model as default
+		}
+
+		// Show model if current is different from expected
+		if currentModel != "" && currentModel != expectedModel {
+			prompt += " " + modelColor.Sprint("["+currentModel+"]")
+		}
+	}
+
 	if stateSymbol != "" {
 		prompt += " " + stateColor.Sprint("["+stateSymbol+"]")
 	}

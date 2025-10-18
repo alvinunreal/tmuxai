@@ -63,6 +63,26 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 
 	sending := append(history, currentMessage)
 
+	// Check if AI configuration is available before making the API call
+	if !m.hasValidAIConfiguration() {
+		s.Stop()
+		m.Status = ""
+		fmt.Println("⚠️  No AI configuration found.")
+		fmt.Println("Please configure your AI settings:")
+		fmt.Println("  • Add model configurations to ~/.config/tmuxai/config.yaml")
+		fmt.Println("  • Or set environment variables for your AI provider")
+		fmt.Println("  • Use '/model' to check available configurations")
+		fmt.Println("")
+		fmt.Println("Example configuration:")
+		fmt.Println("  default_model: 'gemini-flash'")
+		fmt.Println("  models:")
+		fmt.Println("    gemini-flash:")
+		fmt.Println("      provider: 'openrouter'")
+		fmt.Println("      model: 'google/gemini-2.5-flash-preview'")
+		fmt.Println("      api_key: 'sk-or-your-api-key'")
+		return false
+	}
+
 	response, err := m.AiClient.GetResponseFromChatMessages(ctx, sending, m.GetModel())
 	if err != nil {
 		s.Stop()

@@ -18,6 +18,8 @@ const helpMessage = `Available commands:
 - /prepare: Prepare the pane for TmuxAI automation
 - /watch <prompt>: Start watch mode
 - /squash: Summarize the chat history
+- /model: List available models and show current model
+- /model <name>: Switch to a different model
 - /kb: List available knowledge bases
 - /kb load <name>: Load a knowledge base
 - /kb unload <name>: Unload a knowledge base
@@ -34,6 +36,7 @@ var commands = []string{
 	"/prepare",
 	"/config",
 	"/squash",
+	"/model",
 	"/kb",
 }
 
@@ -289,6 +292,18 @@ Watch for: ` + watchDesc
 			return
 		}
 
+	case prefixMatch(commandPrefix, "/model"):
+		// Handle model commands: /model, /model <name>
+		if len(parts) == 1 {
+			// List available models and show current
+			m.listModels()
+			return
+		} else if len(parts) >= 2 {
+			modelName := strings.Join(parts[1:], " ")
+			m.switchModel(modelName)
+			return
+		}
+
 	default:
 		m.Println(fmt.Sprintf("Unknown command: %s. Type '/help' to see available commands.", command))
 		return
@@ -314,6 +329,29 @@ func (m *Manager) formatInfo() {
 	formatLine("Version", Version)
 	formatLine("Max Capture Lines", m.Config.MaxCaptureLines)
 	formatLine("Wait Interval", m.Config.WaitInterval)
+
+	// Display AI model information
+	currentModelConfig, _ := m.GetCurrentModelConfig()
+	currentDefault := m.GetModelsDefault()
+	availableModels := m.GetAvailableModels()
+
+	if len(availableModels) > 0 {
+		// Show current model configuration
+		modelName := currentDefault
+		if modelName == "" && len(availableModels) > 0 {
+			modelName = availableModels[0] // First model as default
+		}
+		if modelName != "" {
+			formatLine("Model", modelName)
+		}
+		if modelConfig, exists := m.GetModelConfig(modelName); exists {
+			formatLine("Provider", modelConfig.Provider)
+		}
+	} else {
+		// Legacy configuration
+		formatLine("Provider", currentModelConfig.Provider)
+		formatLine("Model", currentModelConfig.Model)
+	}
 
 	// Display context information section
 	fmt.Println(formatter.FormatSection("\nContext"))
@@ -348,4 +386,72 @@ func (m *Manager) formatInfo() {
 		pane.Refresh(m.GetMaxCaptureLines())
 		fmt.Println(pane.FormatInfo(formatter))
 	}
+}
+
+// listModels displays available models and highlights the current one
+func (m *Manager) listModels() {
+	formatter := system.NewInfoFormatter()
+
+	// Get current model configuration
+	currentModelConfig, _ := m.GetCurrentModelConfig()
+	currentDefault := m.GetModelsDefault()
+
+	fmt.Println(formatter.FormatSection("\nAvailable Models"))
+
+	// List configured models
+	availableModels := m.GetAvailableModels()
+	if len(availableModels) > 0 {
+		for _, name := range availableModels {
+			config, exists := m.GetModelConfig(name)
+			if exists {
+				status := " [ ]"
+				if currentDefault == name {
+					status = " [✓]"
+				}
+				fmt.Printf("%s %s (%s: %s)\n", status, name, config.Provider, config.Model)
+			}
+		}
+	} else {
+		fmt.Println("No model configurations found. Using legacy configuration.")
+	}
+
+	// Show current model from legacy config if no models configured
+	if len(availableModels) == 0 || currentDefault == "" {
+		fmt.Println("\nCurrent Model (Legacy):")
+		fmt.Printf("  Provider: %s\n", currentModelConfig.Provider)
+		fmt.Printf("  Model: %s\n", currentModelConfig.Model)
+		if currentModelConfig.BaseURL != "" {
+			fmt.Printf("  Base URL: %s\n", currentModelConfig.BaseURL)
+		}
+	} else {
+		fmt.Println("\nCurrent Model:")
+		fmt.Printf("  Configuration: %s\n", currentDefault)
+		fmt.Printf("  Provider: %s\n", currentModelConfig.Provider)
+		fmt.Printf("  Model: %s\n", currentModelConfig.Model)
+		if currentModelConfig.BaseURL != "" {
+			fmt.Printf("  Base URL: %s\n", currentModelConfig.BaseURL)
+		}
+	}
+
+	if len(availableModels) > 0 {
+		fmt.Println("\nUsage: /model <name> to switch models")
+	}
+}
+
+// switchModel switches to the specified model configuration
+func (m *Manager) switchModel(modelName string) {
+	// Check if the model exists in configurations
+	_, exists := m.GetModelConfig(modelName)
+	if !exists {
+		m.Println(fmt.Sprintf("Model '%s' not found. Available models: %s", modelName, strings.Join(m.GetAvailableModels(), ", ")))
+		return
+	}
+
+	// Set the model as default for this session
+	m.SetModelsDefault(modelName)
+
+	// Get the model configuration to show details
+	modelConfig, _ := m.GetModelConfig(modelName)
+
+	m.Println(fmt.Sprintf("✓ Switched to %s (%s: %s)", modelName, modelConfig.Provider, modelConfig.Model))
 }

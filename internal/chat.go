@@ -210,6 +210,22 @@ func (c *CLIInterface) newCompleter() *completion.CmdCompletionOrList2 {
 					return kbNames, kbNames
 				}
 			}
+
+			// Handle /model subcommands
+			if len(field) > 0 && field[0] == "/model" {
+				if len(field) == 1 || (len(field) == 2 && !strings.HasSuffix(field[1], " ")) {
+					// Return available models for completion
+					availableModels := c.manager.GetAvailableModels()
+					if len(availableModels) == 0 {
+						return nil, nil
+					}
+					// Disable autocompletion when there's only one model, bug with readline
+					if len(availableModels) == 1 {
+						return nil, nil
+					}
+					return availableModels, availableModels
+				}
+			}
 			return nil, nil
 		},
 	}

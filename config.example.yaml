@@ -6,6 +6,47 @@ send_keys_confirm: true # Confirm before executing send keys
 paste_multiline_confirm: true # Confirm before pasting multiline content
 exec_confirm: true # Confirm before executing commands
 
+# Multiple model configurations (NEW)
+# Define multiple AI model configurations and switch between them easily
+# Usage:
+#   CLI: tmuxai --model gpt4
+#   Interactive: /model gpt4
+default_model: "gemini-flash"  # Which model to use by default
+
+models:
+  gpt4:
+    provider: "openai"
+    model: "gpt-4"
+    api_key: "sk-XXXXXXXXX"
+    base_url: "https://api.openai.com/v1"
+
+  claude-sonnet:
+    provider: "openrouter"
+    model: "anthropic/claude-3.5-sonnet"
+    api_key: "sk-or-XXXXXXXXX"
+
+  gemini-flash:
+    provider: "openrouter"
+    model: "google/gemini-2.5-flash-preview"
+    api_key: "sk-or-v1-XXXXXXXXX"
+    base_url: "https://openrouter.ai/api/v1"
+
+  local-llama:
+    provider: "openrouter"
+    model: "meta-llama/llama-3.1-8b-instruct:free"
+    api_key: "sk-or-XXXXXXXXX"
+
+  azure-gpt4:
+    provider: "azure"
+    model: "gpt-4o"
+    api_key: "your-azure-openai-api-key"
+    api_base: "https://your-resource.openai.azure.com/"
+    api_version: "2025-04-01-preview"
+    deployment_name: "gpt-4o"
+
+# Legacy configuration (BACKWARD COMPATIBILITY)
+# If models section is not configured, the following will be used
+
 # OpenAI Responses API (recommended for new models like GPT-5)
 # openai:
 #   api_key: sk-XXXXXXXXX

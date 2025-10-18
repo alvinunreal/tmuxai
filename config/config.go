@@ -24,6 +24,8 @@ type Config struct {
 	OpenRouter            OpenRouterConfig      `mapstructure:"openrouter"`
 	OpenAI                OpenAIConfig          `mapstructure:"openai"`
 	AzureOpenAI           AzureOpenAIConfig     `mapstructure:"azure_openai"`
+	DefaultModel          string                 `mapstructure:"default_model"`
+	Models                map[string]ModelConfig  `mapstructure:"models"`
 	Prompts               PromptsConfig         `mapstructure:"prompts"`
 	KnowledgeBase         KnowledgeBaseConfig   `mapstructure:"knowledge_base"`
 }
@@ -45,6 +47,20 @@ type OpenAIConfig struct {
 // AzureOpenAIConfig holds Azure OpenAI API configuration
 type AzureOpenAIConfig struct {
 	APIKey         string `mapstructure:"api_key"`
+	APIBase        string `mapstructure:"api_base"`
+	APIVersion     string `mapstructure:"api_version"`
+	DeploymentName string `mapstructure:"deployment_name"`
+}
+
+
+// ModelConfig holds a single model configuration
+type ModelConfig struct {
+	Provider string `mapstructure:"provider"`
+	Model   string `mapstructure:"model"`
+	APIKey  string `mapstructure:"api_key"`
+	BaseURL string `mapstructure:"base_url"`
+
+	// Azure-specific fields
 	APIBase        string `mapstructure:"api_base"`
 	APIVersion     string `mapstructure:"api_version"`
 	DeploymentName string `mapstructure:"deployment_name"`
@@ -84,6 +100,8 @@ func DefaultConfig() *Config {
 			BaseURL: "https://api.openai.com/v1",
 		},
 		AzureOpenAI: AzureOpenAIConfig{},
+		DefaultModel: "",
+	Models:       make(map[string]ModelConfig),
 		Prompts: PromptsConfig{
 			BaseSystem:    ``,
 			ChatAssistant: ``,

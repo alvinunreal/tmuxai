@@ -17,8 +17,9 @@ import (
 
 // AiClient represents an AI client for interacting with OpenAI-compatible APIs including Azure OpenAI
 type AiClient struct {
-	config *config.Config
-	client *http.Client
+	config      *config.Config
+	configMgr   *Manager  // To access model configuration methods
+	client      *http.Client
 }
 
 // Message represents a chat message
@@ -115,8 +116,30 @@ func NewAiClient(cfg *config.Config) *AiClient {
 	}
 }
 
+// SetConfigManager sets the configuration manager for accessing model configurations
+func (c *AiClient) SetConfigManager(mgr *Manager) {
+	c.configMgr = mgr
+}
+
 // determineAPIType determines which API to use based on the model and configuration
 func (c *AiClient) determineAPIType(model string) string {
+	// If we have a config manager, try to get the current model configuration
+	if c.configMgr != nil {
+		if modelConfig, exists := c.configMgr.GetCurrentModelConfig(); exists {
+			switch modelConfig.Provider {
+			case "openai":
+				return "responses"
+			case "azure":
+				return "azure"
+			case "openrouter":
+				return "openrouter"
+			default:
+				return "openrouter"
+			}
+		}
+	}
+
+	// Fallback to legacy configuration
 	// If OpenAI API key is configured, use Responses API
 	if c.config.OpenAI.APIKey != "" {
 		return "responses"
@@ -188,29 +211,65 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 		Messages: messages,
 	}
 
+	// Get model configuration
+	var provider string
+	var apiKey string
+	var baseURL string
+	var apiBase string
+	var apiVersion string
+	var deploymentName string
+
+	// Try to get model configuration
+	if c.configMgr != nil {
+		if modelConfig, exists := c.configMgr.GetCurrentModelConfig(); exists {
+			provider = modelConfig.Provider
+			apiKey = modelConfig.APIKey
+			baseURL = modelConfig.BaseURL
+			apiBase = modelConfig.APIBase
+			apiVersion = modelConfig.APIVersion
+			deploymentName = modelConfig.DeploymentName
+		}
+	}
+
+	// Fallback to legacy configuration if no model config found
+	if provider == "" {
+		if c.config.AzureOpenAI.APIKey != "" {
+			provider = "azure"
+			apiKey = c.config.AzureOpenAI.APIKey
+			apiBase = c.config.AzureOpenAI.APIBase
+			apiVersion = c.config.AzureOpenAI.APIVersion
+			deploymentName = c.config.AzureOpenAI.DeploymentName
+		} else if c.config.OpenRouter.APIKey != "" {
+			provider = "openrouter"
+			apiKey = c.config.OpenRouter.APIKey
+			baseURL = c.config.OpenRouter.BaseURL
+		}
+	}
+
 	// determine endpoint and headers based on configuration
 	var url string
 	var apiKeyHeader string
-	var apiKey string
 
-	if c.config.AzureOpenAI.APIKey != "" {
+	if provider == "azure" {
 		// Use Azure OpenAI endpoint
-		base := strings.TrimSuffix(c.config.AzureOpenAI.APIBase, "/")
+		base := strings.TrimSuffix(apiBase, "/")
 		url = fmt.Sprintf("%s/openai/deployments/%s/chat/completions?api-version=%s",
 			base,
-			c.config.AzureOpenAI.DeploymentName,
-			c.config.AzureOpenAI.APIVersion)
+			deploymentName,
+			apiVersion)
 		apiKeyHeader = "api-key"
-		apiKey = c.config.AzureOpenAI.APIKey
 
 		// Azure endpoint doesn't expect model in body
 		reqBody.Model = ""
 	} else {
 		// default OpenRouter/OpenAI compatible endpoint
-		baseURL := strings.TrimSuffix(c.config.OpenRouter.BaseURL, "/")
-		url = baseURL + "/chat/completions"
+		if baseURL == "" {
+			baseURL = c.config.OpenRouter.BaseURL
+		}
+		base := strings.TrimSuffix(baseURL, "/")
+		url = base + "/chat/completions"
 		apiKeyHeader = "Authorization"
-		apiKey = "Bearer " + c.config.OpenRouter.APIKey
+		apiKey = "Bearer " + apiKey
 	}
 
 	reqJSON, err := json.Marshal(reqBody)
@@ -311,8 +370,28 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 		Store:        false, // Default to stateless for better control over API usage and costs
 	}
 
-	// Use OpenAI configuration
-	baseURL := strings.TrimSuffix(c.config.OpenAI.BaseURL, "/")
+	// Get model configuration for OpenAI
+	var apiKey string
+	var baseURL string
+
+	// Try to get model configuration
+	if c.configMgr != nil {
+		if modelConfig, exists := c.configMgr.GetCurrentModelConfig(); exists && modelConfig.Provider == "openai" {
+			apiKey = modelConfig.APIKey
+			baseURL = modelConfig.BaseURL
+		}
+	}
+
+	// Fallback to legacy configuration
+	if apiKey == "" {
+		apiKey = c.config.OpenAI.APIKey
+	}
+
+	if baseURL == "" {
+		baseURL = c.config.OpenAI.BaseURL
+	}
+
+	baseURL = strings.TrimSuffix(baseURL, "/")
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
 	}
@@ -332,7 +411,7 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.config.OpenAI.APIKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	req.Header.Set("HTTP-Referer", "https://github.com/alvinunreal/tmuxai")
 	req.Header.Set("X-Title", "TmuxAI")

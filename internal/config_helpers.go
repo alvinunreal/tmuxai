@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/alvinunreal/tmuxai/config"
 )
 
 // AllowedConfigKeys defines the list of configuration keys that users are allowed to modify
@@ -22,6 +24,7 @@ var AllowedConfigKeys = []string{
 	"azure_openai.deployment_name",
 	"azure_openai.api_base",
 	"azure_openai.api_version",
+	"default_model",
 }
 
 // GetMaxCaptureLines returns the max capture lines value with session override if present
@@ -140,30 +143,165 @@ func (m *Manager) GetAzureOpenAIDeploymentName() string {
 	return m.Config.AzureOpenAI.DeploymentName
 }
 
-// GetModel returns the appropriate model based on configuration priority
-// Priority: OpenAI > Azure > OpenRouter
-func (m *Manager) GetModel() string {
-	// If OpenAI is configured, use OpenAI model
+// GetModelsDefault returns the default model configuration name with session override if present
+func (m *Manager) GetModelsDefault() string {
+	// Check for session override first
+	if override, exists := m.SessionOverrides["default_model"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+
+	// If default model is configured, use it
+	if m.Config.DefaultModel != "" {
+		return m.Config.DefaultModel
+	}
+
+	// If no default model is set, use the first available model
+	availableModels := m.GetAvailableModels()
+	if len(availableModels) > 0 {
+		return availableModels[0]
+	}
+
+	// Return empty string if no models are configured
+	return ""
+}
+
+// SetModelsDefault sets the default model configuration for the current session
+func (m *Manager) SetModelsDefault(modelName string) {
+	m.SessionOverrides["default_model"] = modelName
+}
+
+// GetAvailableModels returns a list of available model configuration names
+func (m *Manager) GetAvailableModels() []string {
+	var models []string
+	for name := range m.Config.Models {
+		models = append(models, name)
+	}
+	// Sort the models alphabetically for consistent ordering
+	for i := 0; i < len(models); i++ {
+		for j := i + 1; j < len(models); j++ {
+			if models[i] > models[j] {
+				models[i], models[j] = models[j], models[i]
+			}
+		}
+	}
+	return models
+}
+
+// GetModelConfig returns the model configuration for the given name
+func (m *Manager) GetModelConfig(name string) (config.ModelConfig, bool) {
+	config, exists := m.Config.Models[name]
+	return config, exists
+}
+
+// GetCurrentModelConfig returns the currently active model configuration
+func (m *Manager) GetCurrentModelConfig() (config.ModelConfig, bool) {
+	// First try to get the model from the new models system
+	defaultModel := m.GetModelsDefault()
+	if defaultModel != "" {
+		if modelConfig, exists := m.GetModelConfig(defaultModel); exists {
+			return modelConfig, true
+		}
+	}
+
+	// Fall back to legacy configuration by converting to a ModelConfig
+	return m.getLegacyModelConfig(), true
+}
+
+// hasValidAIConfiguration checks if there's a valid AI configuration available
+func (m *Manager) hasValidAIConfiguration() bool {
+	// Check new model configurations first
+	availableModels := m.GetAvailableModels()
+	if len(availableModels) > 0 {
+		// Check if any model has an API key
+		for _, modelName := range availableModels {
+			if modelConfig, exists := m.GetModelConfig(modelName); exists {
+				if modelConfig.APIKey != "" {
+					return true
+				}
+			}
+		}
+		// Also check if current model has API key
+		if currentModelConfig, exists := m.GetCurrentModelConfig(); exists {
+			if currentModelConfig.APIKey != "" {
+				return true
+			}
+		}
+	}
+
+	// Fall back to legacy configuration
+	return m.Config.OpenRouter.APIKey != "" || m.Config.OpenAI.APIKey != "" || m.Config.AzureOpenAI.APIKey != ""
+}
+
+// getLegacyModelConfig converts the legacy provider configuration to a ModelConfig
+func (m *Manager) getLegacyModelConfig() config.ModelConfig {
+	// Priority: OpenAI > Azure > OpenRouter
 	if m.GetOpenAIAPIKey() != "" {
-		model := m.GetOpenAIModel()
-		if model != "" {
-			return model
+		return config.ModelConfig{
+			Provider: "openai",
+			Model:    m.GetOpenAIModel(),
+			APIKey:   m.GetOpenAIAPIKey(),
+			BaseURL:  m.GetOpenAIBaseURL(),
 		}
-		// Default model for OpenAI if not specified
-		return "gpt-5-codex"
 	}
 
-	// If Azure is configured, use Azure deployment name
 	if m.GetAzureOpenAIAPIKey() != "" {
-		deployment := m.GetAzureOpenAIDeploymentName()
-		if deployment != "" {
-			return deployment
+		return config.ModelConfig{
+			Provider:       "azure",
+			Model:          m.GetAzureOpenAIDeploymentName(),
+			APIKey:         m.GetAzureOpenAIAPIKey(),
+			APIBase:        m.Config.AzureOpenAI.APIBase,
+			APIVersion:     m.Config.AzureOpenAI.APIVersion,
+			DeploymentName: m.GetAzureOpenAIDeploymentName(),
 		}
-		// Default deployment for Azure if not specified
-		return "gpt-4o"
 	}
 
-	// Default to OpenRouter
+	return config.ModelConfig{
+		Provider: "openrouter",
+		Model:    m.GetOpenRouterModel(),
+		APIKey:   m.Config.OpenRouter.APIKey,
+		BaseURL:  m.Config.OpenRouter.BaseURL,
+	}
+}
+
+// GetModel returns the appropriate model based on configuration priority
+// New logic: Use models.default if available, otherwise use first available model, then fall back to legacy priority system
+func (m *Manager) GetModel() string {
+	// Get the current model name (using auto-selection logic)
+	currentModelName := m.GetModelsDefault()
+	if currentModelName == "" {
+		// No models configured, fall back to legacy configuration
+		// If OpenAI is configured, use OpenAI model
+		if m.GetOpenAIAPIKey() != "" {
+			model := m.GetOpenAIModel()
+			if model != "" {
+				return model
+			}
+			// Default model for OpenAI if not specified
+			return "gpt-5-codex"
+		}
+
+		// If Azure is configured, use Azure deployment name
+		if m.GetAzureOpenAIAPIKey() != "" {
+			deployment := m.GetAzureOpenAIDeploymentName()
+			if deployment != "" {
+				return deployment
+			}
+			// Default deployment for Azure if not specified
+			return "gpt-4o"
+		}
+
+		// Default to OpenRouter
+		return m.GetOpenRouterModel()
+	}
+
+	// Get the actual model name from the configuration
+	if modelConfig, exists := m.GetModelConfig(currentModelName); exists {
+		return modelConfig.Model
+	}
+
+	// Fallback: try to get model from legacy config if current model name doesn't exist
 	return m.GetOpenRouterModel()
 }
 
