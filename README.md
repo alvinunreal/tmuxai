@@ -44,6 +44,10 @@
 - [Squashing](#squashing)
   - [What is Squashing?](#what-is-squashing)
   - [Manual Squashing](#manual-squashing)
+- [Knowledge Base](#knowledge-base)
+  - [Creating Knowledge Bases](#creating-knowledge-bases)
+  - [Using Knowledge Bases](#using-knowledge-bases)
+  - [Auto-Loading Knowledge Bases](#auto-loading-knowledge-bases)
 - [Core Commands](#core-commands)
 - [Command-Line Usage](#command-line-usage)
 - [Configuration](#configuration)
@@ -314,6 +318,97 @@ If you'd like to manage your context before reaching the automatic threshold, yo
 TmuxAI » /squash
 ```
 
+## Knowledge Base
+
+The Knowledge Base feature allows you to create pre-defined context files in markdown format that can be loaded into TmuxAI's conversation context. This is useful for sharing common patterns, workflows, or project-specific information with the AI across sessions.
+
+### Creating Knowledge Bases
+
+Knowledge bases are markdown files stored in `~/.config/tmuxai/kb/`. To create one:
+
+1. Create the knowledge base directory if it doesn't exist:
+   ```bash
+   mkdir -p ~/.config/tmuxai/kb
+   ```
+
+2. Create a markdown file with your knowledge base content:
+   ```bash
+   cat > ~/.config/tmuxai/kb/docker-workflows.md << 'EOF'
+   # Docker Workflows
+
+   ## Common Commands
+   - Always use `docker compose` (not `docker-compose`)
+   - Prefer named volumes over bind mounts for databases
+   - Use `.env` files for environment-specific configuration
+
+   ## Project Structure
+   - Development: `docker compose -f docker-compose.dev.yml up`
+   - Production: `docker compose -f docker-compose.prod.yml up -d`
+   EOF
+   ```
+
+### Using Knowledge Bases
+
+Once created, you can load knowledge bases into your TmuxAI session:
+
+```bash
+# List available knowledge bases
+TmuxAI » /kb
+Available knowledge bases:
+  [ ] docker-workflows
+  [ ] git-conventions
+  [ ] testing-procedures
+
+# Load a knowledge base
+TmuxAI » /kb load docker-workflows
+✓ Loaded knowledge base: docker-workflows (850 tokens)
+
+# List again to see loaded status
+TmuxAI » /kb
+Available knowledge bases:
+  [✓] docker-workflows (850 tokens)
+  [ ] git-conventions
+  [ ] testing-procedures
+
+Loaded: 1 KB(s), 850 tokens
+
+# Unload a knowledge base
+TmuxAI » /kb unload docker-workflows
+✓ Unloaded knowledge base: docker-workflows
+
+# Unload all knowledge bases
+TmuxAI » /kb unload --all
+✓ Unloaded all knowledge bases (2 KB(s))
+```
+
+You can also load knowledge bases directly from the command line when starting TmuxAI:
+
+```bash
+# Load single knowledge base
+tmuxai --kb docker-workflows
+
+# Load multiple knowledge bases (comma-separated)
+tmuxai --kb docker-workflows,git-conventions
+```
+
+### Auto-Loading Knowledge Bases
+
+You can configure knowledge bases to load automatically on startup by adding them to your `~/.config/tmuxai/config.yaml`:
+
+```yaml
+knowledge_base:
+  auto_load:
+    - docker-workflows
+    - git-conventions
+  # path: /custom/path  # Optional: use custom KB directory
+```
+
+**Important Notes:**
+- Loaded knowledge bases consume tokens from your context budget
+- Use `/info` to see how many tokens your loaded KBs are using
+- Knowledge bases are injected after the system prompt but before conversation history
+- Unloading a KB removes it from future messages immediately
+
 ## Core Commands
 
 | Command                     | Description                                                      |
@@ -324,8 +419,12 @@ TmuxAI » /squash
 | `/config`                   | View current configuration settings                              |
 | `/config set <key> <value>` | Override configuration for current session                       |
 | `/squash`                   | Manually trigger context summarization                           |
-| `/prepare [shell]`          | Initialize Prepared Mode for the Exec Pane (e.g., bash, zsh)     |
+| `/prepare [shell]`          | Initialize Prepared Mode for the Exec Pane (e.g., bash, zsh)    |
 | `/watch <description>`      | Enable Watch Mode with specified goal                            |
+| `/kb`                       | List available knowledge bases with loaded status                |
+| `/kb load <name>`           | Load a knowledge base into conversation context                  |
+| `/kb unload <name>`         | Unload a specific knowledge base                                 |
+| `/kb unload --all`          | Unload all knowledge bases                                       |
 | `/exit`                     | Exit TmuxAI                                                      |
 
 ## Command-Line Usage
@@ -341,6 +440,15 @@ You can start `tmuxai` with an initial message or task file from the command lin
 - **Task File:**
   ```sh
   tmuxai -f path/to/your_task.txt
+  ```
+
+- **Load Knowledge Bases:**
+  ```sh
+  # Single knowledge base
+  tmuxai --kb docker-workflows
+
+  # Multiple knowledge bases
+  tmuxai --kb docker-workflows,git-conventions
   ```
 
 ## Configuration

@@ -18,6 +18,10 @@ const helpMessage = `Available commands:
 - /prepare: Prepare the pane for TmuxAI automation
 - /watch <prompt>: Start watch mode
 - /squash: Summarize the chat history
+- /kb: List available knowledge bases
+- /kb load <name>: Load a knowledge base
+- /kb unload <name>: Unload a knowledge base
+- /kb unload --all: Unload all knowledge bases
 - /exit: Exit the application`
 
 var commands = []string{
@@ -30,6 +34,7 @@ var commands = []string{
 	"/prepare",
 	"/config",
 	"/squash",
+	"/kb",
 }
 
 // checks if the given content is a command
@@ -191,6 +196,99 @@ Watch for: ` + watchDesc
 			return
 		}
 
+	case prefixMatch(commandPrefix, "/kb"):
+		// Handle KB commands: /kb, /kb list, /kb load <name>, /kb unload <name>
+		if len(parts) == 1 || (len(parts) == 2 && parts[1] == "list") {
+			// List all available knowledge bases
+			kbs, err := m.listKBs()
+			if err != nil {
+				m.Println(fmt.Sprintf("Error listing knowledge bases: %v", err))
+				return
+			}
+
+			if len(kbs) == 0 {
+				m.Println("No knowledge bases found in " + config.GetKBDir())
+				return
+			}
+
+			m.Println("Available knowledge bases:")
+			totalTokens := 0
+			loadedCount := 0
+
+			for _, name := range kbs {
+				_, loaded := m.LoadedKBs[name]
+				status := "[ ]"
+				tokens := ""
+				if loaded {
+					status = "[✓]"
+					tokenCount := system.EstimateTokenCount(m.LoadedKBs[name])
+					tokens = fmt.Sprintf(" (%d tokens)", tokenCount)
+					totalTokens += tokenCount
+					loadedCount++
+				}
+				m.Println(fmt.Sprintf("  %s %s%s", status, name, tokens))
+			}
+
+			if loadedCount > 0 {
+				m.Println("")
+				m.Println(fmt.Sprintf("Loaded: %d KB(s), %d tokens", loadedCount, totalTokens))
+			}
+			return
+
+		} else if len(parts) >= 2 && parts[1] == "load" {
+			if len(parts) < 3 {
+				m.Println("Usage: /kb load <name>")
+				return
+			}
+
+			name := parts[2]
+			if _, loaded := m.LoadedKBs[name]; loaded {
+				m.Println(fmt.Sprintf("Knowledge base '%s' is already loaded", name))
+				return
+			}
+
+			if err := m.loadKB(name); err != nil {
+				m.Println(fmt.Sprintf("Error loading KB '%s': %v", name, err))
+				return
+			}
+
+			tokenCount := system.EstimateTokenCount(m.LoadedKBs[name])
+			m.Println(fmt.Sprintf("✓ Loaded knowledge base: %s (%d tokens)", name, tokenCount))
+			return
+
+		} else if len(parts) >= 2 && parts[1] == "unload" {
+			if len(parts) >= 3 && parts[2] == "--all" {
+				// Unload all KBs
+				if len(m.LoadedKBs) == 0 {
+					m.Println("No knowledge bases are currently loaded")
+					return
+				}
+
+				count := len(m.LoadedKBs)
+				m.LoadedKBs = make(map[string]string)
+				m.Println(fmt.Sprintf("✓ Unloaded all knowledge bases (%d KB(s))", count))
+				return
+			}
+
+			if len(parts) < 3 {
+				m.Println("Usage: /kb unload <name> or /kb unload --all")
+				return
+			}
+
+			name := parts[2]
+			if err := m.unloadKB(name); err != nil {
+				m.Println(fmt.Sprintf("Error: %v", err))
+				return
+			}
+
+			m.Println(fmt.Sprintf("✓ Unloaded knowledge base: %s", name))
+			return
+
+		} else {
+			m.Println("Usage: /kb [list|load <name>|unload <name>|unload --all]")
+			return
+		}
+
 	default:
 		m.Println(fmt.Sprintf("Unknown command: %s. Type '/help' to see available commands.", command))
 		return
@@ -234,6 +332,12 @@ func (m *Manager) formatInfo() {
 	fmt.Printf("%s\n", fmt.Sprintf("%d tokens", totalTokens))
 	fmt.Printf("%-*s  %s\n", labelWidth, "", formatter.FormatProgressBar(usagePercent, 10))
 	formatLine("Max Size", fmt.Sprintf("%d tokens", m.GetMaxContextSize()))
+
+	// Display knowledge base information
+	if len(m.LoadedKBs) > 0 {
+		kbTokens := m.getTotalLoadedKBTokens()
+		formatLine("Loaded KBs", fmt.Sprintf("%d (%d tokens)", len(m.LoadedKBs), kbTokens))
+	}
 
 	// Display tmux panes section
 	fmt.Println()

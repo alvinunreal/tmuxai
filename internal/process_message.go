@@ -50,6 +50,15 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		history = []ChatMessage{m.chatAssistantPrompt(false)}
 	}
 
+	// Inject loaded knowledge bases after system prompt
+	for kbName, kbContent := range m.LoadedKBs {
+		history = append(history, ChatMessage{
+			Content:   fmt.Sprintf("=== Knowledge Base: %s ===\n%s", kbName, kbContent),
+			FromUser:  false,
+			Timestamp: time.Now(),
+		})
+	}
+
 	history = append(history, m.Messages...)
 
 	sending := append(history, currentMessage)
