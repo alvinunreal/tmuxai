@@ -184,6 +184,32 @@ func (c *CLIInterface) newCompleter() *completion.CmdCompletionOrList2 {
 					return []string{"bash", "zsh", "fish"}, []string{"bash", "zsh", "fish"}
 				}
 			}
+
+			// Handle /kb subcommands
+			if len(field) > 0 && field[0] == "/kb" {
+				if len(field) == 1 || (len(field) == 2 && !strings.HasSuffix(field[1], " ")) {
+					return []string{"list", "load", "unload"}, []string{"list", "load", "unload"}
+				} else if (len(field) == 2 && field[1] == "load") || (len(field) >= 3 && field[1] == "load") {
+					// Get available knowledge bases for completion
+					kbs, err := c.manager.listKBs()
+					if err != nil {
+						return nil, nil
+					}
+					// Disable autocompletion when there's only one KB, bug with readline
+					if len(kbs) == 1 {
+						return nil, nil
+					}
+					return kbs, kbs
+				} else if (len(field) == 2 && field[1] == "unload") || (len(field) >= 3 && field[1] == "unload") {
+					// For unload, show loaded knowledge bases and --all option
+					var kbNames []string
+					for name := range c.manager.LoadedKBs {
+						kbNames = append(kbNames, name)
+					}
+					kbNames = append(kbNames, "--all")
+					return kbNames, kbNames
+				}
+			}
 			return nil, nil
 		},
 	}
