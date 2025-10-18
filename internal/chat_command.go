@@ -18,6 +18,7 @@ const helpMessage = `Available commands:
 - /prepare: Prepare the pane for TmuxAI automation
 - /watch <prompt>: Start watch mode
 - /squash: Summarize the chat history
+- /model: Manage AI model profiles
 - /exit: Exit the application`
 
 var commands = []string{
@@ -30,6 +31,7 @@ var commands = []string{
 	"/prepare",
 	"/config",
 	"/squash",
+	"/model",
 }
 
 // checks if the given content is a command
@@ -191,6 +193,10 @@ Watch for: ` + watchDesc
 			return
 		}
 
+	case prefixMatch(commandPrefix, "/model"):
+		m.handleModelCommand(parts)
+		return
+
 	default:
 		m.Println(fmt.Sprintf("Unknown command: %s. Type '/help' to see available commands.", command))
 		return
@@ -243,5 +249,78 @@ func (m *Manager) formatInfo() {
 	for _, pane := range panes {
 		pane.Refresh(m.GetMaxCaptureLines())
 		fmt.Println(pane.FormatInfo(formatter))
+	}
+}
+
+// handleModelCommand handles the /model command with its subcommands
+func (m *Manager) handleModelCommand(parts []string) {
+	if len(parts) < 2 {
+		m.Println("Usage:")
+		m.Println("  /model list              - List all available models")
+		m.Println("  /model use <name>        - Switch to a specific model")
+		m.Println("  /model current           - Show currently active model")
+		return
+	}
+
+	subCommand := parts[1]
+
+	switch subCommand {
+	case "list":
+		models := m.Config.ListModels()
+		if len(models) == 0 {
+			m.Println("No models configured. Add models in your config file under the 'models' key.")
+			return
+		}
+
+		currentModel := m.GetCurrentModelName()
+		m.Println("Available models:")
+		for _, name := range models {
+			if modelConfig, ok := m.Config.GetModel(name); ok {
+				marker := " "
+				if name == currentModel {
+					marker = "*"
+				}
+				m.Println(fmt.Sprintf("  %s %s (%s - %s)", marker, name, modelConfig.Provider, modelConfig.Model))
+			}
+		}
+
+	case "use":
+		if len(parts) < 3 {
+			m.Println("Usage: /model use <name>")
+			return
+		}
+
+		modelName := parts[2]
+		if err := m.SetCurrentModel(modelName); err != nil {
+			m.Println(fmt.Sprintf("Error: %s", err.Error()))
+			return
+		}
+
+		if modelConfig, ok := m.Config.GetModel(modelName); ok {
+			m.Println(fmt.Sprintf("Switched to model: %s (%s - %s)", modelName, modelConfig.Provider, modelConfig.Model))
+		}
+
+	case "current":
+		currentModel := m.GetCurrentModelName()
+		if currentModel == "" {
+			m.Println("No model profile active. Using default configuration.")
+			m.Println(fmt.Sprintf("Current model: %s", m.GetModel()))
+		} else {
+			if modelConfig, ok := m.Config.GetModel(currentModel); ok {
+				m.Println(fmt.Sprintf("Current model profile: %s", currentModel))
+				m.Println(fmt.Sprintf("  Provider: %s", modelConfig.Provider))
+				m.Println(fmt.Sprintf("  Model: %s", modelConfig.Model))
+				if modelConfig.BaseURL != "" {
+					m.Println(fmt.Sprintf("  Base URL: %s", modelConfig.BaseURL))
+				}
+				if modelConfig.APIBase != "" {
+					m.Println(fmt.Sprintf("  API Base: %s", modelConfig.APIBase))
+				}
+			}
+		}
+
+	default:
+		m.Println(fmt.Sprintf("Unknown subcommand: %s", subCommand))
+		m.Println("Available subcommands: list, use, current")
 	}
 }

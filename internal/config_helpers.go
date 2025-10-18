@@ -22,6 +22,7 @@ var AllowedConfigKeys = []string{
 	"azure_openai.deployment_name",
 	"azure_openai.api_base",
 	"azure_openai.api_version",
+	"current_model",
 }
 
 // GetMaxCaptureLines returns the max capture lines value with session override if present
@@ -140,9 +141,52 @@ func (m *Manager) GetAzureOpenAIDeploymentName() string {
 	return m.Config.AzureOpenAI.DeploymentName
 }
 
+// GetCurrentModelName returns the name of the currently active model
+func (m *Manager) GetCurrentModelName() string {
+	// Check for session override first
+	if override, exists := m.SessionOverrides["current_model"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+
+	// Check for default_model in config
+	if m.Config.DefaultModel != "" {
+		return m.Config.DefaultModel
+	}
+
+	return ""
+}
+
+// SetCurrentModel sets the current model and syncs with AiClient
+func (m *Manager) SetCurrentModel(modelName string) error {
+	// Validate that the model exists
+	if modelName != "" {
+		if _, ok := m.Config.GetModel(modelName); !ok {
+			return fmt.Errorf("model '%s' not found in configuration", modelName)
+		}
+	}
+
+	// Set in session overrides
+	m.SessionOverrides["current_model"] = modelName
+
+	// Sync with AiClient
+	m.AiClient.SetCurrentModel(modelName)
+
+	return nil
+}
+
 // GetModel returns the appropriate model based on configuration priority
-// Priority: OpenAI > Azure > OpenRouter
+// Priority: Named Model Profile > OpenAI > Azure > OpenRouter
 func (m *Manager) GetModel() string {
+	// Check if a named model profile is active
+	currentModelName := m.GetCurrentModelName()
+	if currentModelName != "" {
+		if modelConfig, ok := m.Config.GetModel(currentModelName); ok {
+			return modelConfig.Model
+		}
+	}
+
 	// If OpenAI is configured, use OpenAI model
 	if m.GetOpenAIAPIKey() != "" {
 		model := m.GetOpenAIModel()

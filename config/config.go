@@ -12,19 +12,21 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Debug                 bool              `mapstructure:"debug"`
-	MaxCaptureLines       int               `mapstructure:"max_capture_lines"`
-	MaxContextSize        int               `mapstructure:"max_context_size"`
-	WaitInterval          int               `mapstructure:"wait_interval"`
-	SendKeysConfirm       bool              `mapstructure:"send_keys_confirm"`
-	PasteMultilineConfirm bool              `mapstructure:"paste_multiline_confirm"`
-	ExecConfirm           bool              `mapstructure:"exec_confirm"`
-	WhitelistPatterns     []string          `mapstructure:"whitelist_patterns"`
-	BlacklistPatterns     []string          `mapstructure:"blacklist_patterns"`
-	OpenRouter            OpenRouterConfig  `mapstructure:"openrouter"`
-	OpenAI                OpenAIConfig      `mapstructure:"openai"`
-	AzureOpenAI           AzureOpenAIConfig `mapstructure:"azure_openai"`
-	Prompts               PromptsConfig     `mapstructure:"prompts"`
+	Debug                 bool                     `mapstructure:"debug"`
+	MaxCaptureLines       int                      `mapstructure:"max_capture_lines"`
+	MaxContextSize        int                      `mapstructure:"max_context_size"`
+	WaitInterval          int                      `mapstructure:"wait_interval"`
+	SendKeysConfirm       bool                     `mapstructure:"send_keys_confirm"`
+	PasteMultilineConfirm bool                     `mapstructure:"paste_multiline_confirm"`
+	ExecConfirm           bool                     `mapstructure:"exec_confirm"`
+	WhitelistPatterns     []string                 `mapstructure:"whitelist_patterns"`
+	BlacklistPatterns     []string                 `mapstructure:"blacklist_patterns"`
+	OpenRouter            OpenRouterConfig         `mapstructure:"openrouter"`
+	OpenAI                OpenAIConfig             `mapstructure:"openai"`
+	AzureOpenAI           AzureOpenAIConfig        `mapstructure:"azure_openai"`
+	Prompts               PromptsConfig            `mapstructure:"prompts"`
+	Models                map[string]ModelConfig   `mapstructure:"models"`
+	DefaultModel          string                   `mapstructure:"default_model"`
 }
 
 // OpenRouterConfig holds OpenRouter API configuration
@@ -57,6 +59,18 @@ type PromptsConfig struct {
 	Watch                 string `mapstructure:"watch"`
 }
 
+// ModelConfig holds a named model configuration profile
+type ModelConfig struct {
+	Provider string `mapstructure:"provider"` // "openai", "openrouter", or "azure"
+	Model    string `mapstructure:"model"`
+	APIKey   string `mapstructure:"api_key"`
+	BaseURL  string `mapstructure:"base_url"`
+	// Azure-specific fields
+	APIBase        string `mapstructure:"api_base"`
+	APIVersion     string `mapstructure:"api_version"`
+	DeploymentName string `mapstructure:"deployment_name"`
+}
+
 // DefaultConfig returns a configuration with default values
 func DefaultConfig() *Config {
 	return &Config{
@@ -81,6 +95,8 @@ func DefaultConfig() *Config {
 			BaseSystem:    ``,
 			ChatAssistant: ``,
 		},
+		Models:       make(map[string]ModelConfig),
+		DefaultModel: "",
 	}
 }
 
@@ -256,5 +272,33 @@ func resolveEnvKeyReferenceInValue(val reflect.Value) {
 		if !val.IsNil() {
 			resolveEnvKeyReferenceInValue(val.Elem())
 		}
+	case reflect.Map:
+		// Handle maps (e.g., Models map[string]ModelConfig)
+		for _, key := range val.MapKeys() {
+			mapVal := val.MapIndex(key)
+			if mapVal.Kind() == reflect.Struct {
+				// Create a new addressable struct to modify
+				newVal := reflect.New(mapVal.Type()).Elem()
+				newVal.Set(mapVal)
+				resolveEnvKeyReferenceInValue(newVal)
+				val.SetMapIndex(key, newVal)
+			}
+		}
 	}
+}
+
+// GetModel returns the ModelConfig for a given model name
+// Returns the model config and a boolean indicating if it was found
+func (c *Config) GetModel(name string) (ModelConfig, bool) {
+	model, ok := c.Models[name]
+	return model, ok
+}
+
+// ListModels returns a list of all configured model names
+func (c *Config) ListModels() []string {
+	names := make([]string, 0, len(c.Models))
+	for name := range c.Models {
+		names = append(names, name)
+	}
+	return names
 }

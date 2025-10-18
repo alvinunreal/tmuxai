@@ -91,6 +91,11 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	manager.confirmedToExec = manager.confirmedToExecFn
 	manager.getTmuxPanesInXml = manager.getTmuxPanesInXmlFn
 
+	// Initialize current model from config
+	if cfg.DefaultModel != "" {
+		aiClient.SetCurrentModel(cfg.DefaultModel)
+	}
+
 	manager.InitExecPane()
 	return manager, nil
 }

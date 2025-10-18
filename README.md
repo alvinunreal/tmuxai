@@ -323,6 +323,9 @@ TmuxAI » /squash
 | `/reset`                    | Clear chat history and reset all panes.                          |
 | `/config`                   | View current configuration settings                              |
 | `/config set <key> <value>` | Override configuration for current session                       |
+| `/model list`               | List all available model profiles                                |
+| `/model use <name>`         | Switch to a specific model profile                               |
+| `/model current`            | Show currently active model profile                              |
 | `/squash`                   | Manually trigger context summarization                           |
 | `/prepare [shell]`          | Initialize Prepared Mode for the Exec Pane (e.g., bash, zsh)     |
 | `/watch <description>`      | Enable Watch Mode with specified goal                            |
@@ -406,6 +409,87 @@ TmuxAI » /config set openrouter.model gpt-4o-mini
 ```
 
 These changes will persist only for the current session and won't modify your config file.
+
+### Model Profiles
+
+TmuxAI supports **model profiles**, allowing you to define multiple AI model configurations and switch between them easily during a session. This is useful for:
+
+- **Cost Control**: Switch between expensive and affordable models based on task complexity
+- **Performance Tuning**: Use faster models for simple tasks, powerful models for complex ones
+- **Multi-Environment**: Maintain separate configurations for cloud APIs and local models
+
+#### Defining Model Profiles
+
+Add named model configurations in your `config.yaml`:
+
+```yaml
+# Optional: Set a default model profile
+default_model: fast
+
+# Define your model profiles
+models:
+  fast:
+    provider: openrouter
+    model: google/gemini-2.5-flash-preview
+    api_key: "${OPENROUTER_KEY}"
+    base_url: https://openrouter.ai/api/v1
+
+  powerful:
+    provider: openai
+    model: gpt-5-codex
+    api_key: "${OPENAI_KEY}"
+    base_url: https://api.openai.com/v1
+
+  local:
+    provider: openrouter
+    model: gemma3:1b
+    api_key: ollama
+    base_url: http://localhost:11434/v1
+
+  azure-production:
+    provider: azure
+    model: gpt-4o
+    api_key: "${AZURE_KEY}"
+    api_base: https://your-resource.openai.azure.com/
+    api_version: 2025-04-01-preview
+    deployment_name: gpt-4o-deployment
+```
+
+#### Using Model Profiles
+
+Manage your model profiles using the `/model` command:
+
+```bash
+# List all available model profiles
+TmuxAI » /model list
+Available models:
+  * fast (openrouter - google/gemini-2.5-flash-preview)
+    powerful (openai - gpt-5-codex)
+    local (openrouter - gemma3:1b)
+    azure-production (azure - gpt-4o)
+
+# Switch to a different model profile
+TmuxAI » /model use powerful
+Switched to model: powerful (openai - gpt-5-codex)
+
+# View current active model profile
+TmuxAI » /model current
+Current model profile: powerful
+  Provider: openai
+  Model: gpt-5-codex
+  Base URL: https://api.openai.com/v1
+```
+
+#### Priority Order
+
+When determining which model configuration to use, TmuxAI follows this priority:
+
+1. **Active Model Profile** (set via `/model use` or `default_model` in config)
+2. **Direct OpenAI Configuration** (if `openai.api_key` is set)
+3. **Direct Azure Configuration** (if `azure_openai.api_key` is set)
+4. **Direct OpenRouter Configuration** (default fallback)
+
+**Note**: Model profiles are fully **backward compatible**. Existing configurations without the `models` key will continue to work as before.
 
 ### Using Other AI Providers
 
