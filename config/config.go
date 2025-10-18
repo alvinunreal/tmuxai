@@ -12,19 +12,20 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Debug                 bool              `mapstructure:"debug"`
-	MaxCaptureLines       int               `mapstructure:"max_capture_lines"`
-	MaxContextSize        int               `mapstructure:"max_context_size"`
-	WaitInterval          int               `mapstructure:"wait_interval"`
-	SendKeysConfirm       bool              `mapstructure:"send_keys_confirm"`
-	PasteMultilineConfirm bool              `mapstructure:"paste_multiline_confirm"`
-	ExecConfirm           bool              `mapstructure:"exec_confirm"`
-	WhitelistPatterns     []string          `mapstructure:"whitelist_patterns"`
-	BlacklistPatterns     []string          `mapstructure:"blacklist_patterns"`
-	OpenRouter            OpenRouterConfig  `mapstructure:"openrouter"`
-	OpenAI                OpenAIConfig      `mapstructure:"openai"`
-	AzureOpenAI           AzureOpenAIConfig `mapstructure:"azure_openai"`
-	Prompts               PromptsConfig     `mapstructure:"prompts"`
+	Debug                 bool                  `mapstructure:"debug"`
+	MaxCaptureLines       int                   `mapstructure:"max_capture_lines"`
+	MaxContextSize        int                   `mapstructure:"max_context_size"`
+	WaitInterval          int                   `mapstructure:"wait_interval"`
+	SendKeysConfirm       bool                  `mapstructure:"send_keys_confirm"`
+	PasteMultilineConfirm bool                  `mapstructure:"paste_multiline_confirm"`
+	ExecConfirm           bool                  `mapstructure:"exec_confirm"`
+	WhitelistPatterns     []string              `mapstructure:"whitelist_patterns"`
+	BlacklistPatterns     []string              `mapstructure:"blacklist_patterns"`
+	OpenRouter            OpenRouterConfig      `mapstructure:"openrouter"`
+	OpenAI                OpenAIConfig          `mapstructure:"openai"`
+	AzureOpenAI           AzureOpenAIConfig     `mapstructure:"azure_openai"`
+	Prompts               PromptsConfig         `mapstructure:"prompts"`
+	KnowledgeBase         KnowledgeBaseConfig   `mapstructure:"knowledge_base"`
 }
 
 // OpenRouterConfig holds OpenRouter API configuration
@@ -57,6 +58,12 @@ type PromptsConfig struct {
 	Watch                 string `mapstructure:"watch"`
 }
 
+// KnowledgeBaseConfig holds knowledge base configuration
+type KnowledgeBaseConfig struct {
+	AutoLoad []string `mapstructure:"auto_load"`
+	Path     string   `mapstructure:"path"`
+}
+
 // DefaultConfig returns a configuration with default values
 func DefaultConfig() *Config {
 	return &Config{
@@ -80,6 +87,10 @@ func DefaultConfig() *Config {
 		Prompts: PromptsConfig{
 			BaseSystem:    ``,
 			ChatAssistant: ``,
+		},
+		KnowledgeBase: KnowledgeBaseConfig{
+			AutoLoad: []string{},
+			Path:     "",
 		},
 	}
 }
@@ -172,6 +183,21 @@ func GetConfigDir() (string, error) {
 func GetConfigFilePath(filename string) string {
 	configDir, _ := GetConfigDir()
 	return filepath.Join(configDir, filename)
+}
+
+// GetKBDir returns the path to the knowledge base directory
+func GetKBDir() (string, error) {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	kbDir := filepath.Join(configDir, "kb")
+	if err := os.MkdirAll(kbDir, 0o755); err != nil {
+		return "", fmt.Errorf("failed to create KB directory: %w", err)
+	}
+
+	return kbDir, nil
 }
 
 func TryInferType(key, value string) any {

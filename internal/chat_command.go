@@ -18,6 +18,7 @@ const helpMessage = `Available commands:
 - /prepare: Prepare the pane for TmuxAI automation
 - /watch <prompt>: Start watch mode
 - /squash: Summarize the chat history
+- /kb: Manage knowledge bases
 - /exit: Exit the application`
 
 var commands = []string{
@@ -30,6 +31,7 @@ var commands = []string{
 	"/prepare",
 	"/config",
 	"/squash",
+	"/kb",
 }
 
 // checks if the given content is a command
@@ -191,6 +193,10 @@ Watch for: ` + watchDesc
 			return
 		}
 
+	case prefixMatch(commandPrefix, "/kb"):
+		m.handleKBCommand(parts)
+		return
+
 	default:
 		m.Println(fmt.Sprintf("Unknown command: %s. Type '/help' to see available commands.", command))
 		return
@@ -200,6 +206,76 @@ Watch for: ` + watchDesc
 // Helper function to check if a command matches a prefix
 func prefixMatch(command, target string) bool {
 	return strings.HasPrefix(target, command)
+}
+
+// handleKBCommand handles knowledge base subcommands
+func (m *Manager) handleKBCommand(parts []string) {
+	if len(parts) == 1 || (len(parts) >= 2 && parts[1] == "list") {
+		// List knowledge bases
+		kbs, err := m.listKBs()
+		if err != nil {
+			m.Println(fmt.Sprintf("Error listing knowledge bases: %v", err))
+			return
+		}
+
+		if len(kbs) == 0 {
+			m.Println("No knowledge bases found.")
+			return
+		}
+
+		fmt.Println("\nAvailable knowledge bases:")
+		loadedCount := 0
+		totalTokens := 0
+		for _, kb := range kbs {
+			status := "[ ]"
+			tokenInfo := ""
+			if kb.Loaded {
+				status = "[✓]"
+				tokenInfo = fmt.Sprintf(" (%d tokens)", kb.Tokens)
+				loadedCount++
+				totalTokens += kb.Tokens
+			}
+			fmt.Printf("  %s %s%s\n", status, kb.Name, tokenInfo)
+		}
+		fmt.Printf("\nLoaded: %d KBs, %d tokens\n", loadedCount, totalTokens)
+		return
+	}
+
+	if len(parts) < 3 {
+		m.Println("Usage: /kb [list|load|unload] [name]")
+		return
+	}
+
+	subcommand := parts[1]
+	name := parts[2]
+
+	switch subcommand {
+	case "load":
+		if err := m.loadKB(name); err != nil {
+			m.Println(fmt.Sprintf("Error loading KB: %v", err))
+			return
+		}
+		tokens := m.getTotalLoadedKBTokens()
+		m.Println(fmt.Sprintf("✓ Loaded knowledge base: %s (%d tokens)", name, system.EstimateTokenCount(m.LoadedKBs[name])))
+		_ = tokens // silence unused warning if needed elsewhere
+
+	case "unload":
+		if name == "--all" {
+			count := len(m.LoadedKBs)
+			m.LoadedKBs = make(map[string]string)
+			m.Println(fmt.Sprintf("✓ Unloaded all knowledge bases (%d KBs)", count))
+			return
+		}
+		if err := m.unloadKB(name); err != nil {
+			m.Println(fmt.Sprintf("Error unloading KB: %v", err))
+			return
+		}
+		m.Println(fmt.Sprintf("✓ Unloaded knowledge base: %s", name))
+
+	default:
+		m.Println(fmt.Sprintf("Unknown /kb subcommand: %s", subcommand))
+		m.Println("Usage: /kb [list|load|unload] [name]")
+	}
 }
 
 // formats system information and tmux details into a readable string
@@ -223,6 +299,13 @@ func (m *Manager) formatInfo() {
 	var totalTokens int
 	for _, msg := range m.Messages {
 		totalTokens += system.EstimateTokenCount(msg.Content)
+	}
+
+	// Add KB info to context
+	kbCount := len(m.LoadedKBs)
+	kbTokens := m.getTotalLoadedKBTokens()
+	if kbCount > 0 {
+		formatLine("Loaded KBs", fmt.Sprintf("%d (%d tokens)", kbCount, kbTokens))
 	}
 
 	usagePercent := 0.0

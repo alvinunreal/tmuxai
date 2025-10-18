@@ -46,6 +46,10 @@
   - [Manual Squashing](#manual-squashing)
 - [Core Commands](#core-commands)
 - [Command-Line Usage](#command-line-usage)
+- [Knowledge Base](#knowledge-base)
+  - [Creating Knowledge Bases](#creating-knowledge-bases)
+  - [KB Commands](#kb-commands)
+  - [Auto-Loading Knowledge Bases](#auto-loading-knowledge-bases)
 - [Configuration](#configuration)
   - [Environment Variables](#environment-variables)
   - [Session-Specific Configuration](#session-specific-configuration)
@@ -326,6 +330,7 @@ TmuxAI » /squash
 | `/squash`                   | Manually trigger context summarization                           |
 | `/prepare [shell]`          | Initialize Prepared Mode for the Exec Pane (e.g., bash, zsh)     |
 | `/watch <description>`      | Enable Watch Mode with specified goal                            |
+| `/kb`                       | Manage knowledge bases (see [Knowledge Base](#knowledge-base))   |
 | `/exit`                     | Exit TmuxAI                                                      |
 
 ## Command-Line Usage
@@ -342,6 +347,113 @@ You can start `tmuxai` with an initial message or task file from the command lin
   ```sh
   tmuxai -f path/to/your_task.txt
   ```
+
+## Knowledge Base
+
+Knowledge bases allow you to provide TmuxAI with persistent context that can be loaded into any session. This is useful for:
+
+- Project-specific workflows and conventions
+- Common commands and patterns you use frequently
+- Reference documentation you want the AI to be aware of
+- Team standards and best practices
+
+### Creating Knowledge Bases
+
+Knowledge bases are markdown files stored in `~/.config/tmuxai/kb/`. To create a knowledge base:
+
+1. Create a markdown file in the KB directory:
+   ```bash
+   mkdir -p ~/.config/tmuxai/kb
+   nano ~/.config/tmuxai/kb/docker-workflows.md
+   ```
+
+2. Add your content in markdown format:
+   ````markdown
+   # Docker Workflows
+
+   ## Common Commands
+
+   Start containers in development:
+   ```bash
+   docker-compose up -d
+   ```
+
+   View logs:
+   ```bash
+   docker-compose logs -f
+   ```
+
+   ## Project Conventions
+
+   - Always use docker-compose for local development
+   - Production images should be built with multi-stage builds
+   - Use .dockerignore to exclude unnecessary files
+   ````
+
+### KB Commands
+
+| Command                  | Description                                    |
+| ------------------------ | ---------------------------------------------- |
+| `/kb` or `/kb list`     | List all available knowledge bases with status |
+| `/kb load <name>`       | Load a knowledge base into the current session |
+| `/kb unload <name>`     | Remove a knowledge base from context           |
+| `/kb unload --all`      | Unload all loaded knowledge bases              |
+
+**Example session:**
+
+```
+TmuxAI » /kb
+Available knowledge bases:
+  [ ] docker-workflows
+  [ ] git-conventions
+  [ ] testing-procedures
+
+Loaded: 0 KBs, 0 tokens
+
+TmuxAI » /kb load docker-workflows
+✓ Loaded knowledge base: docker-workflows (850 tokens)
+
+TmuxAI » /kb
+Available knowledge bases:
+  [✓] docker-workflows (850 tokens)
+  [ ] git-conventions
+  [ ] testing-procedures
+
+Loaded: 1 KBs, 850 tokens
+
+TmuxAI » help me set up a mysql container
+[AI responds with context from docker-workflows.md]
+
+TmuxAI » /kb unload docker-workflows
+✓ Unloaded knowledge base: docker-workflows
+```
+
+### Auto-Loading Knowledge Bases
+
+You can configure knowledge bases to load automatically when TmuxAI starts. Add this to your `~/.config/tmuxai/config.yaml`:
+
+```yaml
+knowledge_base:
+  auto_load:
+    - docker-workflows
+    - git-conventions
+```
+
+Now these knowledge bases will be available in every TmuxAI session automatically.
+
+**Note:** Loaded knowledge bases consume tokens from your context budget. Use `/info` to see how many tokens your loaded KBs are using:
+
+```
+TmuxAI » /info
+...
+Context
+────────
+Messages            5
+Loaded KBs          2 (1,270 tokens)
+Context Size~       15,500 tokens
+                    ███░░░░░░░ 15.5%
+Max Size            100,000 tokens
+```
 
 ## Configuration
 
