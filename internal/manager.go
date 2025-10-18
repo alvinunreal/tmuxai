@@ -42,6 +42,7 @@ type Manager struct {
 	WatchMode        bool
 	OS               string
 	SessionOverrides map[string]interface{} // session-only config overrides
+	LoadedKBs        map[string]string      // name -> content mapping
 
 	// Functions for mocking
 	confirmedToExec  func(command string, prompt string, edit bool) (bool, string)
@@ -86,12 +87,17 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		ExecPane:         &system.TmuxPaneDetails{},
 		OS:               os,
 		SessionOverrides: make(map[string]interface{}),
+		LoadedKBs:        make(map[string]string),
 	}
 
 	manager.confirmedToExec = manager.confirmedToExecFn
 	manager.getTmuxPanesInXml = manager.getTmuxPanesInXmlFn
 
 	manager.InitExecPane()
+
+	// Auto-load KBs from config
+	manager.autoLoadKBs()
+
 	return manager, nil
 }
 

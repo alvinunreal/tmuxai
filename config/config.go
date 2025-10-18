@@ -25,6 +25,7 @@ type Config struct {
 	OpenAI                OpenAIConfig      `mapstructure:"openai"`
 	AzureOpenAI           AzureOpenAIConfig `mapstructure:"azure_openai"`
 	Prompts               PromptsConfig     `mapstructure:"prompts"`
+	KnowledgeBase         KnowledgeBaseConfig `mapstructure:"knowledge_base"`
 }
 
 // OpenRouterConfig holds OpenRouter API configuration
@@ -57,6 +58,12 @@ type PromptsConfig struct {
 	Watch                 string `mapstructure:"watch"`
 }
 
+// KnowledgeBaseConfig holds KB configuration
+type KnowledgeBaseConfig struct {
+	AutoLoad []string `mapstructure:"auto_load"`
+	Path     string   `mapstructure:"path"`
+}
+
 // DefaultConfig returns a configuration with default values
 func DefaultConfig() *Config {
 	return &Config{
@@ -80,6 +87,10 @@ func DefaultConfig() *Config {
 		Prompts: PromptsConfig{
 			BaseSystem:    ``,
 			ChatAssistant: ``,
+		},
+		KnowledgeBase: KnowledgeBaseConfig{
+			AutoLoad: []string{},
+			Path:     "",
 		},
 	}
 }
@@ -172,6 +183,30 @@ func GetConfigDir() (string, error) {
 func GetConfigFilePath(filename string) string {
 	configDir, _ := GetConfigDir()
 	return filepath.Join(configDir, filename)
+}
+
+// GetKBDir returns the path to the KB directory (defaults to ~/.config/tmuxai/kb/)
+func GetKBDir(customPath string) (string, error) {
+	if customPath != "" {
+		// Use custom path if provided
+		if err := os.MkdirAll(customPath, 0o755); err != nil {
+			return "", fmt.Errorf("failed to create KB directory: %w", err)
+		}
+		return customPath, nil
+	}
+
+	// Default to ~/.config/tmuxai/kb/
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	kbDir := filepath.Join(configDir, "kb")
+	if err := os.MkdirAll(kbDir, 0o755); err != nil {
+		return "", fmt.Errorf("failed to create KB directory: %w", err)
+	}
+
+	return kbDir, nil
 }
 
 func TryInferType(key, value string) any {
