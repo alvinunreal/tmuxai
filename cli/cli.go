@@ -16,6 +16,7 @@ import (
 var (
 	initMessage  string
 	taskFileFlag string
+	modelFlag    string
 )
 
 var rootCmd = &cobra.Command{
@@ -56,6 +57,17 @@ var rootCmd = &cobra.Command{
 			logger.Error("manager.NewManager failed: %v", err)
 			os.Exit(1)
 		}
+
+		// Set active model from CLI flag if provided
+		if modelFlag != "" {
+			if err := mgr.SetActiveModel(modelFlag); err != nil {
+				logger.Error("Failed to set model: %v", err)
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			logger.Info("Using model from CLI flag: %s", modelFlag)
+		}
+
 		if initMessage != "" {
 			logger.Info("Starting with initial subcommand: %s", initMessage)
 		}
@@ -69,6 +81,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Flags().StringVarP(&taskFileFlag, "file", "f", "", "Read request from specified file")
+	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Select model profile to use")
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
 }
 

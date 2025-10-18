@@ -42,6 +42,7 @@ type Manager struct {
 	WatchMode        bool
 	OS               string
 	SessionOverrides map[string]interface{} // session-only config overrides
+	ActiveModel      string                 // currently active model profile name
 
 	// Functions for mocking
 	confirmedToExec  func(command string, prompt string, edit bool) (bool, string)
@@ -86,10 +87,16 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		ExecPane:         &system.TmuxPaneDetails{},
 		OS:               os,
 		SessionOverrides: make(map[string]interface{}),
+		ActiveModel:      cfg.DefaultModel,
 	}
 
 	manager.confirmedToExec = manager.confirmedToExecFn
 	manager.getTmuxPanesInXml = manager.getTmuxPanesInXmlFn
+
+	// Initialize AI client with active model if set
+	if manager.ActiveModel != "" {
+		manager.UpdateAiClientForModel()
+	}
 
 	manager.InitExecPane()
 	return manager, nil
@@ -166,4 +173,109 @@ func (ai *AIResponse) String() string {
 		ai.WaitingForUserResponse,
 		ai.NoComment,
 	)
+}
+
+// SetActiveModel sets the active model and updates the AI client
+func (m *Manager) SetActiveModel(modelName string) error {
+	if modelName == "" {
+		return fmt.Errorf("model name cannot be empty")
+	}
+
+	// Check if the model exists
+	if _, exists := m.Config.Models[modelName]; !exists {
+		return fmt.Errorf("model '%s' not found in configuration", modelName)
+	}
+
+	m.ActiveModel = modelName
+	return m.UpdateAiClientForModel()
+}
+
+// UpdateAiClientForModel updates the AI client based on the active model
+func (m *Manager) UpdateAiClientForModel() error {
+	if m.ActiveModel == "" {
+		return nil
+	}
+
+	modelCfg, exists := m.Config.Models[m.ActiveModel]
+	if !exists {
+		return fmt.Errorf("model '%s' not found", m.ActiveModel)
+	}
+
+	// Update config based on model provider
+	switch strings.ToLower(modelCfg.Provider) {
+	case "openai":
+		m.SessionOverrides["openai.api_key"] = modelCfg.APIKey
+		m.SessionOverrides["openai.model"] = modelCfg.Model
+		if modelCfg.BaseURL != "" {
+			m.SessionOverrides["openai.base_url"] = modelCfg.BaseURL
+		}
+	case "openrouter":
+		m.SessionOverrides["openrouter.api_key"] = modelCfg.APIKey
+		m.SessionOverrides["openrouter.model"] = modelCfg.Model
+		if modelCfg.BaseURL != "" {
+			m.SessionOverrides["openrouter.base_url"] = modelCfg.BaseURL
+		}
+	case "azure":
+		m.SessionOverrides["azure_openai.api_key"] = modelCfg.APIKey
+		if modelCfg.APIBase != "" {
+			m.SessionOverrides["azure_openai.api_base"] = modelCfg.APIBase
+		}
+		if modelCfg.APIVersion != "" {
+			m.SessionOverrides["azure_openai.api_version"] = modelCfg.APIVersion
+		}
+		if modelCfg.DeploymentName != "" {
+			m.SessionOverrides["azure_openai.deployment_name"] = modelCfg.DeploymentName
+		}
+	default:
+		return fmt.Errorf("unknown provider '%s' for model '%s'", modelCfg.Provider, m.ActiveModel)
+	}
+
+	// Recreate AI client with updated config
+	m.AiClient = NewAiClient(m.Config)
+
+	return nil
+}
+
+// GetActiveModelInfo returns information about the currently active model
+func (m *Manager) GetActiveModelInfo() string {
+	if m.ActiveModel == "" {
+		// Fall back to showing the traditional config
+		provider := "OpenRouter"
+		model := m.GetModel()
+
+		if m.GetOpenAIAPIKey() != "" {
+			provider = "OpenAI"
+		} else if m.GetAzureOpenAIAPIKey() != "" {
+			provider = "Azure OpenAI"
+		}
+
+		return fmt.Sprintf("Provider: %s\nModel: %s\n(Using direct configuration, no model profile active)", provider, model)
+	}
+
+	modelCfg, exists := m.Config.Models[m.ActiveModel]
+	if !exists {
+		return fmt.Sprintf("Active model '%s' not found in configuration", m.ActiveModel)
+	}
+
+	var info strings.Builder
+	info.WriteString(fmt.Sprintf("Active Model: %s\n", m.ActiveModel))
+	info.WriteString(fmt.Sprintf("Provider: %s\n", modelCfg.Provider))
+	info.WriteString(fmt.Sprintf("Model: %s\n", modelCfg.Model))
+	if modelCfg.BaseURL != "" {
+		info.WriteString(fmt.Sprintf("Base URL: %s\n", modelCfg.BaseURL))
+	}
+	if modelCfg.APIBase != "" {
+		info.WriteString(fmt.Sprintf("API Base: %s\n", modelCfg.APIBase))
+	}
+
+	return info.String()
+}
+
+// ListModels returns a list of all configured model names
+func (m *Manager) ListModels() []string {
+	models := make([]string, 0, len(m.Config.Models))
+	for name := range m.Config.Models {
+		models = append(models, name)
+	}
+	return models
 }

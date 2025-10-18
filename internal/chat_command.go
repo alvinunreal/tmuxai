@@ -18,6 +18,9 @@ const helpMessage = `Available commands:
 - /prepare: Prepare the pane for TmuxAI automation
 - /watch <prompt>: Start watch mode
 - /squash: Summarize the chat history
+- /model list: List all available models
+- /model use <name>: Switch to a specific model
+- /model current: Show current model information
 - /exit: Exit the application`
 
 var commands = []string{
@@ -30,6 +33,7 @@ var commands = []string{
 	"/prepare",
 	"/config",
 	"/squash",
+	"/model",
 }
 
 // checks if the given content is a command
@@ -188,6 +192,53 @@ Watch for: ` + watchDesc
 		} else {
 			code, _ := system.HighlightCode("yaml", m.FormatConfig())
 			fmt.Println(code)
+			return
+		}
+
+	case prefixMatch(commandPrefix, "/model"):
+		if len(parts) < 2 {
+			m.Println("Usage: /model <list|use|current>")
+			return
+		}
+
+		subCommand := parts[1]
+		switch subCommand {
+		case "list":
+			models := m.ListModels()
+			if len(models) == 0 {
+				m.Println("No models configured. Add models to your config file.")
+				return
+			}
+			m.Println("Available models:")
+			for _, modelName := range models {
+				if modelName == m.ActiveModel {
+					m.Println(fmt.Sprintf("  * %s (active)", modelName))
+				} else {
+					m.Println(fmt.Sprintf("    %s", modelName))
+				}
+			}
+			return
+
+		case "use":
+			if len(parts) < 3 {
+				m.Println("Usage: /model use <name>")
+				return
+			}
+			modelName := parts[2]
+			if err := m.SetActiveModel(modelName); err != nil {
+				m.Println(fmt.Sprintf("Error: %v", err))
+				return
+			}
+			m.Println(fmt.Sprintf("Switched to model: %s", modelName))
+			return
+
+		case "current":
+			info := m.GetActiveModelInfo()
+			m.Println(info)
+			return
+
+		default:
+			m.Println(fmt.Sprintf("Unknown subcommand: %s. Use 'list', 'use', or 'current'", subCommand))
 			return
 		}
 

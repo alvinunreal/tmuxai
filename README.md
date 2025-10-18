@@ -323,6 +323,9 @@ TmuxAI » /squash
 | `/reset`                    | Clear chat history and reset all panes.                          |
 | `/config`                   | View current configuration settings                              |
 | `/config set <key> <value>` | Override configuration for current session                       |
+| `/model list`               | List all available model profiles                                |
+| `/model use <name>`         | Switch to a specific model profile                               |
+| `/model current`            | Show currently active model information                          |
 | `/squash`                   | Manually trigger context summarization                           |
 | `/prepare [shell]`          | Initialize Prepared Mode for the Exec Pane (e.g., bash, zsh)     |
 | `/watch <description>`      | Enable Watch Mode with specified goal                            |
@@ -330,7 +333,7 @@ TmuxAI » /squash
 
 ## Command-Line Usage
 
-You can start `tmuxai` with an initial message or task file from the command line:
+You can start `tmuxai` with an initial message, task file, or specific model from the command line:
 
 - **Direct Message:**
 
@@ -341,6 +344,18 @@ You can start `tmuxai` with an initial message or task file from the command lin
 - **Task File:**
   ```sh
   tmuxai -f path/to/your_task.txt
+  ```
+
+- **Select Model:**
+  ```sh
+  tmuxai -m fast
+  # or
+  tmuxai --model powerful
+  ```
+
+- **Combined Options:**
+  ```sh
+  tmuxai -m local -f task.txt
   ```
 
 ## Configuration
@@ -406,6 +421,78 @@ TmuxAI » /config set openrouter.model gpt-4o-mini
 ```
 
 These changes will persist only for the current session and won't modify your config file.
+
+### Model Profiles
+
+Model profiles allow you to define multiple AI model configurations and easily switch between them during sessions. This is useful for:
+
+- Switching between fast/cheap models for simple tasks and powerful models for complex ones
+- Testing different models without editing config files
+- Managing separate profiles for local development, cloud APIs, etc.
+
+#### Configuration
+
+Define model profiles in your config file using the `models` key:
+
+```yaml
+# Optional: Set default model to use at startup
+default_model: fast
+
+# Define named model profiles
+models:
+  fast:
+    provider: openrouter
+    model: google/gemini-2.5-flash-preview
+    api_key: "${OPENROUTER_KEY}"
+    base_url: https://openrouter.ai/api/v1
+
+  powerful:
+    provider: openai
+    model: gpt-5-codex
+    api_key: "${OPENAI_KEY}"
+
+  local:
+    provider: openrouter
+    model: gemma3:1b
+    api_key: ollama
+    base_url: http://localhost:11434/v1
+
+  azure-prod:
+    provider: azure
+    api_key: "${AZURE_KEY}"
+    api_base: https://your-resource.openai.azure.com
+    api_version: "2024-02-01"
+    deployment_name: gpt-4o
+```
+
+#### Using Model Profiles
+
+**In Session Commands:**
+
+```bash
+# List all available models
+TmuxAI » /model list
+
+# Switch to a specific model
+TmuxAI » /model use powerful
+
+# Show current model details
+TmuxAI » /model current
+```
+
+**CLI Flag:**
+
+```bash
+# Start with a specific model
+tmuxai -m fast
+
+# Or use the long form
+tmuxai --model powerful
+```
+
+#### Backward Compatibility
+
+Model profiles are completely optional. If you don't define any profiles, TmuxAI will continue to work with the traditional OpenAI/Azure/OpenRouter direct configuration (see below).
 
 ### Using Other AI Providers
 

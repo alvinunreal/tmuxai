@@ -6,6 +6,36 @@ send_keys_confirm: true # Confirm before executing send keys
 paste_multiline_confirm: true # Confirm before pasting multiline content
 exec_confirm: true # Confirm before executing commands
 
+# Model Profiles - Define multiple model configurations and switch between them
+# Use /model list, /model use <name>, /model current commands or --model CLI flag
+# default_model: fast  # Optional: Set default model to use at startup
+
+# models:
+#   fast:
+#     provider: openrouter
+#     model: google/gemini-2.5-flash-preview
+#     api_key: "${OPENROUTER_KEY}"
+#     base_url: https://openrouter.ai/api/v1
+#
+#   powerful:
+#     provider: openai
+#     model: gpt-5-codex
+#     api_key: "${OPENAI_KEY}"
+#
+#   local:
+#     provider: openrouter
+#     model: gemma3:1b
+#     api_key: ollama
+#     base_url: http://localhost:11434/v1
+#
+#   azure-prod:
+#     provider: azure
+#     api_key: "${AZURE_KEY}"
+#     api_base: https://your-resource.openai.azure.com
+#     api_version: "2024-02-01"
+#     deployment_name: gpt-4o
+
+# Traditional configuration (still supported for backward compatibility)
 # OpenAI Responses API (recommended for new models like GPT-5)
 # openai:
 #   api_key: sk-XXXXXXXXX
