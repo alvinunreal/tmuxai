@@ -1,14 +1,20 @@
 package internal
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
+	"unicode"
 
-	"github.com/chzyer/readline"
 	"github.com/fatih/color"
+	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 func (m *Manager) confirmedToExecFn(command string, prompt string, edit bool) (bool, string) {
@@ -26,28 +32,15 @@ func (m *Manager) confirmedToExecFn(command string, prompt string, edit bool) (b
 		promptText = fmt.Sprintf("%s [Y]es/No: ", prompt)
 	}
 
-	// Use readline for initial confirmation to properly handle Ctrl+C
-	rlConfig := &readline.Config{
-		Prompt:          promptColor.Sprint(promptText),
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
-	}
+	promptStr := promptColor.Sprint(promptText)
 
-	rl, err := readline.NewEx(rlConfig)
+	confirmInput, cancelled, err := readConfirmationInput(promptStr)
 	if err != nil {
-		fmt.Printf("Error initializing readline: %v\n", err)
+		fmt.Printf("Error reading confirmation: %v\n", err)
 		return false, ""
 	}
-	defer func() { _ = rl.Close() }()
-
-	confirmInput, err := rl.Readline()
-	if err != nil {
-		if err == readline.ErrInterrupt {
-			m.Status = ""
-			return false, ""
-		}
-
-		fmt.Printf("Error reading confirmation: %v\n", err)
+	if cancelled {
+		m.Status = ""
 		return false, ""
 	}
 
@@ -168,4 +161,277 @@ func (m *Manager) whitelistCheck(command string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func readConfirmationInput(prompt string) (string, bool, error) {
+	fd := int(os.Stdin.Fd())
+
+	if !term.IsTerminal(fd) {
+		fmt.Print(prompt)
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return "", false, err
+		}
+		return strings.TrimRight(line, "\r\n"), false, nil
+	}
+
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = term.Restore(fd, oldState) }()
+
+	fmt.Print(prompt)
+
+	reader := bufio.NewReader(os.Stdin)
+	const maxBufferSize = 4096 // Prevent unbounded memory growth
+	var (
+		buffer []rune
+		cursor int
+	)
+
+	redraw := func() {
+		fmt.Printf("\r%s%s", prompt, string(buffer))
+		fmt.Print("\033[K")
+		fmt.Printf("\r%s", prompt)
+		if cursor > 0 {
+			fmt.Print(string(buffer[:cursor]))
+		}
+	}
+
+	beep := func() {
+		fmt.Print("\a")
+	}
+
+	insertRune := func(r rune) {
+		if len(buffer) >= maxBufferSize {
+			beep()
+			return
+		}
+		buffer = append(buffer, 0)
+		copy(buffer[cursor+1:], buffer[cursor:])
+		buffer[cursor] = r
+		cursor++
+		redraw()
+	}
+
+	for {
+		r, _, err := reader.ReadRune()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				fmt.Print("\r\n")
+				return string(buffer), false, nil
+			}
+			return "", false, err
+		}
+
+		switch r {
+		case '\r', '\n':
+			fmt.Print("\r\n")
+			return string(buffer), false, nil
+		case 3: // Ctrl+C
+			fmt.Print("\r\n")
+			return "", true, nil
+		case 4: // Ctrl+D
+			if len(buffer) == 0 {
+				fmt.Print("\r\n")
+				return "", true, nil
+			}
+			beep()
+		case 127, 8: // Backspace/Delete
+			if cursor > 0 {
+				buffer = append(buffer[:cursor-1], buffer[cursor:]...)
+				cursor--
+				redraw()
+			} else {
+				beep()
+			}
+		case 27: // Escape sequences
+			seq, seqErr := readEscapeSequence(reader, fd, 25*time.Millisecond)
+			if seqErr != nil {
+				return "", false, seqErr
+			}
+			if len(seq) == 1 {
+				fmt.Print("\r\n")
+				return "", true, nil
+			}
+			handleEscapeSequence(seq, &buffer, &cursor, redraw, beep)
+		default:
+			if unicode.IsPrint(r) {
+				insertRune(r)
+			} else {
+				beep()
+			}
+		}
+	}
+}
+
+func handleEscapeSequence(seq []byte, buffer *[]rune, cursor *int, redraw func(), beep func()) {
+	if len(seq) < 2 {
+		return
+	}
+
+	const (
+		left  = 'D'
+		right = 'C'
+		up    = 'A'
+		down  = 'B'
+	)
+
+	switch seq[1] {
+	case '[':
+		if len(seq) < 3 {
+			return
+		}
+		switch seq[2] {
+		case left:
+			if *cursor > 0 {
+				*cursor--
+				redraw()
+			} else {
+				beep()
+			}
+		case right:
+			if *cursor < len(*buffer) {
+				*cursor++
+				redraw()
+			} else {
+				beep()
+			}
+		case up, down:
+			beep()
+		case 'H':
+			if *cursor != 0 {
+				*cursor = 0
+				redraw()
+			} else {
+				beep()
+			}
+		case 'F':
+			if *cursor != len(*buffer) {
+				*cursor = len(*buffer)
+				redraw()
+			} else {
+				beep()
+			}
+		case '3':
+			if len(seq) >= 4 && seq[3] == '~' {
+				if *cursor < len(*buffer) {
+					b := *buffer
+					*buffer = append(b[:*cursor], b[*cursor+1:]...)
+					redraw()
+				} else {
+					beep()
+				}
+			}
+		}
+	case 'O':
+		if len(seq) < 3 {
+			return
+		}
+		switch seq[2] {
+		case 'H':
+			if *cursor != 0 {
+				*cursor = 0
+				redraw()
+			} else {
+				beep()
+			}
+		case 'F':
+			if *cursor != len(*buffer) {
+				*cursor = len(*buffer)
+				redraw()
+			} else {
+				beep()
+			}
+		default:
+			beep()
+		}
+	default:
+		beep()
+	}
+}
+
+func readEscapeSequence(reader *bufio.Reader, fd int, timeout time.Duration) ([]byte, error) {
+	seq := []byte{27}
+
+	readNext := func() (bool, error) {
+		if reader.Buffered() == 0 {
+			ready, err := waitForInput(fd, timeout)
+			if err != nil {
+				return false, err
+			}
+			if !ready {
+				return false, nil
+			}
+		}
+
+		b, err := reader.ReadByte()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return false, nil
+			}
+			return false, err
+		}
+		seq = append(seq, b)
+		return true, nil
+	}
+
+	if ok, err := readNext(); err != nil {
+		return seq, err
+	} else if !ok {
+		return seq, nil
+	}
+
+	switch seq[1] {
+	case '[', 'O':
+		for {
+			if seq[1] == '[' && len(seq) >= 3 {
+				last := seq[len(seq)-1]
+				if last >= 0x40 && last <= 0x7E {
+					break
+				}
+			}
+			if seq[1] == 'O' && len(seq) >= 3 {
+				break
+			}
+			ok, err := readNext()
+			if err != nil {
+				return seq, err
+			}
+			if !ok {
+				break
+			}
+		}
+	}
+
+	return seq, nil
+}
+
+func waitForInput(fd int, timeout time.Duration) (bool, error) {
+	// Ensure minimum timeout to prevent race conditions with ESC sequences
+	if timeout <= 0 {
+		timeout = 10 * time.Millisecond
+	}
+	pollTimeout := int(timeout / time.Millisecond)
+	if pollTimeout <= 0 {
+		pollTimeout = 1
+	}
+
+	fds := []unix.PollFd{
+		{Fd: int32(fd), Events: unix.POLLIN},
+	}
+
+	n, err := unix.Poll(fds, pollTimeout)
+	if err != nil {
+		if errors.Is(err, unix.EINTR) {
+			return false, nil
+		}
+		return false, err
+	}
+	if n == 0 {
+		return false, nil
+	}
+	return fds[0].Revents&unix.POLLIN != 0, nil
 }
