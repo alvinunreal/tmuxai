@@ -432,6 +432,12 @@ models:
     api_key: "your-anthropic-api-key"
     base_url: "https://api.anthropic.com"
 
+  github-copilot:
+    provider: "openrouter"
+    model: "claude-sonnet-4.5"
+    api_key: "your-github-copilot-api-key"
+    base_url: "https://api.githubcopilot.com"
+
   local-llama:
     provider: "openrouter"
     model: "gemma3:1b"
