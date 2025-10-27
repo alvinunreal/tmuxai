@@ -18,6 +18,7 @@ var (
 	taskFileFlag string
 	kbFlag       string
 	modelFlag    string
+	onceFlag     bool
 )
 
 var rootCmd = &cobra.Command{
@@ -71,6 +72,21 @@ var rootCmd = &cobra.Command{
 			logger.Info("Set model from CLI flag: %s", modelFlag)
 		}
 
+		// Handle --once flag for one-off queries
+		if onceFlag {
+			if initMessage == "" {
+				fmt.Fprintln(os.Stderr, "Error: --once flag requires a message argument or --file flag")
+				os.Exit(1)
+			}
+
+			if err := mgr.ExecuteOnce(initMessage); err != nil {
+				logger.Error("ExecuteOnce failed: %v", err)
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
 		if initMessage != "" {
 			logger.Info("Starting with initial subcommand: %s", initMessage)
 		}
@@ -87,6 +103,7 @@ func init() {
 	rootCmd.Flags().StringVar(&kbFlag, "kb", "", "Comma-separated list of knowledge bases to load (e.g., --kb docker,git)")
 	rootCmd.Flags().StringVar(&modelFlag, "model", "", "AI model configuration to use (e.g., --model gpt4)")
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
+	rootCmd.Flags().BoolP("once", "o", false, "Execute one-off query and print response without interactive mode")
 }
 
 func Execute() error {

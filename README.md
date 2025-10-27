@@ -512,6 +512,29 @@ TmuxAI [claude-sonnet] »
 
 You can start `tmuxai` with an initial message, task file, model configuration, or knowledge bases from the command line:
 
+- **One-Off Query (No Interactive Mode):**
+
+  Use the `--once` (or `-o`) flag to execute a single query and print the AI response without entering interactive mode. This is perfect for scripting, quick questions, or getting AI assistance without tmux integration:
+
+  ```sh
+  # Simple query
+  tmuxai --once "How do I list files recursively in bash?"
+
+  # With task file
+  tmuxai --once -f question.txt
+
+  # With model selection
+  tmuxai --once --model gpt4 "Explain Docker volumes"
+
+  # With knowledge base
+  tmuxai --once --kb docker "How do I create a named volume?"
+
+  # Pipe output to other commands
+  tmuxai --once "Generate a bash one-liner to find large files" | grep "find"
+  ```
+
+  **Note:** The `--once` flag works outside of tmux and does not require any tmux integration. It simply sends your message to the AI and prints the response to stdout.
+
 - **Direct Message:**
 
   ```sh

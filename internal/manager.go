@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -189,4 +190,51 @@ func (ai *AIResponse) String() string {
 		ai.WaitingForUserResponse,
 		ai.NoComment,
 	)
+}
+
+// ExecuteOnce sends a single message to AI and prints the response without entering interactive mode
+func (m *Manager) ExecuteOnce(message string) error {
+	ctx := context.Background()
+
+	// Build a simple system prompt + user message
+	systemPrompt := ChatMessage{
+		Content:   fmt.Sprintf("You are a helpful AI assistant. OS: %s", m.OS),
+		FromUser:  false,
+		Timestamp: time.Now(),
+	}
+
+	userMessage := ChatMessage{
+		Content:   message,
+		FromUser:  true,
+		Timestamp: time.Now(),
+	}
+
+	history := []ChatMessage{systemPrompt}
+
+	// Add loaded knowledge bases if any
+	for kbName, kbContent := range m.LoadedKBs {
+		history = append(history, ChatMessage{
+			Content:   fmt.Sprintf("=== Knowledge Base: %s ===\n%s", kbName, kbContent),
+			FromUser:  false,
+			Timestamp: time.Now(),
+		})
+	}
+
+	history = append(history, userMessage)
+
+	// Check AI configuration
+	if !m.hasValidAIConfiguration() {
+		return fmt.Errorf("no AI configuration found - please configure in ~/.config/tmuxai/config.yaml")
+	}
+
+	// Get response from AI
+	response, err := m.AiClient.GetResponseFromChatMessages(ctx, history, m.GetModel())
+	if err != nil {
+		return fmt.Errorf("failed to get AI response: %w", err)
+	}
+
+	// Print response without formatting/parsing
+	fmt.Println(response)
+
+	return nil
 }
