@@ -180,7 +180,7 @@ TmuxAI operates by default in "observe mode". Here's how the interaction flow wo
 5. **If a command is suggested**, TmuxAI will:
 
    - Check if the command matches whitelist or blacklist patterns
-   - Ask for your confirmation (unless the command is whitelisted)
+   - Ask for your confirmation (unless the command is whitelisted). The confirmation prompt includes a risk indicator (✓ safe, ? unknown, ! danger) for guidance only - always review commands carefully as the risk scoring is not exhaustive and should not be relied upon for security decisions
    - Execute the command in the designated Exec Pane if approved
    - Wait for the `wait_interval` (default: 5 seconds) (You can pause/resume the countdown with `space` or `enter` to stop the countdown)
    - Capture the new output from all panes
@@ -411,7 +411,7 @@ Configure multiple AI models in your `~/.config/tmuxai/config.yaml`:
 
 ```yaml
 # Optional: specify which model to use by default
-# If not set, the first model in the list will be used automatically
+# If not set, the first model alphabetically will be used automatically
 default_model: "fast"
 
 models:
