@@ -12,8 +12,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/alvinunreal/tmuxai/internal/safety"
-
 	"github.com/fatih/color"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
@@ -28,27 +26,28 @@ func (m *Manager) confirmedToExecFn(command string, prompt string, edit bool) (b
 	promptColor := color.New(color.FgCyan, color.Bold)
 
 	// Score the command for risk assessment
-	assessment := safety.ScoreCommand(command)
+	assessment := ScoreCommand(command)
 
-	// Determine color based on risk level
+	// Determine color and icon based on risk level
 	var riskColor *color.Color
+	var riskIcon string
 	switch assessment.Level {
-	case safety.RiskHigh:
+	case RiskDanger:
 		riskColor = color.New(color.FgRed, color.Bold)
-	case safety.RiskMedium:
+		riskIcon = "!"
+	case RiskUnknown:
 		riskColor = color.New(color.FgYellow, color.Bold)
-	default:
+		riskIcon = "?"
+	default: // RiskSafe
 		riskColor = color.New(color.FgGreen, color.Bold)
+		riskIcon = "✓"
 	}
-	// Build the risk string with colored level
-	riskLevel := riskColor.Sprintf("%s", assessment.Level)
-	riskStr := fmt.Sprintf("[Risk: %s] ", riskLevel)
 
 	var promptText string
 	if edit {
-		promptText = fmt.Sprintf("%s%s [Y]es/No/Edit: ", riskStr, prompt)
+		promptText = fmt.Sprintf("%s %s [Y/n/e]: ", riskColor.Sprint(riskIcon), prompt)
 	} else {
-		promptText = fmt.Sprintf("%s%s [Y]es/No: ", riskStr, prompt)
+		promptText = fmt.Sprintf("%s %s [Y/n]: ", riskColor.Sprint(riskIcon), prompt)
 	}
 
 	promptStr := promptColor.Sprint(promptText)
