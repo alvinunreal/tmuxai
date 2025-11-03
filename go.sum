@@ -38,10 +38,12 @@ github.com/mattn/go-runewidth v0.0.19 h1:v++JhqYnZuu5jSKrk9RbgF5v4CGUjqRfBm05byF
 github.com/mattn/go-runewidth v0.0.19/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
 github.com/mattn/go-tty v0.0.7 h1:KJ486B6qI8+wBO7kQxYgmmEFDaFEE96JMBQ7h400N8Q=
 github.com/mattn/go-tty v0.0.7/go.mod h1:f2i5ZOvXBU/tCABmLmOfzLz9azMo5wdAaElRNnJKr+k=
-github.com/nyaosorg/go-box/v2 v2.2.1 h1:1SAtgLE+uYCA8oycJGKFrzsYaOWmxXWiqH8PR9wvnIo=
-github.com/nyaosorg/go-box/v2 v2.2.1/go.mod h1:IAW2+ri9apF0QTlZ5r5lkU+Rfnsigkmt6yODV7JMZ5E=
-github.com/nyaosorg/go-readline-ny v1.11.0 h1:D2y24u68a4lr2tAN+SS1DgGtbInoBHtP+rxm5Gx/Evo=
-github.com/nyaosorg/go-readline-ny v1.11.0/go.mod h1:ifQ0YwPemXHat17gvybf+i7/gyQnpufancIbnqTjsEM=
+github.com/nyaosorg/go-box/v3 v3.0.0 h1:W5qfScEkKBoD68gbP/lwfWlvcTRB0rwXkhL+9iC62xI=
+github.com/nyaosorg/go-box/v3 v3.0.0/go.mod h1:70GsE9mIh7JKVCxt71q3jEijO6C9YJmOZqWpPa9w+GY=
+github.com/nyaosorg/go-readline-ny v1.12.2 h1:PH273rRJ7USE2nCjJK7QzuiFpxJsnzWY2XKsJIdwLSs=
+github.com/nyaosorg/go-readline-ny v1.12.2/go.mod h1:KIoNjr6f6aur67nnYkVvLapZQiFPNRSqUcTe32IgeLE=
+github.com/nyaosorg/go-ttyadapter v0.1.0 h1:3U3ytc35SOdkrn15rHLG36ozkmqBeGqhQgNufoep1AI=
+github.com/nyaosorg/go-ttyadapter v0.1.0/go.mod h1:w6ySb/Y8rpr0uIju4vN/TMRHC/6ayabORHmEVs6d/qE=
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=
 github.com/pelletier/go-toml/v2 v2.2.4/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
