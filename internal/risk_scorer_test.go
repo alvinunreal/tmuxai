@@ -233,6 +233,18 @@ func TestScoreCommand_CommandChainingVulnerabilities(t *testing.T) {
 			RiskDanger,
 			"redirect and command substitution make entire command dangerous (pattern-based approach)",
 		},
+		{
+			"redirect without spaces",
+			"echo test>file.txt",
+			RiskDanger,
+			"redirect operator detected regardless of spacing",
+		},
+		{
+			"append redirect without spaces",
+			"echo test>>file.txt",
+			RiskDanger,
+			"append redirect operator detected regardless of spacing",
+		},
 	}
 
 	for _, tt := range tests {
