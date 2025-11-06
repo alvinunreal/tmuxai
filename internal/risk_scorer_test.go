@@ -200,8 +200,8 @@ func TestScoreCommand_CommandChainingVulnerabilities(t *testing.T) {
 		{
 			"safe command but unknown chained command",
 			"ls -la; ./unknown-script.sh",
-			RiskUnknown,
-			"unknown script should require confirmation even after safe command",
+			RiskDanger,
+			"semicolon makes entire command dangerous (pattern-based approach)",
 		},
 		{
 			"tar with command execution",
@@ -218,20 +218,20 @@ func TestScoreCommand_CommandChainingVulnerabilities(t *testing.T) {
 		{
 			"safe then unknown command",
 			"pwd; make install",
-			RiskUnknown,
-			"make install is unknown and should require confirmation",
+			RiskDanger,
+			"semicolon makes entire command dangerous (pattern-based approach)",
 		},
 		{
 			"multiple safe commands then unknown",
 			"ls -la && pwd && ./build.sh",
-			RiskUnknown,
-			"./build.sh is unknown, whole chain should be unknown",
+			RiskDanger,
+			"&& operator makes entire command dangerous (pattern-based approach)",
 		},
 		{
 			"safe command with redirect to unknown location",
 			"echo test > /tmp/$(whoami)/file.txt",
-			RiskUnknown,
-			"command substitution in path makes it unknown",
+			RiskDanger,
+			"redirect and command substitution make entire command dangerous (pattern-based approach)",
 		},
 	}
 
