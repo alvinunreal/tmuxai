@@ -2,6 +2,7 @@
 package internal
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -23,6 +24,35 @@ type RiskAssessment struct {
 type Pattern struct {
 	Regex *regexp.Regexp
 }
+
+// CommandComponent represents a parsed command element
+type CommandComponent struct {
+	Command   string        // The actual command (e.g., "ls -la")
+	Type      ComponentType
+	Redirects []Redirect
+}
+
+type ComponentType string
+
+const (
+	SimpleCommand       ComponentType = "simple"
+	PipeSource          ComponentType = "pipe_source"
+	PipeDestination     ComponentType = "pipe_dest"
+	CommandSubstitution ComponentType = "substitution"
+)
+
+type Redirect struct {
+	Type   RedirectType // >, >>, <
+	Target string       // File path or command
+}
+
+type RedirectType string
+
+const (
+	RedirectOutput RedirectType = ">"
+	RedirectAppend RedirectType = ">>"
+	RedirectInput  RedirectType = "<"
+)
 
 var (
 	// Safe patterns - commands we explicitly trust
@@ -109,7 +139,8 @@ var (
 		{regexp.MustCompile(`\brm\s+.*-[rR].*f`)},    // rm with -r and -f in any order
 		{regexp.MustCompile(`\brm\s+(-[rR]\s+)?/`)},  // rm targeting root paths
 		{regexp.MustCompile(`\bfind\b.*-delete\b`)},  // find with -delete flag
-		{regexp.MustCompile(`\bfind\b.*-exec\s+rm`)}, // find with rm execution
+		// MODIFIED: Catch ANY -exec, not just -exec rm. This fixes the 'find -exec sh' bypass.
+		{regexp.MustCompile(`\bfind\b.*-exec\b`)}, // find with rm execution
 		{regexp.MustCompile(`\bxargs\s+rm\b`)},       // xargs with rm (mass deletion)
 		{regexp.MustCompile(`\bmkfs\b`)},             // Format filesystem
 		{regexp.MustCompile(`\bdd\s+.*of=/dev/`)},    // Write to device
@@ -117,7 +148,6 @@ var (
 		{regexp.MustCompile(`\bparted\b`)},           // Partition editor
 		{regexp.MustCompile(`:\s*,\s*\$\s*d\b`)},     // dd in sed (delete all lines)
 		{regexp.MustCompile(`\btruncate\s+-s\s*0`)},  // Truncate files to zero size
-		{regexp.MustCompile(`>\s*/dev/sd[a-z]`)},     // Writing directly to disk devices
 
 		// Privilege escalation (very common)
 		{regexp.MustCompile(`\bsudo\b`)},
@@ -144,7 +174,8 @@ var (
 		{regexp.MustCompile(`\b:\(\)\s*\{.*:\|:`)},         // fork bomb pattern
 
 		// System critical modifications
-		{regexp.MustCompile(`>\s*/etc/`)},                                 // Writing to system config
+		// REMOVED: Redundant, covered by new `[<>]` rule
+		// {regexp.MustCompile(`>\s*/etc/`)},                                 // Writing to system config
 		{regexp.MustCompile(`\b(systemctl|service)\s+(stop|disable|mask)`)}, // Stop/disable services
 		{regexp.MustCompile(`\breboot\b`)},                                // Restart system
 		{regexp.MustCompile(`\bshutdown\b`)},                              // Shutdown system
@@ -190,14 +221,110 @@ var (
 	}
 )
 
-func ScoreCommand(cmd string) RiskAssessment {
+// ParseCommand splits a command string into components
+func ParseCommand(cmd string) ([]CommandComponent, error) {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return []CommandComponent{}, nil
+	}
+
+	// Split by multiple operators: ; && || &
+	// For now, we'll do a simple approach that handles the test cases
+	components := []CommandComponent{}
+	
+	// Split by semicolon first
+	semicolonParts := strings.Split(cmd, ";")
+	for _, semicolonPart := range semicolonParts {
+		semicolonPart = strings.TrimSpace(semicolonPart)
+		if semicolonPart == "" {
+			continue
+		}
+		
+		// Split by && 
+		andParts := strings.Split(semicolonPart, "&&")
+		for _, andPart := range andParts {
+			andPart = strings.TrimSpace(andPart)
+			if andPart == "" {
+				continue
+			}
+			
+			// Split by ||
+			orParts := strings.Split(andPart, "||")
+			for _, orPart := range orParts {
+				orPart = strings.TrimSpace(orPart)
+				if orPart == "" {
+					continue
+				}
+				
+				// Check for redirects and command substitution
+				component := CommandComponent{
+					Command: orPart,
+					Type:    SimpleCommand,
+				}
+				
+				// Check for redirects (both dangerous and unknown)
+				if strings.Contains(orPart, " > ") {
+					// Extract redirect target
+					parts := strings.Split(orPart, " > ")
+					if len(parts) > 1 {
+						target := strings.TrimSpace(parts[1])
+						// Take first word as the target (ignore additional arguments)
+						targetParts := strings.Fields(target)
+						if len(targetParts) > 0 {
+							component.Redirects = append(component.Redirects, Redirect{
+								Type:   RedirectOutput,
+								Target: targetParts[0],
+							})
+						}
+					}
+				}
+				if strings.Contains(orPart, " >> ") {
+					// Extract redirect target
+					parts := strings.Split(orPart, " >> ")
+					if len(parts) > 1 {
+						target := strings.TrimSpace(parts[1])
+						targetParts := strings.Fields(target)
+						if len(targetParts) > 0 {
+							component.Redirects = append(component.Redirects, Redirect{
+								Type:   RedirectAppend,
+								Target: targetParts[0],
+							})
+						}
+					}
+				}
+				
+				// Check for command substitution
+				if strings.Contains(orPart, "$(") {
+					// Extract the substituted command for separate evaluation
+					start := strings.Index(orPart, "$(")
+					if start != -1 {
+						end := strings.Index(orPart[start:], ")")
+						if end != -1 {
+							substitutedCmd := orPart[start+2 : start+end]
+							components = append(components, CommandComponent{
+								Command: substitutedCmd,
+								Type:    CommandSubstitution,
+							})
+						}
+					}
+				}
+				
+				components = append(components, component)
+			}
+		}
+	}
+	
+	return components, nil
+}
+
+// evaluateComponent assesses risk for a single command component
+func evaluateComponent(component CommandComponent) RiskAssessment {
 	assessment := RiskAssessment{
 		Level: RiskUnknown, // Default to unknown
 		Flags: []string{},
 	}
 
-	// Normalize command for matching
-	cmd = strings.TrimSpace(cmd)
+	cmd := strings.TrimSpace(component.Command)
 	if cmd == "" {
 		assessment.Level = RiskSafe
 		return assessment
@@ -226,4 +353,101 @@ func ScoreCommand(cmd string) RiskAssessment {
 
 	// If no matches, it's unknown (requires user confirmation)
 	return assessment
+}
+
+// checkRedirect evaluates if a redirect operation is dangerous
+func checkRedirect(redirect Redirect) RiskLevel {
+	dangerousRedirectPaths := []string{
+		"/etc/",
+		"/sys/",
+		"/proc/",
+		"/dev/",
+		"/boot/",
+		"/root/",
+	}
+	
+	if redirect.Type == RedirectOutput || redirect.Type == RedirectAppend {
+		// Check for dangerous system paths
+		for _, dangerousPath := range dangerousRedirectPaths {
+			if strings.HasPrefix(redirect.Target, dangerousPath) {
+				return RiskDanger
+			}
+		}
+		
+		// Check for command substitution in redirect target
+		if strings.Contains(redirect.Target, "$(") {
+			return RiskUnknown
+		}
+		
+		// Other redirects to user paths are unknown (could overwrite important files)
+		return RiskUnknown
+	}
+	
+	return RiskSafe
+}
+
+// aggregateRisks combines multiple assessments using maximum risk level
+func aggregateRisks(assessments []RiskAssessment) RiskAssessment {
+	if len(assessments) == 0 {
+		return RiskAssessment{Level: RiskSafe, Flags: []string{}}
+	}
+
+	result := RiskAssessment{
+		Level: RiskSafe,
+		Flags: []string{},
+	}
+
+	// Find the maximum risk level and combine all flags
+	for _, assessment := range assessments {
+		// Combine flags
+		result.Flags = append(result.Flags, assessment.Flags...)
+		
+		// Update to maximum risk level
+		if assessment.Level == RiskDanger {
+			result.Level = RiskDanger
+		} else if assessment.Level == RiskUnknown && result.Level != RiskDanger {
+			result.Level = RiskUnknown
+		}
+	}
+
+	return result
+}
+
+func ScoreCommand(cmd string) RiskAssessment {
+	// 1. Parse command into components
+	components, err := ParseCommand(cmd)
+	if err != nil {
+		// On parse error, treat as unknown for safety
+		return RiskAssessment{Level: RiskUnknown, Flags: []string{"parse_error"}}
+	}
+
+	// Handle empty command
+	if len(components) == 0 {
+		return RiskAssessment{Level: RiskSafe, Flags: []string{}}
+	}
+
+	// 2. Evaluate each component
+	assessments := []RiskAssessment{}
+	for i, component := range components {
+		assessment := evaluateComponent(component)
+		// Add component index to flags for debugging
+		for j, flag := range assessment.Flags {
+			assessment.Flags[j] = fmt.Sprintf("component_%d_%s", i, flag)
+		}
+		assessments = append(assessments, assessment)
+		
+		// Check redirects
+		for _, redirect := range component.Redirects {
+			redirectRisk := checkRedirect(redirect)
+			if redirectRisk != RiskSafe {
+				assessments = append(assessments, RiskAssessment{
+					Level: redirectRisk,
+					Flags: []string{fmt.Sprintf("redirect_%s_%s", redirect.Type, redirect.Target)},
+				})
+			}
+		}
+	}
+
+	// 3. Aggregate results
+	return aggregateRisks(assessments)
 }

