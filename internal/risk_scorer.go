@@ -104,14 +104,17 @@ var (
 
 	// Dangerous patterns - major risks that require user confirmation
 	dangerousPatterns = []Pattern{
-		// NEW: Shell metacharacters (command chaining, substitution, redirects)
-		// This is the *real* fix and will pass your tests.
-		{regexp.MustCompile(`[;&]`)},                     // Command chaining (semicolon or background)
-		{regexp.MustCompile(`\$\(`)},                      // Command substitution $()
-		{regexp.MustCompile("`")},                        // Command substitution (legacy) ``
-		{regexp.MustCompile(`\|\|`)},                     // Logical OR chaining
-		{regexp.MustCompile(`&&`)},                       // Logical AND chaining
-		{regexp.MustCompile(`[<>]`)},                      // Redirects (input/output)
+		// Detect explicit chaining/substitution and scoped redirects (avoid overbroad [<>])
+		{regexp.MustCompile(`;`)},                             // Semicolon command chaining
+		{regexp.MustCompile(`(?m)\s&\s|&$`)},                  // Background job operator (standalone &)
+		{regexp.MustCompile(`\$\(`)},                          // Command substitution $()
+		{regexp.MustCompile("`")},                              // Command substitution (legacy) ``
+		{regexp.MustCompile(`\|\|`)},                         // Logical OR chaining
+		{regexp.MustCompile(`&&`)},                           // Logical AND chaining
+		// Redirect operator detection (>, >>, <, and fd>), scoped to redirect tokens so we don't match stray angle brackets
+		{regexp.MustCompile(`(?:^|\s|[a-zA-Z0-9])(?:[0-9]*[<>]{1,2})\s*[^&|;]+`)},
+		// Specific redirect to dangerous system paths (write redirects targeting system dirs)
+		{regexp.MustCompile(`[>\s]+/(?:etc|dev|proc|sys|boot|root)(?:/|$)`)},
 		
 		// NEW: Also add the other fixes
 		{regexp.MustCompile(`\bfind\b.*-exec\b`)}, // find with -exec (potentially dangerous execution)
@@ -119,9 +122,8 @@ var (
 		{regexp.MustCompile(`\bsed\b.*[\s;]e\b`)},
 
 		// chmod patterns - detect execute permission grants
-		{regexp.MustCompile(`\bchmod\s+[^\s]*\+x`)},           // chmod +x or chmod u+x, etc.
+		{regexp.MustCompile(`\bchmod\s+.*(\+x|=[^,]*x)`)},      // chmod +x or symbolic grant of execute
 		{regexp.MustCompile(`\bchmod\s+[0-7]*[1357][0-7]{2}\b`)}, // chmod with execute bits (1,3,5,7)
-		{regexp.MustCompile(`\bchmod\s+(u=.*x|g=.*x|o=.*x|a=.*x)`)}, // symbolic with execute
 
 		// Destructive filesystem operations (most common/dangerous)
 		{regexp.MustCompile(`\brm\s+-[rR]f`)},        // rm -rf
