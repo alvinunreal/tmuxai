@@ -112,16 +112,16 @@ var (
 		{regexp.MustCompile(`\|\|`)},                     // Logical OR chaining
 		{regexp.MustCompile(`&&`)},                       // Logical AND chaining
 		{regexp.MustCompile(`[<>]`)},                      // Redirects (input/output)
-
+		
 		// NEW: Also add the other fixes
-		{regexp.MustCompile(`\bfind\b.*-exec\b`)},
+		{regexp.MustCompile(`\bfind\b.*-exec\b`)}, // find with -exec (potentially dangerous execution)
 		{regexp.MustCompile(`\b(curl|wget)\b.*\s(-o|--output|-O)\b`)},
 		{regexp.MustCompile(`\bsed\b.*[\s;]e\b`)},
 
-		// And the fix for chmod
-		{regexp.MustCompile(`\bchmod\s+.*[+x]`)},
-		{regexp.MustCompile(`\bchmod\s+[0-7]*[1357][0-7]{2}\b`)},
-		{regexp.MustCompile(`\bchmod\s+(u=.*x|g=.*x|o=.*x|a=.*x)`)},
+		// chmod patterns - detect execute permission grants
+		{regexp.MustCompile(`\bchmod\s+[^\s]*\+x`)},           // chmod +x or chmod u+x, etc.
+		{regexp.MustCompile(`\bchmod\s+[0-7]*[1357][0-7]{2}\b`)}, // chmod with execute bits (1,3,5,7)
+		{regexp.MustCompile(`\bchmod\s+(u=.*x|g=.*x|o=.*x|a=.*x)`)}, // symbolic with execute
 
 		// Destructive filesystem operations (most common/dangerous)
 		{regexp.MustCompile(`\brm\s+-[rR]f`)},        // rm -rf
@@ -141,9 +141,7 @@ var (
 		{regexp.MustCompile(`\bsu\s`)},
 		{regexp.MustCompile(`\bdoas\b`)}, // OpenBSD sudo alternative
 
-		// Dangerous permissions
-		{regexp.MustCompile(`\bchmod\s+[0-7]*[67][0-7]*\b`)}, // chmod with exec bits
-		{regexp.MustCompile(`\bchmod\s+777`)},                // chmod 777 (world writable)
+		// Dangerous ownership changes
 		{regexp.MustCompile(`\bchown\s+.*root`)},             // chown to root
 
 		// Code execution risks
