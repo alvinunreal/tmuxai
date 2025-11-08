@@ -28,10 +28,41 @@ func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
 func (m *Manager) InitExecPane() {
 	availablePane := m.GetAvailablePane()
 	if availablePane.Id == "" {
-		_, _ = system.TmuxCreateNewPane(m.PaneId)
+		// Detect the current shell from the main pane to start exec pane with clean shell
+		currentShell := m.detectCurrentShell()
+		cleanShellCommand := system.GetCleanShellCommand(currentShell)
+		_, _ = system.TmuxCreateNewPane(m.PaneId, cleanShellCommand)
 		availablePane = m.GetAvailablePane()
 	}
 	m.ExecPane = &availablePane
+}
+
+// detectCurrentShell detects the shell running in the current tmux pane
+func (m *Manager) detectCurrentShell() string {
+	// Get the current pane details to find the shell
+	panes, err := m.GetTmuxPanes()
+	if err != nil || len(panes) == 0 {
+		return "bash" // fallback to bash
+	}
+
+	// Find the current tmuxai pane
+	for _, pane := range panes {
+		if pane.IsTmuxAiPane {
+			// Check if CurrentCommand is a shell
+			if system.IsShellCommand(pane.CurrentCommand) {
+				return pane.CurrentCommand
+			}
+			// If not a shell, check if it's a subshell and try to detect from args
+			if pane.IsSubShell && pane.CurrentCommandArgs != "" {
+				args := strings.Fields(pane.CurrentCommandArgs)
+				if len(args) > 0 && system.IsShellCommand(args[0]) {
+					return args[0]
+				}
+			}
+		}
+	}
+
+	return "bash" // fallback to bash
 }
 
 func (m *Manager) PrepareExecPaneWithShell(shell string) {

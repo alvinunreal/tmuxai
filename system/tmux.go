@@ -11,9 +11,29 @@ import (
 	"github.com/alvinunreal/tmuxai/logger"
 )
 
+// GetCleanShellCommand returns the command to start a shell with no profile/rc loaded
+func GetCleanShellCommand(shell string) string {
+	switch shell {
+	case "bash":
+		return "bash --noprofile --norc"
+	case "zsh":
+		return "zsh -f"
+	case "fish":
+		return "fish --no-config"
+	default:
+		return shell
+	}
+}
+
 // TmuxCreateNewPane creates a new horizontal split pane in the specified window and returns its ID
-func TmuxCreateNewPane(target string) (string, error) {
-	cmd := exec.Command("tmux", "split-window", "-d", "-h", "-t", target, "-P", "-F", "#{pane_id}")
+// If shellCommand is provided, it will be executed in the new pane
+func TmuxCreateNewPane(target string, shellCommand ...string) (string, error) {
+	args := []string{"split-window", "-d", "-h", "-t", target, "-P", "-F", "#{pane_id}"}
+	if len(shellCommand) > 0 && shellCommand[0] != "" {
+		args = append(args, shellCommand[0])
+	}
+
+	cmd := exec.Command("tmux", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
