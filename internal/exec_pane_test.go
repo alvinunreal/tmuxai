@@ -141,23 +141,27 @@ func TestPrepareExecPaneWithShell(t *testing.T) {
 
 	// Test bash shell preparation
 	manager.PrepareExecPaneWithShell("bash")
-	assert.Len(t, commandsSent, 2, "Should send 2 commands for bash")
-	assert.Contains(t, commandsSent[0], "PS1=", "Should set PS1 for bash")
-	assert.Equal(t, "C-l", commandsSent[1], "Should clear screen")
+	assert.Len(t, commandsSent, 3, "Should send 3 commands for bash")
+	assert.Equal(t, "unset PROMPT_COMMAND", commandsSent[0], "Should unset PROMPT_COMMAND for bash")
+	assert.Contains(t, commandsSent[1], "PS1=", "Should set PS1 for bash")
+	assert.Equal(t, "C-l", commandsSent[2], "Should clear screen")
 
 	// Reset and test zsh shell preparation
 	commandsSent = []string{}
 	manager.PrepareExecPaneWithShell("zsh")
-	assert.Len(t, commandsSent, 2, "Should send 2 commands for zsh")
-	assert.Contains(t, commandsSent[0], "PROMPT=", "Should set PROMPT for zsh")
-	assert.Equal(t, "C-l", commandsSent[1], "Should clear screen")
+	assert.Len(t, commandsSent, 4, "Should send 4 commands for zsh")
+	assert.Equal(t, "unset PROMPT_COMMAND", commandsSent[0], "Should unset PROMPT_COMMAND for zsh")
+	assert.Equal(t, "unset precmd_functions", commandsSent[1], "Should unset precmd_functions for zsh")
+	assert.Contains(t, commandsSent[2], "PROMPT=", "Should set PROMPT for zsh")
+	assert.Equal(t, "C-l", commandsSent[3], "Should clear screen")
 
 	// Reset and test fish shell preparation
 	commandsSent = []string{}
 	manager.PrepareExecPaneWithShell("fish")
-	assert.Len(t, commandsSent, 2, "Should send 2 commands for fish")
-	assert.Contains(t, commandsSent[0], "fish_prompt", "Should set fish_prompt for fish")
-	assert.Equal(t, "C-l", commandsSent[1], "Should clear screen")
+	assert.Len(t, commandsSent, 3, "Should send 3 commands for fish")
+	assert.Equal(t, "functions -e fish_prompt", commandsSent[0], "Should delete fish_prompt function")
+	assert.Contains(t, commandsSent[1], "function fish_prompt", "Should set fish_prompt for fish")
+	assert.Equal(t, "C-l", commandsSent[2], "Should clear screen")
 
 	// Reset and test unsupported shell
 	commandsSent = []string{}
@@ -222,7 +226,7 @@ func TestExecWaitCapture_SSHScenario(t *testing.T) {
 	// Mock system functions to simulate SSH environment
 	originalTmuxSend := system.TmuxSendCommandToPane
 	originalTmuxCapture := system.TmuxCapturePane
-	defer func() { 
+	defer func() {
 		system.TmuxSendCommandToPane = originalTmuxSend
 		system.TmuxCapturePane = originalTmuxCapture
 	}()
@@ -277,7 +281,7 @@ func TestExecWaitCapture_SuccessfulExecution(t *testing.T) {
 	// Mock system functions to simulate successful execution
 	originalTmuxSend := system.TmuxSendCommandToPane
 	originalTmuxCapture := system.TmuxCapturePane
-	defer func() { 
+	defer func() {
 		system.TmuxSendCommandToPane = originalTmuxSend
 		system.TmuxCapturePane = originalTmuxCapture
 	}()

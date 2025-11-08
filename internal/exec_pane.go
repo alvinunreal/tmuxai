@@ -28,41 +28,10 @@ func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
 func (m *Manager) InitExecPane() {
 	availablePane := m.GetAvailablePane()
 	if availablePane.Id == "" {
-		// Detect the current shell from the main pane to start exec pane with clean shell
-		currentShell := m.detectCurrentShell()
-		cleanShellCommand := system.GetCleanShellCommand(currentShell)
-		_, _ = system.TmuxCreateNewPane(m.PaneId, cleanShellCommand)
+		_, _ = system.TmuxCreateNewPane(m.PaneId)
 		availablePane = m.GetAvailablePane()
 	}
 	m.ExecPane = &availablePane
-}
-
-// detectCurrentShell detects the shell running in the current tmux pane
-func (m *Manager) detectCurrentShell() string {
-	// Get the current pane details to find the shell
-	panes, err := m.GetTmuxPanes()
-	if err != nil || len(panes) == 0 {
-		return "bash" // fallback to bash
-	}
-
-	// Find the current tmuxai pane
-	for _, pane := range panes {
-		if pane.IsTmuxAiPane {
-			// Check if CurrentCommand is a shell
-			if system.IsShellCommand(pane.CurrentCommand) {
-				return pane.CurrentCommand
-			}
-			// If not a shell, check if it's a subshell and try to detect from args
-			if pane.IsSubShell && pane.CurrentCommandArgs != "" {
-				args := strings.Fields(pane.CurrentCommandArgs)
-				if len(args) > 0 && system.IsShellCommand(args[0]) {
-					return args[0]
-				}
-			}
-		}
-	}
-
-	return "bash" // fallback to bash
 }
 
 func (m *Manager) PrepareExecPaneWithShell(shell string) {
@@ -71,21 +40,27 @@ func (m *Manager) PrepareExecPaneWithShell(shell string) {
 		return
 	}
 
-	var ps1Command string
+	// Send commands to sanitize prompt and set simple prompt
 	switch shell {
 	case "zsh":
-		ps1Command = `export PROMPT='%n@%m:%~[%T][%?]» '`
+		// Unset zsh prompt customizations
+		_ = system.TmuxSendCommandToPane(m.ExecPane.Id, "unset PROMPT_COMMAND", true)
+		_ = system.TmuxSendCommandToPane(m.ExecPane.Id, "unset precmd_functions", true)
+		_ = system.TmuxSendCommandToPane(m.ExecPane.Id, `export PROMPT='%n@%m:%~[%D{%L:%M:%S}][$?]» '`, true)
 	case "bash":
-		ps1Command = `export PS1='\u@\h:\w[\A][$?]» '`
+		// Unset bash prompt customizations
+		_ = system.TmuxSendCommandToPane(m.ExecPane.Id, "unset PROMPT_COMMAND", true)
+		_ = system.TmuxSendCommandToPane(m.ExecPane.Id, `export PS1='\u@\h:\w[\A][$?]» '`, true)
 	case "fish":
-		ps1Command = `function fish_prompt; set -l s $status; printf '%s@%s:%s[%s][%d]» ' $USER (hostname -s) (prompt_pwd) (date +"%H:%M") $s; end`
+		// Delete and redefine fish_prompt function
+		_ = system.TmuxSendCommandToPane(m.ExecPane.Id, "functions -e fish_prompt", true)
+		_ = system.TmuxSendCommandToPane(m.ExecPane.Id, `function fish_prompt; echo -n (whoami)'@'(hostname)':'(pwd)'['(date +%H:%M:%S)']['$status']» '; end`, true)
 	default:
 		errMsg := fmt.Sprintf("Shell '%s' in pane %s is recognized but not yet supported for PS1 modification.", shell, m.ExecPane.Id)
 		logger.Info(errMsg)
 		return
 	}
 
-	_ = system.TmuxSendCommandToPane(m.ExecPane.Id, ps1Command, true)
 	_ = system.TmuxSendCommandToPane(m.ExecPane.Id, "C-l", false)
 }
 
