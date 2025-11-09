@@ -43,10 +43,13 @@ func (m *Manager) PrepareExecPaneWithShell(shell string) {
 	var ps1Command string
 	switch shell {
 	case "zsh":
+		// Only set PROMPT for zsh; avoid unsetting precmd hooks to respect user's zsh configuration
 		ps1Command = `export PROMPT='%n@%m:%~[%T][%?]» '`
 	case "bash":
-		ps1Command = `export PS1='\u@\h:\w[\A][$?]» '`
+		// Unset PROMPT_COMMAND for bash (can interfere with prompts), then set PS1
+		ps1Command = `unset PROMPT_COMMAND; export PS1='\u@\h:\w[\A][$?]» '`
 	case "fish":
+		// Redefine fish_prompt only (do not remove other functions)
 		ps1Command = `function fish_prompt; set -l s $status; printf '%s@%s:%s[%s][%d]» ' $USER (hostname -s) (prompt_pwd) (date +"%H:%M") $s; end`
 	default:
 		errMsg := fmt.Sprintf("Shell '%s' in pane %s is recognized but not yet supported for PS1 modification.", shell, m.ExecPane.Id)
