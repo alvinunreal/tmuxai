@@ -56,9 +56,10 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 	commandsSent = []string{} // Reset
 	manager.ProcessSubCommand("/prepare bash")
 
-	assert.Len(t, commandsSent, 2, "Should send PS1 command and clear command for bash")
-	assert.Contains(t, commandsSent[0], "PS1=", "Should send bash PS1 command")
-	assert.Equal(t, "C-l", commandsSent[1], "Should send clear screen command")
+	assert.Len(t, commandsSent, 3, "Should send 3 commands for bash")
+	assert.Equal(t, "unset PROMPT_COMMAND", commandsSent[0], "Should unset PROMPT_COMMAND for bash")
+	assert.Contains(t, commandsSent[1], "PS1=", "Should send bash PS1 command")
+	assert.Equal(t, "C-l", commandsSent[2], "Should send clear screen command")
 
 	// Test case 2: /prepare with zsh on subshell
 	commandsSent = []string{} // Reset
@@ -92,7 +93,7 @@ func TestProcessSubCommand_PrepareNormalShell(t *testing.T) {
 		Messages:         []ChatMessage{},
 		ExecPane: &system.TmuxPaneDetails{
 			Id:             "test-pane",
-			IsSubShell:     false,    // This is NOT a subshell
+			IsSubShell:     false,     // This is NOT a subshell
 			CurrentCommand: "unknown", // Unsupported shell - should not send commands
 		},
 	}
