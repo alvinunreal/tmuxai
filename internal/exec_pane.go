@@ -47,8 +47,7 @@ func (m *Manager) PrepareExecPaneWithShell(shell string) {
 		ps1Command = `export PROMPT='%n@%m:%~[%T][%?]» '`
 	case "bash":
 		// Unset PROMPT_COMMAND for bash (can interfere with prompts), then set PS1
-		_ = system.TmuxSendCommandToPane(m.ExecPane.Id, "unset PROMPT_COMMAND", true)
-		ps1Command = `export PS1='\u@\h:\w[\A][$?]» '`
+		ps1Command = `unset PROMPT_COMMAND; export PS1='\u@\h:\w[\A][$?]» '`
 	case "fish":
 		// Redefine fish_prompt only (do not remove other functions)
 		ps1Command = `function fish_prompt; set -l s $status; printf '%s@%s:%s[%s][%d]» ' $USER (hostname -s) (prompt_pwd) (date +"%H:%M") $s; end`

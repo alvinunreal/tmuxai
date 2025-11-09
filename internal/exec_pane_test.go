@@ -141,10 +141,10 @@ func TestPrepareExecPaneWithShell(t *testing.T) {
 
 	// Test bash shell preparation
 	manager.PrepareExecPaneWithShell("bash")
-	assert.Len(t, commandsSent, 3, "Should send 3 commands for bash")
-	assert.Equal(t, "unset PROMPT_COMMAND", commandsSent[0], "Should unset PROMPT_COMMAND for bash")
-	assert.Contains(t, commandsSent[1], "PS1=", "Should set PS1 for bash")
-	assert.Equal(t, "C-l", commandsSent[2], "Should clear screen")
+	assert.Len(t, commandsSent, 2, "Should send 2 commands for bash")
+	assert.Contains(t, commandsSent[0], "unset PROMPT_COMMAND", "Should unset PROMPT_COMMAND for bash")
+	assert.Contains(t, commandsSent[0], "PS1=", "Should set PS1 for bash")
+	assert.Equal(t, "C-l", commandsSent[1], "Should clear screen")
 
 	// Reset and test zsh shell preparation (only set PROMPT, do not unset precmd hooks)
 	commandsSent = []string{}
