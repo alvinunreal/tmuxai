@@ -1,5 +1,12 @@
 name: Run tests
-on: push
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
 jobs:
   build:
     runs-on: ubuntu-latest
