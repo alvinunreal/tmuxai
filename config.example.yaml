@@ -52,6 +52,12 @@ models:
     api_version: "2025-04-01-preview"
     deployment_name: "gpt-4o"
 
+  synthetic-glm-4-6:
+    provider: "synthetic"
+    model: "hf:zai-org/GLM-4.6"
+    api_key: "your-synthetic-api-key"
+    base_url: "https://api.synthetic.new/openai/v1"
+
 # Confirm before AI executes a command
 exec_confirm: true
 

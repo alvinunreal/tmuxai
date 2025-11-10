@@ -23,7 +23,8 @@ type Config struct {
 	BlacklistPatterns     []string              `mapstructure:"blacklist_patterns"`
 	OpenRouter            OpenRouterConfig      `mapstructure:"openrouter"`
 	OpenAI                OpenAIConfig          `mapstructure:"openai"`
-	AzureOpenAI           AzureOpenAIConfig     `mapstructure:"azure_openai"`
+	AzureOpenAI           AzureOpenAIConfig     `mapstructure:"azure_open_ai"`
+	Synthetic             SyntheticConfig       `mapstructure:"synthetic"`
 	DefaultModel          string                 `mapstructure:"default_model"`
 	Models                map[string]ModelConfig  `mapstructure:"models"`
 	Prompts               PromptsConfig         `mapstructure:"prompts"`
@@ -50,6 +51,13 @@ type AzureOpenAIConfig struct {
 	APIBase        string `mapstructure:"api_base"`
 	APIVersion     string `mapstructure:"api_version"`
 	DeploymentName string `mapstructure:"deployment_name"`
+}
+
+// SyntheticConfig holds Synthetic API configuration
+type SyntheticConfig struct {
+	APIKey  string `mapstructure:"api_key"`
+	Model   string `mapstructure:"model"`
+	BaseURL string `mapstructure:"base_url"`
 }
 
 
@@ -100,6 +108,9 @@ func DefaultConfig() *Config {
 			BaseURL: "https://api.openai.com/v1",
 		},
 		AzureOpenAI: AzureOpenAIConfig{},
+		Synthetic: SyntheticConfig{
+			BaseURL: "https://api.synthetic.new/openai/v1",
+		},
 		DefaultModel: "",
 	Models:       make(map[string]ModelConfig),
 		Prompts: PromptsConfig{

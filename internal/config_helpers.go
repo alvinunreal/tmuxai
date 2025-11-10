@@ -24,6 +24,9 @@ var AllowedConfigKeys = []string{
 	"azure_openai.deployment_name",
 	"azure_openai.api_base",
 	"azure_openai.api_version",
+	"synthetic.api_key",
+	"synthetic.model",
+	"synthetic.base_url",
 	"default_model",
 }
 
@@ -143,6 +146,36 @@ func (m *Manager) GetAzureOpenAIDeploymentName() string {
 	return m.Config.AzureOpenAI.DeploymentName
 }
 
+// GetSyntheticModel returns the Synthetic model value with session override if present
+func (m *Manager) GetSyntheticModel() string {
+	if override, exists := m.SessionOverrides["synthetic.model"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.Synthetic.Model
+}
+
+// GetSyntheticAPIKey returns the Synthetic API key value with session override if present
+func (m *Manager) GetSyntheticAPIKey() string {
+	if override, exists := m.SessionOverrides["synthetic.api_key"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.Synthetic.APIKey
+}
+
+// GetSyntheticBaseURL returns the Synthetic base URL value with session override if present
+func (m *Manager) GetSyntheticBaseURL() string {
+	if override, exists := m.SessionOverrides["synthetic.base_url"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.Synthetic.BaseURL
+}
+
 // GetModelsDefault returns the default model configuration name with session override if present
 func (m *Manager) GetModelsDefault() string {
 	// Check for session override first
@@ -231,12 +264,12 @@ func (m *Manager) hasValidAIConfiguration() bool {
 	}
 
 	// Fall back to legacy configuration
-	return m.Config.OpenRouter.APIKey != "" || m.Config.OpenAI.APIKey != "" || m.Config.AzureOpenAI.APIKey != ""
+	return m.Config.OpenRouter.APIKey != "" || m.Config.OpenAI.APIKey != "" || m.Config.AzureOpenAI.APIKey != "" || m.Config.Synthetic.APIKey != ""
 }
 
 // getLegacyModelConfig converts the legacy provider configuration to a ModelConfig
 func (m *Manager) getLegacyModelConfig() config.ModelConfig {
-	// Priority: OpenAI > Azure > OpenRouter
+	// Priority: OpenAI > Azure > Synthetic > OpenRouter
 	if m.GetOpenAIAPIKey() != "" {
 		return config.ModelConfig{
 			Provider: "openai",
@@ -254,6 +287,15 @@ func (m *Manager) getLegacyModelConfig() config.ModelConfig {
 			APIBase:        m.Config.AzureOpenAI.APIBase,
 			APIVersion:     m.Config.AzureOpenAI.APIVersion,
 			DeploymentName: m.GetAzureOpenAIDeploymentName(),
+		}
+	}
+
+	if m.GetSyntheticAPIKey() != "" {
+		return config.ModelConfig{
+			Provider: "synthetic",
+			Model:    m.GetSyntheticModel(),
+			APIKey:   m.GetSyntheticAPIKey(),
+			BaseURL:  m.GetSyntheticBaseURL(),
 		}
 	}
 
@@ -290,6 +332,16 @@ func (m *Manager) GetModel() string {
 			}
 			// Default deployment for Azure if not specified
 			return "gpt-4o"
+		}
+
+		// If Synthetic is configured, use Synthetic model
+		if m.GetSyntheticAPIKey() != "" {
+			model := m.GetSyntheticModel()
+			if model != "" {
+				return model
+			}
+			// Default model for Synthetic if not specified
+			return "hf:zai-org/GLM-4.6"
 		}
 
 		// Default to OpenRouter
