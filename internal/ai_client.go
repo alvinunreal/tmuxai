@@ -131,7 +131,7 @@ func (c *AiClient) determineAPIType(model string) string {
 				return "responses"
 			case "azure":
 				return "azure"
-			case "openrouter":
+			case "openrouter", "synthetic":
 				return "openrouter"
 			default:
 				return "openrouter"
@@ -148,6 +148,11 @@ func (c *AiClient) determineAPIType(model string) string {
 	// If Azure OpenAI is configured, use Azure Chat Completions
 	if c.config.AzureOpenAI.APIKey != "" {
 		return "azure"
+	}
+
+	// If Synthetic is configured, use OpenRouter-compatible Chat Completions
+	if c.config.Synthetic.APIKey != "" {
+		return "openrouter"
 	}
 
 	// Default to OpenRouter Chat Completions
@@ -239,6 +244,10 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 			apiBase = c.config.AzureOpenAI.APIBase
 			apiVersion = c.config.AzureOpenAI.APIVersion
 			deploymentName = c.config.AzureOpenAI.DeploymentName
+		} else if c.config.Synthetic.APIKey != "" {
+			provider = "synthetic"
+			apiKey = c.config.Synthetic.APIKey
+			baseURL = c.config.Synthetic.BaseURL
 		} else if c.config.OpenRouter.APIKey != "" {
 			provider = "openrouter"
 			apiKey = c.config.OpenRouter.APIKey
