@@ -15,6 +15,7 @@ const helpMessage = `Available commands:
 - /info: Display system information
 - /clear: Clear the chat history
 - /reset: Reset the chat history
+- /paste: Enter paste mode for multiline input
 - /prepare: Prepare the pane for TmuxAI automation
 - /watch <prompt>: Start watch mode
 - /squash: Summarize the chat history
@@ -30,6 +31,7 @@ var commands = []string{
 	"/help",
 	"/clear",
 	"/reset",
+	"/paste",
 	"/exit",
 	"/info",
 	"/watch",
