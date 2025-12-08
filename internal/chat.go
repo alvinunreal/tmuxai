@@ -23,6 +23,8 @@ type ChatMessage struct {
 type CLIInterface struct {
 	manager     *Manager
 	initMessage string
+	pasteMode   bool
+	pasteBuffer strings.Builder
 }
 
 func NewCLIInterface(manager *Manager) *CLIInterface {
@@ -60,7 +62,11 @@ func (c *CLIInterface) Start(initMessage string) error {
 
 	for {
 		// Update prompt (in case state changed)
-		rl.SetPrompt(c.manager.GetPrompt())
+		if c.pasteMode {
+			rl.SetPrompt("... ")
+		} else {
+			rl.SetPrompt(c.manager.GetPrompt())
+		}
 
 		line, err := rl.Readline()
 		if err == readline.ErrInterrupt {
@@ -80,11 +86,13 @@ func (c *CLIInterface) Start(initMessage string) error {
 
 		// Check for exit/quit commands
 		trimmed := strings.TrimSpace(input)
-		if trimmed == "exit" || trimmed == "quit" {
-			return nil
-		}
-		if trimmed == "" {
-			continue
+		if !c.pasteMode {
+			if trimmed == "exit" || trimmed == "quit" {
+				return nil
+			}
+			if trimmed == "" {
+				continue
+			}
 		}
 
 		c.processInput(input)
@@ -94,11 +102,36 @@ func (c *CLIInterface) Start(initMessage string) error {
 // printWelcomeMessage prints a welcome message
 func (c *CLIInterface) printWelcomeMessage() {
 	fmt.Println()
-	fmt.Println("Type '/help' for a list of commands, '/exit' to quit")
+	fmt.Println("Type '/help' for a list of commands, '/paste' to enter paste mode, '/exit' to quit")
 	fmt.Println()
 }
 
 func (c *CLIInterface) processInput(input string) {
+	if input == "/paste" {
+		c.pasteMode = true
+		c.pasteBuffer.Reset()
+		fmt.Println("Entering paste mode. Type '/end' to submit, or '/cancel' to abort.")
+		return
+	}
+
+	if c.pasteMode {
+		trimmed := strings.TrimSpace(input)
+		if trimmed == "/end" {
+			c.pasteMode = false
+			input = c.pasteBuffer.String()
+			c.pasteBuffer.Reset()
+			fmt.Println("Processing pasted content...")
+		} else if trimmed == "/cancel" {
+			c.pasteMode = false
+			c.pasteBuffer.Reset()
+			fmt.Println("Paste mode cancelled.")
+			return
+		} else {
+			c.pasteBuffer.WriteString(input + "\n")
+			return
+		}
+	}
+
 	if c.manager.IsMessageSubcommand(input) {
 		c.manager.ProcessSubCommand(input)
 		return
