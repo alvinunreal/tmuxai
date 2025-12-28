@@ -1,10 +1,12 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"time"
@@ -64,6 +66,14 @@ func (c *CLIInterface) Start(initMessage string) error {
 	// Bind TAB key to completion
 	editor.BindKey(keys.CtrlI, c.newCompleter())
 
+	// Bind Ctrl+O and Alt+E to open current prompt in external editor
+	editorCmd := &readline.GoCommand{
+		Name: "EDIT_IN_EDITOR",
+		Func: cmdEditInEditor,
+	}
+	editor.BindKey(keys.CtrlO, editorCmd)
+	editor.BindKey(keys.AltE, editorCmd)
+
 	if initMessage != "" {
 		fmt.Printf("%s%s\n", c.manager.GetPrompt(), initMessage)
 		c.processInput(initMessage)
@@ -118,6 +128,52 @@ func (c *CLIInterface) printWelcomeMessage() {
 	fmt.Println()
 	fmt.Println("Type '/help' for a list of commands, '/exit' to quit")
 	fmt.Println()
+}
+
+// startEditor opens the given text in an external editor and returns the edited result
+func startEditor(source string) (string, error) {
+	textEditor := os.Getenv("EDITOR")
+	if textEditor == "" {
+		textEditor = "vim"
+	}
+
+	fd, err := os.CreateTemp("", "tmuxai-prompt-*.txt")
+	if err != nil {
+		return source, err
+	}
+	io.WriteString(fd, source)
+	fd.Close()
+	fname := fd.Name()
+	defer os.Remove(fname)
+
+	cmd := exec.Command(textEditor, fname)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return source, err
+	}
+
+	update, err := os.ReadFile(fname)
+	if err != nil {
+		return source, err
+	}
+	update = bytes.TrimSuffix(update, []byte{'\n'})
+	update = bytes.TrimSuffix(update, []byte{'\r'})
+	return string(update), nil
+}
+
+// cmdEditInEditor is a readline command that opens the current buffer in an external editor
+func cmdEditInEditor(ctx context.Context, B *readline.Buffer) readline.Result {
+	result, err := startEditor(B.String())
+	if err != nil {
+		return readline.CONTINUE
+	}
+	B.Buffer = B.Buffer[:0]
+	B.InsertString(0, result)
+	B.Cursor = len(B.Buffer)
+	B.RepaintAll()
+	return readline.CONTINUE
 }
 
 func (c *CLIInterface) processInput(input string) {

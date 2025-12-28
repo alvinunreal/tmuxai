@@ -51,6 +51,7 @@
 - [Squashing](#squashing)
   - [What is Squashing?](#what-is-squashing)
   - [Manual Squashing](#manual-squashing)
+- [Multiline Input](#multiline-input)
 - [Core Commands](#core-commands)
 - [Command-Line Usage](#command-line-usage)
 - [Configuration](#configuration)
@@ -309,6 +310,24 @@ If you'd like to manage your context before reaching the automatic threshold, yo
 ```bash
 TmuxAI » /squash
 ```
+
+## Multiline Input
+
+For longer or more complex prompts, you can open your current input in an external text editor. This is similar to how bash allows editing commands with `Ctrl+X Ctrl+E`.
+
+**Keyboard Shortcuts:**
+- `Ctrl+O` - Open current prompt in external editor (works on all platforms)
+- `Alt+E` - Alternative binding (may not work on macOS due to Option key behavior)
+
+When triggered, TmuxAI will:
+1. Open your `$EDITOR` (falls back to `vim` if not set) with the current prompt content
+2. Wait for you to edit, save, and close the editor
+3. Replace the prompt with the edited content
+
+This is useful for:
+- Writing multi-line prompts or detailed instructions
+- Editing long commands more comfortably
+- Pasting and formatting complex content
 
 ## Knowledge Base
 
