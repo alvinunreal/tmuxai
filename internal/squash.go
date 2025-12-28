@@ -11,9 +11,13 @@ import (
 	"github.com/briandowns/spinner"
 )
 
-// needSquash checks if the current context size is approaching the max limit
 func (m *Manager) needSquash() bool {
 	totalTokens := 0
+
+	isPrepared := m.ExecPane != nil && m.ExecPane.IsPrepared
+	totalTokens += system.EstimateTokenCount(m.chatAssistantPrompt(isPrepared).Content)
+	totalTokens += m.getTotalLoadedKBTokens()
+
 	for _, msg := range m.Messages {
 		totalTokens += system.EstimateTokenCount(msg.Content)
 	}
@@ -22,71 +26,27 @@ func (m *Manager) needSquash() bool {
 	return totalTokens > threshold
 }
 
-// manageContext handles context reduction by summarizing chat history
 func (m *Manager) squashHistory() {
-	var systemMessage ChatMessage
-	var assistantBaseMessage ChatMessage
-	var hasSystemMessage bool
-	var hasAssistantBaseMessage bool
-
-	// Find system and initial assistant messages to preserve
-	for i, msg := range m.Messages {
-		if i == 0 && !msg.FromUser {
-			systemMessage = msg
-			hasSystemMessage = true
-			continue
-		}
-		if i == 1 && !msg.FromUser && hasSystemMessage {
-			assistantBaseMessage = msg
-			hasAssistantBaseMessage = true
-			break
-		}
+	if len(m.Messages) < 2 {
+		return
 	}
 
-	// Messages to be summarized (exclude system and initial assistant message)
-	var messagesToSummarize []ChatMessage
-	startIdx := 0
-	if hasSystemMessage {
-		startIdx++
-	}
-	if hasAssistantBaseMessage {
-		startIdx++
+	messagesToSummarize := m.Messages[:len(m.Messages)-1]
+
+	summarizedHistory, err := m.summarizeChatHistory(messagesToSummarize)
+	if err != nil {
+		logger.Error("Failed to summarize chat history: %v", err)
+		return
 	}
 
-	// Only summarize if we have messages beyond the base ones
-	if startIdx < len(m.Messages)-1 {
-		messagesToSummarize = m.Messages[startIdx : len(m.Messages)-1] // Exclude the most recent user message
-
-		// Request summarization from AI
-		summarizedHistory, err := m.summarizeChatHistory(messagesToSummarize)
-		if err != nil {
-			logger.Error("Failed to summarize chat history: %v", err)
-			return
-		}
-
-		// Build new context with summarized history
-		var newHistory []ChatMessage
-
-		// Add system message if present
-		if hasSystemMessage {
-			newHistory = append(newHistory, systemMessage)
-		}
-
-		// Add assistant base message if present
-		if hasAssistantBaseMessage {
-			newHistory = append(newHistory, assistantBaseMessage)
-		}
-
-		// Add the summary as a system message
-		newHistory = append(newHistory, ChatMessage{
+	m.Messages = []ChatMessage{
+		{
 			Content:   summarizedHistory,
 			FromUser:  false,
 			Timestamp: time.Now(),
-		})
-
-		m.Messages = newHistory
-		logger.Debug("Context successfully reduced through summarization")
+		},
 	}
+	logger.Debug("Context successfully reduced through summarization")
 }
 
 // summarizeChatHistory asks the AI to summarize the chat history
