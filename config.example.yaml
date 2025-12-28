@@ -55,6 +55,12 @@ models:
     api_version: "2025-04-01-preview"
     deployment_name: "gpt-4o"
 
+  # Gemini API (direct access using Google's go-genai SDK)
+  gemini-flash:
+    provider: "gemini"
+    model: "gemini-2.5-flash"
+    api_key: "${GOOGLE_API_KEY}"
+
 # Confirm before AI executes a command
 exec_confirm: true
 
