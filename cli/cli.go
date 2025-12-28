@@ -18,6 +18,7 @@ var (
 	taskFileFlag string
 	kbFlag       string
 	modelFlag    string
+	yoloFlag     bool
 )
 
 var rootCmd = &cobra.Command{
@@ -71,6 +72,11 @@ var rootCmd = &cobra.Command{
 			logger.Info("Set model from CLI flag: %s", modelFlag)
 		}
 
+		if yoloFlag {
+			mgr.SessionOverrides["yolo"] = true
+			logger.Info("Yolo mode enabled: skipping all confirmation prompts")
+		}
+
 		if initMessage != "" {
 			logger.Info("Starting with initial subcommand: %s", initMessage)
 		}
@@ -86,6 +92,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&taskFileFlag, "file", "f", "", "Read request from specified file")
 	rootCmd.Flags().StringVar(&kbFlag, "kb", "", "Comma-separated list of knowledge bases to load (e.g., --kb docker,git)")
 	rootCmd.Flags().StringVar(&modelFlag, "model", "", "AI model configuration to use (e.g., --model gpt4)")
+	rootCmd.Flags().BoolVar(&yoloFlag, "yolo", false, "Skip all confirmation prompts and execute commands directly")
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
 }
 
