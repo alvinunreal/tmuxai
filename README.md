@@ -457,12 +457,19 @@ models:
     api_base: "https://your-resource.openai.azure.com/"
     api_version: "2025-04-01-preview"
     deployment_name: "gpt-4o"
+
+  # Gemini API (direct access)
+  gemini-flash:
+    provider: "gemini"
+    model: "gemini-2.5-flash"
+    api_key: "${GOOGLE_API_KEY}"
 ```
 
 **Supported Providers:**
 - `openai` - OpenAI Responses API (GPT-4, GPT-5, etc.)
 - `openrouter` - Universal Chat Completion API, defaults to openrouter base url
 - `azure` - Azure Chat Completions API
+- `gemini` - Google Gemini API (direct access via go-genai SDK)
 
 **Interactive Commands:**
 ```bash

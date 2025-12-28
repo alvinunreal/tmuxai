@@ -244,3 +244,99 @@ func TestSessionOverrides(t *testing.T) {
 	manager.Config.OpenAI.APIKey = originalOpenAIKey
 	manager.Config.AzureOpenAI.APIKey = originalAzureKey
 }
+
+func TestDetermineAPITypeGemini(t *testing.T) {
+	cfg := &config.Config{
+		DefaultModel: "gemini-flash",
+		Models: map[string]config.ModelConfig{
+			"gemini-flash": {
+				Provider: "gemini",
+				Model:    "gemini-2.5-flash",
+				APIKey:   "test-gemini-key",
+			},
+		},
+	}
+
+	manager := &Manager{
+		Config:           cfg,
+		SessionOverrides: make(map[string]interface{}),
+		LoadedKBs:        make(map[string]string),
+	}
+
+	client := NewAiClient(cfg)
+	client.SetConfigManager(manager)
+
+	apiType := client.determineAPIType("gemini-2.5-flash")
+	if apiType != "gemini" {
+		t.Errorf("expected 'gemini', got %s", apiType)
+	}
+}
+
+func TestGeminiProviderSelection(t *testing.T) {
+	tests := []struct {
+		name            string
+		config          *config.Config
+		expectedAPIType string
+	}{
+		{
+			name: "gemini provider selected",
+			config: &config.Config{
+				DefaultModel: "gemini-flash",
+				Models: map[string]config.ModelConfig{
+					"gemini-flash": {
+						Provider: "gemini",
+						Model:    "gemini-2.5-flash",
+						APIKey:   "test-key",
+					},
+				},
+			},
+			expectedAPIType: "gemini",
+		},
+		{
+			name: "openrouter still works",
+			config: &config.Config{
+				DefaultModel: "claude",
+				Models: map[string]config.ModelConfig{
+					"claude": {
+						Provider: "openrouter",
+						Model:    "claude-3.5-sonnet",
+						APIKey:   "test-key",
+					},
+				},
+			},
+			expectedAPIType: "openrouter",
+		},
+		{
+			name: "openai still works",
+			config: &config.Config{
+				DefaultModel: "gpt4",
+				Models: map[string]config.ModelConfig{
+					"gpt4": {
+						Provider: "openai",
+						Model:    "gpt-4",
+						APIKey:   "test-key",
+					},
+				},
+			},
+			expectedAPIType: "responses",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := &Manager{
+				Config:           tt.config,
+				SessionOverrides: make(map[string]interface{}),
+				LoadedKBs:        make(map[string]string),
+			}
+
+			client := NewAiClient(tt.config)
+			client.SetConfigManager(manager)
+
+			apiType := client.determineAPIType("any-model")
+			if apiType != tt.expectedAPIType {
+				t.Errorf("expected '%s', got '%s'", tt.expectedAPIType, apiType)
+			}
+		})
+	}
+}
