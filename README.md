@@ -31,7 +31,6 @@
   - [Human-Inspired Interface](#human-inspired-interface)
 - [Installation](#installation)
   - [Quick Install](#quick-install)
-  - [Homebrew](#homebrew)
   - [Manual Download](#manual-download)
   - [Install from Main](#install-from-main)
 - [Post-Installation Setup](#post-installation-setup)
