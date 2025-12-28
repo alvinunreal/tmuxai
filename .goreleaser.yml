@@ -29,9 +29,9 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/alvinunreal/tmuxai/internal.Version=v{{.Version}}
-      - -s -w -X github.com/alvinunreal/tmuxai/internal.Commit={{.Commit}}
-      - -s -w -X github.com/alvinunreal/tmuxai/internal.Date={{.Date}}
+      - -s -w -X github.com/BoringDystopiaDevelopment/tmuxai/internal.Version=v{{.Version}}
+      - -s -w -X github.com/BoringDystopiaDevelopment/tmuxai/internal.Commit={{.Commit}}
+      - -s -w -X github.com/BoringDystopiaDevelopment/tmuxai/internal.Date={{.Date}}
 
   - id: osx
     goos:
@@ -42,9 +42,9 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/alvinunreal/tmuxai/internal.Version=v{{.Version}}
-      - -s -w -X github.com/alvinunreal/tmuxai/internal.Commit={{.Commit}}
-      - -s -w -X github.com/alvinunreal/tmuxai/internal.Date={{.Date}}
+      - -s -w -X github.com/BoringDystopiaDevelopment/tmuxai/internal.Version=v{{.Version}}
+      - -s -w -X github.com/BoringDystopiaDevelopment/tmuxai/internal.Commit={{.Commit}}
+      - -s -w -X github.com/BoringDystopiaDevelopment/tmuxai/internal.Date={{.Date}}
 
 archives:
   - name_template: >-
@@ -70,10 +70,10 @@ changelog:
 brews:
   - name: tmuxai
     repository:
-      owner: alvinunreal
+      owner: BoringDystopiaDevelopment
       name: homebrew-tmuxai
     commit_author:
-      name: alvinunreal
+      name: BoringDystopiaDevelopment
       email: alvin@tmuxai.dev
     directory: Formula
     dependencies:
@@ -85,7 +85,7 @@ brews:
 
 nfpms:
   - file_name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
-    maintainer: alvinunreal
+    maintainer: BoringDystopiaDevelopment
     homepage: https://tmuxai.dev
     description: AI-Powered, Non-Intrusive Terminal Assistant
     license: "Apache-2.0"

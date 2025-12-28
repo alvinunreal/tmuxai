@@ -15,7 +15,7 @@ import (
 	"github.com/alecthomas/chroma/formatters"
 	"github.com/alecthomas/chroma/lexers"
 	"github.com/alecthomas/chroma/styles"
-	"github.com/alvinunreal/tmuxai/logger"
+	"github.com/BoringDystopiaDevelopment/tmuxai/logger"
 )
 
 func GetProcessArgs(pid int) string {

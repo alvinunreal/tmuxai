@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/alvinunreal/tmuxai/config"
+	"github.com/BoringDystopiaDevelopment/tmuxai/config"
 )
 
 // AllowedConfigKeys defines the list of configuration keys that users are allowed to modify

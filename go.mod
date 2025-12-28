@@ -1,4 +1,4 @@
-module github.com/alvinunreal/tmuxai
+module github.com/BoringDystopiaDevelopment/tmuxai
 
 go 1.24.0
 

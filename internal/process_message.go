@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/alvinunreal/tmuxai/logger"
-	"github.com/alvinunreal/tmuxai/system"
+	"github.com/BoringDystopiaDevelopment/tmuxai/logger"
+	"github.com/BoringDystopiaDevelopment/tmuxai/system"
 	"github.com/briandowns/spinner"
 )
 

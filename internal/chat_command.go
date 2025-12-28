@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alvinunreal/tmuxai/config"
-	"github.com/alvinunreal/tmuxai/logger"
-	"github.com/alvinunreal/tmuxai/system"
+	"github.com/BoringDystopiaDevelopment/tmuxai/config"
+	"github.com/BoringDystopiaDevelopment/tmuxai/logger"
+	"github.com/BoringDystopiaDevelopment/tmuxai/system"
 )
 
 const helpMessage = `Available commands:

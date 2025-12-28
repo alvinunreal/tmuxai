@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alvinunreal/tmuxai/logger"
+	"github.com/BoringDystopiaDevelopment/tmuxai/logger"
 )
 
 // TmuxCreateNewPane creates a new horizontal split pane in the specified window and returns its ID

@@ -1,6 +1,6 @@
 <br/>
 <div align="center">
-  <a href="https://github.com/alvinunreal/tmuxai">
+  <a href="https://github.com/BoringDystopiaDevelopment/tmuxai">
     <img src="https://tmuxai.dev/gh.svg?v=2" alt="TmuxAI Logo" width="100%">
   </a>
   <h3 align="center">TmuxAI</h3>
@@ -8,15 +8,15 @@
     Your intelligent pair programmer directly within your tmux sessions.
     <br/>
     <br/>
-    <a href="https://github.com/alvinunreal/tmuxai/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/alvinunreal/tmuxai?style=flat-square"></a>
-    <a href="https://github.com/alvinunreal/tmuxai/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/alvinunreal/tmuxai?style=flat-square"></a>
-    <a href="https://github.com/alvinunreal/tmuxai/issues"><img alt="Issues" src="https://img.shields.io/github/issues/alvinunreal/tmuxai?style=flat-square"></a>
+    <a href="https://github.com/BoringDystopiaDevelopment/tmuxai/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/BoringDystopiaDevelopment/tmuxai?style=flat-square"></a>
+    <a href="https://github.com/BoringDystopiaDevelopment/tmuxai/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/BoringDystopiaDevelopment/tmuxai?style=flat-square"></a>
+    <a href="https://github.com/BoringDystopiaDevelopment/tmuxai/issues"><img alt="Issues" src="https://img.shields.io/github/issues/BoringDystopiaDevelopment/tmuxai?style=flat-square"></a>
     <br/>
     <br/>
     <br/>
     <a href="https://tmuxai.dev/screenshots" target="_blank">Screenshots</a> |
-    <a href="https://github.com/alvinunreal/tmuxai/issues/new?labels=bug&template=bug_report.md" target="_blank">Report Bug</a> |
-    <a href="https://github.com/alvinunreal/tmuxai/issues/new?labels=enhancement&template=feature_request.md" target="_blank">Request Feature</a>
+    <a href="https://github.com/BoringDystopiaDevelopment/tmuxai/issues/new?labels=bug&template=bug_report.md" target="_blank">Report Bug</a> |
+    <a href="https://github.com/BoringDystopiaDevelopment/tmuxai/issues/new?labels=enhancement&template=feature_request.md" target="_blank">Request Feature</a>
     <br/>
     <br/>
     <a href="https://tmuxai.dev/tmux-cheat-sheet/" target="_blank">Tmux Cheat Sheet</a> |
@@ -95,7 +95,7 @@ This installs TmuxAI to `/usr/local/bin/tmuxai` by default. If you need to insta
 
 ### Manual Download
 
-You can also download pre-built binaries from the [GitHub releases page](https://github.com/alvinunreal/tmuxai/releases).
+You can also download pre-built binaries from the [GitHub releases page](https://github.com/BoringDystopiaDevelopment/tmuxai/releases).
 
 After downloading, make the binary executable and move it to a directory in your PATH:
 
@@ -109,7 +109,7 @@ sudo mv ./tmuxai /usr/local/bin/
 To install the latest development version directly from the main branch:
 
 ```bash
-go install github.com/alvinunreal/tmuxai@main
+go install github.com/BoringDystopiaDevelopment/tmuxai@main
 ```
 
 **Note:** The main branch contains the latest features and fixes but may be less stable than official releases.
@@ -583,7 +583,7 @@ You can start `tmuxai` with an initial message, task file, model configuration, 
 The configuration can be managed through a YAML file, environment variables, or via runtime commands.
 
 TmuxAI looks for its configuration file at `~/.config/tmuxai/config.yaml`.
-For a sample configuration file, see [config.example.yaml](https://github.com/alvinunreal/tmuxai/blob/main/config.example.yaml).
+For a sample configuration file, see [config.example.yaml](https://github.com/BoringDystopiaDevelopment/tmuxai/blob/main/config.example.yaml).
 
 ### Environment Variables
 
@@ -638,4 +638,4 @@ Don't forget to give the project a star!
 
 ## License
 
-Distributed under the Apache License. See [Apache License](https://github.com/alvinunreal/tmuxai/blob/main/LICENSE) for more information.
+Distributed under the Apache License. See [Apache License](https://github.com/BoringDystopiaDevelopment/tmuxai/blob/main/LICENSE) for more information.
