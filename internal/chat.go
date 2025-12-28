@@ -141,10 +141,16 @@ func startEditor(source string) (string, error) {
 	if err != nil {
 		return source, err
 	}
-	io.WriteString(fd, source)
-	fd.Close()
 	fname := fd.Name()
-	defer os.Remove(fname)
+	defer func() { _ = os.Remove(fname) }()
+
+	if _, err := io.WriteString(fd, source); err != nil {
+		_ = fd.Close()
+		return source, err
+	}
+	if err := fd.Close(); err != nil {
+		return source, err
+	}
 
 	cmd := exec.Command(textEditor, fname)
 	cmd.Stdin = os.Stdin
