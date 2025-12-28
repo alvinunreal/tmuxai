@@ -544,6 +544,14 @@ You can start `tmuxai` with an initial message, task file, model configuration, 
   tmuxai --model gpt4 --kb docker-workflows "Debug this Docker issue"
   ```
 
+- **Yolo Mode (Skip Confirmations):**
+  ```sh
+  # Skip all confirmation prompts - commands execute immediately
+  tmuxai --yolo "Install and configure nginx"
+  ```
+  
+  > **Warning**: Use `--yolo` with caution. This mode skips all safety confirmations and executes commands directly. Only use when you trust the AI's command suggestions completely.
+
 ## Configuration
 
 The configuration can be managed through a YAML file, environment variables, or via runtime commands.

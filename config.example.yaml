@@ -1,6 +1,9 @@
 # Set to true to log full AI messages sent and received. Dest: ~/.config/tmuxai/debug/
 debug: false
 
+# Skip all confirmation prompts (use with caution!)
+yolo: false
+
 # Maximum context size in tokens, reaching 80% triggers squashing
 max_context_size: 100000
 
