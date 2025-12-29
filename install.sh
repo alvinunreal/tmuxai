@@ -1,20 +1,20 @@
 #!/bin/bash
 
 # Usage:
-#   curl -sfL https://raw.githubusercontent.com/BoringDystopiaDevelopment/tmuxai/main/install.sh | bash
+#   curl -sfL https://raw.githubusercontent.com/alvinunreal/tmuxai/main/install.sh | bash
 #   curl -sfL https://.../install.sh | bash -s -- -b /usr/local/bin # Install to custom bin dir
 #   curl -sfL https://.../install.sh | bash -s v1.0.0               # Install specific version (Tag name)
 #
 set -euo pipefail
 
 
-GH_REPO="BoringDystopiaDevelopment/tmuxai"
+GH_REPO="alvinunreal/tmuxai"
 PROJECT_NAME="tmuxai"
 DEFAULT_INSTALL_DIR="/usr/local/bin"
 
 CONFIG_DIR="$HOME/.config/tmuxai"
 CONFIG_FILE="$CONFIG_DIR/config.example.yaml"
-EXAMPLE_CONFIG_URL="https://raw.githubusercontent.com/BoringDystopiaDevelopment/tmuxai/main/config.example.yaml"
+EXAMPLE_CONFIG_URL="https://raw.githubusercontent.com/alvinunreal/tmuxai/main/config.example.yaml"
 
 tmp_dir=""
 

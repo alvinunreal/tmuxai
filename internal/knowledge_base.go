@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/BoringDystopiaDevelopment/tmuxai/config"
-	"github.com/BoringDystopiaDevelopment/tmuxai/logger"
-	"github.com/BoringDystopiaDevelopment/tmuxai/system"
+	"github.com/alvinunreal/tmuxai/config"
+	"github.com/alvinunreal/tmuxai/logger"
+	"github.com/alvinunreal/tmuxai/system"
 )
 
 // loadKB loads a knowledge base file by name

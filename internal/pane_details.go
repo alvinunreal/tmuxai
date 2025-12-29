@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/BoringDystopiaDevelopment/tmuxai/config"
-	"github.com/BoringDystopiaDevelopment/tmuxai/system"
+	"github.com/alvinunreal/tmuxai/config"
+	"github.com/alvinunreal/tmuxai/system"
 )
 
 func (m *Manager) GetTmuxPanes() ([]system.TmuxPaneDetails, error) {

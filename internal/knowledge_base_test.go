@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/BoringDystopiaDevelopment/tmuxai/config"
+	"github.com/alvinunreal/tmuxai/config"
 )
 
 

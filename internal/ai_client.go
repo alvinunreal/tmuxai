@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BoringDystopiaDevelopment/tmuxai/config"
-	"github.com/BoringDystopiaDevelopment/tmuxai/logger"
+	"github.com/alvinunreal/tmuxai/config"
+	"github.com/alvinunreal/tmuxai/logger"
 	"google.golang.org/genai"
 )
 
@@ -296,7 +296,7 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(apiKeyHeader, apiKey)
 
-	req.Header.Set("HTTP-Referer", "https://github.com/BoringDystopiaDevelopment/tmuxai")
+	req.Header.Set("HTTP-Referer", "https://github.com/alvinunreal/tmuxai")
 	req.Header.Set("X-Title", "TmuxAI")
 
 	// Log the request details for debugging before sending
@@ -421,7 +421,7 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	req.Header.Set("HTTP-Referer", "https://github.com/BoringDystopiaDevelopment/tmuxai")
+	req.Header.Set("HTTP-Referer", "https://github.com/alvinunreal/tmuxai")
 	req.Header.Set("X-Title", "TmuxAI")
 
 	// Log the request details for debugging before sending
