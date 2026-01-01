@@ -7,3 +7,6 @@ debug
 CODEREF.md
 Makefile
 repomix-output.xml
+
+# bv (beads viewer) local config and caches
+.bv/
