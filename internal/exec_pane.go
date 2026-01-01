@@ -43,8 +43,11 @@ func (m *Manager) PrepareExecPaneWithShell(shell string) {
 	var ps1Command string
 	switch shell {
 	case "zsh":
-		// Only set PROMPT for zsh; avoid unsetting precmd hooks to respect user's zsh configuration
-		ps1Command = `export PROMPT='%n@%m:%~[%T][%?]» '`
+		// Rich zsh prompt with colors and optional git branch
+		// - Green user@host, blue directory, magenta git branch
+		// - Git branch gracefully falls back to empty if not in a repo
+		// - Preserves [status]» suffix for parsing compatibility
+		ps1Command = `setopt PROMPT_SUBST; export PROMPT='%F{green}%n@%m%f:%F{blue}%~%f%F{magenta}$(b=$(git symbolic-ref --short HEAD 2>/dev/null) && echo "($b)")%f[%T][%?]» '`
 	case "bash":
 		// Unset PROMPT_COMMAND for bash (can interfere with prompts), then set PS1
 		ps1Command = `unset PROMPT_COMMAND; export PS1='\u@\h:\w[\A][$?]» '`

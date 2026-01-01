@@ -109,6 +109,62 @@ user@localhost:~[00:00][0]» `
 	assert.Equal(t, 0, manager.ExecHistory[1].Code)
 }
 
+// Test parsing with rich zsh prompt (colors and git branch)
+func TestParseExecPaneCommandHistory_RichZshPrompt(t *testing.T) {
+	manager := &Manager{
+		ExecHistory:      []CommandExecHistory{},
+		Config:           &config.Config{MaxCaptureLines: 1000},
+		SessionOverrides: make(map[string]interface{}),
+	}
+
+	manager.ExecPane = &system.TmuxPaneDetails{}
+
+	// Rich prompt with git branch (colors are stripped by tmux capture)
+	testContent := `user@hostname:~/project(main)[14:30][0]» git status
+On branch main
+Your branch is up to date with 'origin/main'.
+user@hostname:~/project(main)[14:31][0]» echo "hello"
+hello
+user@hostname:~/project(main)[14:31][0]» `
+
+	manager.parseExecPaneCommandHistoryWithContent(testContent)
+
+	assert.Len(t, manager.ExecHistory, 2, "Should parse commands from rich zsh prompt with git branch")
+	assert.Equal(t, "git status", manager.ExecHistory[0].Command)
+	assert.Equal(t, 0, manager.ExecHistory[0].Code)
+	assert.Contains(t, manager.ExecHistory[0].Output, "On branch main")
+	assert.Equal(t, "echo \"hello\"", manager.ExecHistory[1].Command)
+	assert.Equal(t, 0, manager.ExecHistory[1].Code)
+	assert.Equal(t, "hello", manager.ExecHistory[1].Output)
+
+	// Test without git branch (outside git repo)
+	manager.ExecHistory = []CommandExecHistory{} // Reset
+	testContent2 := `user@hostname:/tmp[14:32][0]» ls -la
+total 0
+user@hostname:/tmp[14:32][0]» false
+user@hostname:/tmp[14:32][1]» `
+
+	manager.parseExecPaneCommandHistoryWithContent(testContent2)
+
+	assert.Len(t, manager.ExecHistory, 2, "Should parse commands from prompt without git branch")
+	assert.Equal(t, "ls -la", manager.ExecHistory[0].Command)
+	assert.Equal(t, 0, manager.ExecHistory[0].Code)
+	assert.Equal(t, "false", manager.ExecHistory[1].Command)
+	assert.Equal(t, 1, manager.ExecHistory[1].Code, "Should capture non-zero exit code")
+
+	// Test with feature branch containing slashes
+	manager.ExecHistory = []CommandExecHistory{} // Reset
+	testContent3 := `user@hostname:~/project(feature/rich-ps1)[14:33][127]» npm test
+npm test passed
+user@hostname:~/project(feature/rich-ps1)[14:34][0]» `
+
+	manager.parseExecPaneCommandHistoryWithContent(testContent3)
+
+	assert.Len(t, manager.ExecHistory, 1, "Should parse commands with feature branch containing slashes")
+	assert.Equal(t, "npm test", manager.ExecHistory[0].Command)
+	assert.Equal(t, 0, manager.ExecHistory[0].Code)
+}
+
 // Test PrepareExecPaneWithShell for different shells
 func TestPrepareExecPaneWithShell(t *testing.T) {
 	manager := &Manager{
@@ -146,11 +202,16 @@ func TestPrepareExecPaneWithShell(t *testing.T) {
 	assert.Contains(t, commandsSent[0], "PS1=", "Should set PS1 for bash")
 	assert.Equal(t, "C-l", commandsSent[1], "Should clear screen")
 
-	// Reset and test zsh shell preparation (only set PROMPT, do not unset precmd hooks)
+	// Reset and test zsh shell preparation (rich prompt with colors and git branch)
 	commandsSent = []string{}
 	manager.PrepareExecPaneWithShell("zsh")
 	assert.Len(t, commandsSent, 2, "Should send 2 commands for zsh")
+	assert.Contains(t, commandsSent[0], "setopt PROMPT_SUBST", "Should enable prompt substitution for zsh")
 	assert.Contains(t, commandsSent[0], "PROMPT=", "Should set PROMPT for zsh")
+	assert.Contains(t, commandsSent[0], "%F{green}", "Should have green color for user@host")
+	assert.Contains(t, commandsSent[0], "%F{blue}", "Should have blue color for directory")
+	assert.Contains(t, commandsSent[0], "git symbolic-ref", "Should include git branch detection")
+	assert.Contains(t, commandsSent[0], "[%?]»", "Should preserve status code suffix for parsing")
 	assert.Equal(t, "C-l", commandsSent[1], "Should clear screen")
 
 	// Reset and test fish shell preparation (only redefine fish_prompt, do not remove functions)

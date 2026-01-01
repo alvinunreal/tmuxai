@@ -61,12 +61,15 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 	assert.Contains(t, commandsSent[0], "PS1=", "Should send bash PS1 command")
 	assert.Equal(t, "C-l", commandsSent[1], "Should send clear screen command")
 
-	// Test case 2: /prepare with zsh on subshell
+	// Test case 2: /prepare with zsh on subshell (rich prompt with colors and git branch)
 	commandsSent = []string{} // Reset
 	manager.ProcessSubCommand("/prepare zsh")
 
 	assert.Len(t, commandsSent, 2, "Should send PROMPT command and clear command for zsh")
+	assert.Contains(t, commandsSent[0], "setopt PROMPT_SUBST", "Should enable prompt substitution")
 	assert.Contains(t, commandsSent[0], "PROMPT=", "Should send zsh PROMPT command")
+	assert.Contains(t, commandsSent[0], "%F{green}", "Should have green color")
+	assert.Contains(t, commandsSent[0], "git symbolic-ref", "Should include git branch detection")
 	assert.Equal(t, "C-l", commandsSent[1], "Should send clear screen command")
 
 	// Test case 3: /prepare with fish on subshell
@@ -135,12 +138,14 @@ func TestProcessSubCommand_PrepareNormalShell(t *testing.T) {
 
 	assert.Len(t, commandsSent, 0, "Should not send commands when CurrentCommand is not a supported shell")
 
-	// Test case 2: /prepare with explicit shell on normal shell (should work)
+	// Test case 2: /prepare with explicit shell on normal shell (should work with rich prompt)
 	commandsSent = []string{} // Reset
 	manager.ProcessSubCommand("/prepare zsh")
 
 	assert.Len(t, commandsSent, 2, "Should send commands when explicitly specifying shell on normal pane")
+	assert.Contains(t, commandsSent[0], "setopt PROMPT_SUBST", "Should enable prompt substitution")
 	assert.Contains(t, commandsSent[0], "PROMPT=", "Should send zsh PROMPT command")
+	assert.Contains(t, commandsSent[0], "%F{green}", "Should have colors in prompt")
 	assert.Equal(t, "C-l", commandsSent[1], "Should send clear screen command")
 }
 

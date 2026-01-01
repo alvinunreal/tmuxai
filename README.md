@@ -219,6 +219,27 @@ By default, TmuxAI will attempt to detect the shell running in the execution pan
 TmuxAI » /prepare bash
 ```
 
+**Prepared Zsh Example:**
+
+For zsh, the prompt includes colorized elements and optional git branch information:
+
+```shell
+$ /prepare zsh
+user@hostname:~/project(main)[14:30:00][0]» git status
+On branch main
+user@hostname:~/project(main)[14:30:05][0]» 
+```
+
+Prompt components:
+- **Green** `user@hostname` - Username and machine
+- **Blue** `~/project` - Current directory (with ~ abbreviation)
+- **Magenta** `(main)` - Git branch (only shown in git repositories)
+- `[14:30:00]` - Current time (24-hour format)
+- `[0]` - Exit code of last command (critical for TmuxAI's parsing)
+- `» ` - Prompt suffix
+
+The `[status]»` suffix remains stable for TmuxAI's command parsing, while the richer prefix provides better context at a glance.
+
 **Prepared Fish Example:**
 
 ```shell
