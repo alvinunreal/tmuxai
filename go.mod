@@ -15,7 +15,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sys v0.39.0
 	golang.org/x/term v0.38.0
-	google.golang.org/genai v1.40.0
+	google.golang.org/genai v1.41.0
 )
 
 require (
