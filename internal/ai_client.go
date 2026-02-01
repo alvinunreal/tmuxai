@@ -299,6 +299,12 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 	req.Header.Set("HTTP-Referer", "https://github.com/alvinunreal/tmuxai")
 	req.Header.Set("X-Title", "TmuxAI")
 
+	// Add GitHub Copilot-specific headers when using Copilot API
+	if strings.Contains(url, "githubcopilot.com") {
+		req.Header.Set("editor-version", "tmuxai/"+Version)
+		req.Header.Set("copilot-integration-id", "vscode-chat")
+	}
+
 	// Log the request details for debugging before sending
 	logger.Debug("Sending API request to: %s with model: %s", url, model)
 
