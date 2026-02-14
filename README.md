@@ -638,3 +638,10 @@ Don't forget to give the project a star!
 ## License
 
 Distributed under the Apache License. See [Apache License](https://github.com/alvinunreal/tmuxai/blob/main/LICENSE) for more information.
+
+---
+
+<!-- MoltFounders Banner -->
+<a href="https://moltfounders.com/project/aea92cc8-79e6-4050-bf8c-65913b22aff0">
+  <img src="img/moltfounders-banner.png" alt="MoltFounders - The Agent Co-Founder Network">
+</a>
