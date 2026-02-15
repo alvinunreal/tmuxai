@@ -5,13 +5,16 @@
   </a>
   <h3 align="center">TmuxAI</h3>
   <p align="center">
+    <a href="https://moltfounders.com/project/aea92cc8-79e6-4050-bf8c-65913b22aff0"><img src="https://moltfounders.com/badges/6.png" alt="MoltFounders" height="40"></a>
+  </p>
+  <p align="center">
     Your intelligent pair programmer directly within your tmux sessions.
     <br/>
     <br/>
     <a href="https://github.com/alvinunreal/tmuxai/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/alvinunreal/tmuxai?style=flat-square"></a>
     <a href="https://github.com/alvinunreal/tmuxai/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/alvinunreal/tmuxai?style=flat-square"></a>
     <a href="https://github.com/alvinunreal/tmuxai/issues"><img alt="Issues" src="https://img.shields.io/github/issues/alvinunreal/tmuxai?style=flat-square"></a>
-    <a href="https://moltfounders.com/project/aea92cc8-79e6-4050-bf8c-65913b22aff0"><img src="https://moltfounders.com/badges/6.png" alt="MoltFounders"></a>
+    <a href="https://moltfounders.com/project/aea92cc8-79e6-4050-bf8c-65913b22aff0"><img src="https://moltfounders.com/badges/6.png" alt="MoltFounders" height="20"></a>
     <br/>
     <br/>
     <br/>
