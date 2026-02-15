@@ -5,6 +5,9 @@
   </a>
   <h3 align="center">TmuxAI</h3>
   <p align="center">
+    <a href="https://moltfounders.com/project/aea92cc8-79e6-4050-bf8c-65913b22aff0"><img src="https://moltfounders.com/badges/6.png" alt="MoltFounders" height="40"></a>
+  </p>
+  <p align="center">
     Your intelligent pair programmer directly within your tmux sessions.
     <br/>
     <br/>
