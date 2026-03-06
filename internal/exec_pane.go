@@ -28,7 +28,7 @@ func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
 func (m *Manager) InitExecPane() {
 	availablePane := m.GetAvailablePane()
 	if availablePane.Id == "" {
-		_, _ = system.TmuxCreateNewPane(m.PaneId)
+		_, _ = system.TmuxCreateNewPane(m.PaneId, m.Config.Tmux.ExecSplitArgs)
 		availablePane = m.GetAvailablePane()
 	}
 	m.ExecPane = &availablePane

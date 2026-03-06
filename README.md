@@ -586,6 +586,23 @@ The configuration can be managed through a YAML file, environment variables, or 
 TmuxAI looks for its configuration file at `~/.config/tmuxai/config.yaml`.
 For a sample configuration file, see [config.example.yaml](https://github.com/alvinunreal/tmuxai/blob/main/config.example.yaml).
 
+### tmux pane split configuration
+
+You can customize how TmuxAI creates its exec pane by setting raw `tmux split-window` arguments:
+
+```yaml
+tmux:
+  exec_split_args: ["-d", "-h"]
+```
+
+These args are injected as:
+
+```bash
+tmux split-window <exec_split_args...> -t <target> -P -F "#{pane_id}"
+```
+
+If omitted (or empty), TmuxAI uses the legacy default: `-d -h`.
+
 ### Environment Variables
 
 All configuration options can also be set via environment variables, which take precedence over the config file. Use the prefix `TMUXAI_` followed by the uppercase configuration key:

@@ -22,6 +22,7 @@ type Config struct {
 	ExecConfirm           bool                   `mapstructure:"exec_confirm"`
 	WhitelistPatterns     []string               `mapstructure:"whitelist_patterns"`
 	BlacklistPatterns     []string               `mapstructure:"blacklist_patterns"`
+	Tmux                  TmuxConfig             `mapstructure:"tmux"`
 	OpenRouter            OpenRouterConfig       `mapstructure:"openrouter"`
 	OpenAI                OpenAIConfig           `mapstructure:"openai"`
 	AzureOpenAI           AzureOpenAIConfig      `mapstructure:"azure_openai"`
@@ -80,6 +81,12 @@ type KnowledgeBaseConfig struct {
 	Path     string   `mapstructure:"path"`
 }
 
+// TmuxConfig holds tmux-specific behavior settings
+// ExecSplitArgs are raw args passed to `tmux split-window` before target/format flags.
+type TmuxConfig struct {
+	ExecSplitArgs []string `mapstructure:"exec_split_args"`
+}
+
 // DefaultConfig returns a configuration with default values
 func DefaultConfig() *Config {
 	return &Config{
@@ -93,6 +100,9 @@ func DefaultConfig() *Config {
 		ExecConfirm:           true,
 		WhitelistPatterns:     []string{},
 		BlacklistPatterns:     []string{},
+		Tmux: TmuxConfig{
+			ExecSplitArgs: []string{"-d", "-h"},
+		},
 		OpenRouter: OpenRouterConfig{
 			BaseURL: "https://openrouter.ai/api/v1",
 			Model:   "google/gemini-2.5-flash-preview",

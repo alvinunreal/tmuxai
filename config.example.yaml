@@ -13,6 +13,16 @@ max_capture_lines: 200
 # Wait interval when exec pane is considered busy (used in observe and watch modes)
 wait_interval: 5
 
+# tmux pane split behavior for creating exec pane
+# Raw args passed to: tmux split-window <args...> -t <target> -P -F "#{pane_id}"
+# Default matches legacy behavior: detached horizontal split
+# Examples:
+#   ["-d", "-h"]      # horizontal split
+#   ["-d", "-v"]      # vertical split
+#   ["-d", "-v", "-p", "70"]  # vertical, 70%
+tmux:
+  exec_split_args: ["-d", "-h"]
+
 # If empty uses the first model alphabetically
 default_model: "fast"
 

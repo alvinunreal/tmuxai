@@ -11,9 +11,9 @@ import (
 	"github.com/alvinunreal/tmuxai/logger"
 )
 
-// TmuxCreateNewPane creates a new horizontal split pane in the specified window and returns its ID
-func TmuxCreateNewPane(target string) (string, error) {
-	cmd := exec.Command("tmux", "split-window", "-d", "-h", "-t", target, "-P", "-F", "#{pane_id}")
+// TmuxCreateNewPane creates a new split pane in the specified window and returns its ID
+func TmuxCreateNewPane(target string, splitArgs []string) (string, error) {
+	cmd := exec.Command("tmux", buildSplitWindowArgs(target, splitArgs)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -26,6 +26,17 @@ func TmuxCreateNewPane(target string) (string, error) {
 
 	paneId := strings.TrimSpace(stdout.String())
 	return paneId, nil
+}
+
+func buildSplitWindowArgs(target string, splitArgs []string) []string {
+	if len(splitArgs) == 0 {
+		splitArgs = []string{"-d", "-h"}
+	}
+
+	args := []string{"split-window"}
+	args = append(args, splitArgs...)
+	args = append(args, "-t", target, "-P", "-F", "#{pane_id}")
+	return args
 }
 
 // TmuxPanesDetails gets details for all panes in a target window
