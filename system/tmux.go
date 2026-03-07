@@ -30,6 +30,7 @@ func TmuxCreateNewPane(target string, splitArgs []string) (string, error) {
 
 func buildSplitWindowArgs(target string, splitArgs []string) []string {
 	if len(splitArgs) == 0 {
+		// Defensive fallback; DefaultConfig already sets ["-d", "-h"].
 		splitArgs = []string{"-d", "-h"}
 	}
 
