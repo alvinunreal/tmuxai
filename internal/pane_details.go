@@ -76,7 +76,7 @@ func (m *Manager) getTmuxPanesInXmlFn(config *config.Config) string {
 			currentTmuxWindow.WriteString("\n</pane_content>\n")
 		}
 
-		currentTmuxWindow.WriteString(fmt.Sprintf("</%s>\n\n", title))
+		fmt.Fprintf(&currentTmuxWindow, "</%s>\n\n", title)
 	}
 
 	currentTmuxWindow.WriteString("</current_tmux_window_state>\n")

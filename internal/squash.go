@@ -62,7 +62,7 @@ func (m *Manager) summarizeChatHistory(messages []ChatMessage) (string, error) {
 			role = "User"
 		}
 
-		chatLog.WriteString(fmt.Sprintf("[%s]: %s\n\n", role, msg.Content))
+		fmt.Fprintf(&chatLog, "[%s]: %s\n\n", role, msg.Content)
 	}
 
 	// Create a summarization prompt
