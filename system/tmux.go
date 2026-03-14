@@ -43,13 +43,15 @@ var reservedSplitWindowArgs = map[string]struct{}{
 	"-F": {},
 }
 
+// Flags that take a value argument in `tmux split-window`.
+// Used to skip the value when checking for reserved-flag conflicts.
+// -F is also reserved (handled by us), but listed here so its value is skipped.
+// Reference: tmux 3.6a split-window [-bdefhIPvZ] [-c dir] [-e env] [-F fmt] [-l size] [-t target]
 var splitWindowFlagsWithValues = map[string]struct{}{
 	"-c": {},
 	"-e": {},
+	"-F": {},
 	"-l": {},
-	"-p": {},
-	"-x": {},
-	"-y": {},
 }
 
 func buildSplitWindowArgs(target string, splitArgs []string) ([]string, error) {
