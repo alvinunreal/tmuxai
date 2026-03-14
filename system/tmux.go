@@ -43,11 +43,29 @@ var reservedSplitWindowArgs = map[string]struct{}{
 	"-F": {},
 }
 
+var splitWindowFlagsWithValues = map[string]struct{}{
+	"-c": {},
+	"-e": {},
+	"-l": {},
+	"-p": {},
+}
+
 func buildSplitWindowArgs(target string, splitArgs []string) ([]string, error) {
 	args := []string{"split-window"}
+	skipNext := false
 	for _, arg := range splitArgs {
-		if _, reserved := reservedSplitWindowArgs[arg]; reserved {
-			return nil, fmt.Errorf("exec_split_args cannot include reserved tmux flag %q", arg)
+		if skipNext {
+			args = append(args, arg)
+			skipNext = false
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			if _, reserved := reservedSplitWindowArgs[arg]; reserved {
+				return nil, fmt.Errorf("exec_split_args cannot include reserved tmux flag %q", arg)
+			}
+			if _, needsValue := splitWindowFlagsWithValues[arg]; needsValue {
+				skipNext = true
+			}
 		}
 		args = append(args, arg)
 	}

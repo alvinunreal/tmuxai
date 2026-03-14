@@ -47,3 +47,25 @@ func TestBuildSplitWindowArgs_RejectsReservedFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildSplitWindowArgs_AllowsReservedFlagStringsAsValues(t *testing.T) {
+	got, err := buildSplitWindowArgs("@1:2", []string{"-c", "-t"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{"split-window", "-c", "-t", "-t", "@1:2", "-P", "-F", "#{pane_id}"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected args\nwant: %#v\n got: %#v", want, got)
+	}
+}
+
+func TestBuildSplitWindowArgs_RejectsReservedFlagAfterValuePair(t *testing.T) {
+	_, err := buildSplitWindowArgs("@1:2", []string{"-c", "/tmp", "-t"})
+	if err == nil {
+		t.Fatal("expected error for reserved flag used after value pair")
+	}
+	if !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("expected reserved-flag error, got: %v", err)
+	}
+}
