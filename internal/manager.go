@@ -45,7 +45,7 @@ type Manager struct {
 	LoadedKBs        map[string]string      // Loaded knowledge bases (name -> content)
 
 	// Functions for mocking
-	confirmedToExec  func(command string, prompt string, edit bool) (bool, string)
+	confirmedToExec   func(command string, prompt string, edit bool) (bool, string)
 	getTmuxPanesInXml func(config *config.Config) string
 }
 
@@ -92,7 +92,9 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	manager.confirmedToExec = manager.confirmedToExecFn
 	manager.getTmuxPanesInXml = manager.getTmuxPanesInXmlFn
 
-	manager.InitExecPane()
+	if err := manager.InitExecPane(); err != nil {
+		return nil, err
+	}
 
 	// Auto-load knowledge bases from config
 	manager.autoLoadKBs()

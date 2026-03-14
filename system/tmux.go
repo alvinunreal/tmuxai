@@ -11,21 +11,48 @@ import (
 	"github.com/alvinunreal/tmuxai/logger"
 )
 
-// TmuxCreateNewPane creates a new horizontal split pane in the specified window and returns its ID
-func TmuxCreateNewPane(target string) (string, error) {
-	cmd := exec.Command("tmux", "split-window", "-d", "-h", "-t", target, "-P", "-F", "#{pane_id}")
+// TmuxCreateNewPane creates a new split pane in the specified window and returns its ID.
+func TmuxCreateNewPane(target string, splitArgs []string) (string, error) {
+	args, err := buildSplitWindowArgs(target, splitArgs)
+	if err != nil {
+		return "", err
+	}
+
+	cmd := exec.Command("tmux", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		logger.Error("Failed to create tmux pane: %v, stderr: %s", err, stderr.String())
 		return "", err
 	}
 
 	paneId := strings.TrimSpace(stdout.String())
+	if paneId == "" {
+		return "", fmt.Errorf("tmux split-window returned empty pane id")
+	}
+
 	return paneId, nil
+}
+
+var reservedSplitWindowArgs = map[string]struct{}{
+	"-t": {},
+	"-P": {},
+	"-F": {},
+}
+
+func buildSplitWindowArgs(target string, splitArgs []string) ([]string, error) {
+	args := []string{"split-window"}
+	for _, arg := range splitArgs {
+		if _, reserved := reservedSplitWindowArgs[arg]; reserved {
+			return nil, fmt.Errorf("exec_split_args cannot include reserved tmux flag %q", arg)
+		}
+		args = append(args, arg)
+	}
+	args = append(args, "-t", target, "-P", "-F", "#{pane_id}")
+	return args, nil
 }
 
 // TmuxPanesDetails gets details for all panes in a target window

@@ -25,13 +25,17 @@ func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
 	return system.TmuxPaneDetails{}
 }
 
-func (m *Manager) InitExecPane() {
+func (m *Manager) InitExecPane() error {
 	availablePane := m.GetAvailablePane()
 	if availablePane.Id == "" {
-		_, _ = system.TmuxCreateNewPane(m.PaneId)
+		_, err := system.TmuxCreateNewPane(m.PaneId, m.Config.Tmux.ExecSplitArgs)
+		if err != nil {
+			return fmt.Errorf("failed to create exec pane: %w", err)
+		}
 		availablePane = m.GetAvailablePane()
 	}
 	m.ExecPane = &availablePane
+	return nil
 }
 
 func (m *Manager) PrepareExecPaneWithShell(shell string) {

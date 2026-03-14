@@ -74,7 +74,10 @@ func (m *Manager) ProcessSubCommand(command string) {
 
 	case prefixMatch(commandPrefix, "/prepare"):
 		supportedShells := []string{"bash", "zsh", "fish"}
-		m.InitExecPane()
+		if err := m.InitExecPane(); err != nil {
+			m.Println(fmt.Sprintf("Error preparing exec pane: %v", err))
+			return
+		}
 
 		// Check if exec pane is a subshell
 		if m.ExecPane.IsSubShell {
