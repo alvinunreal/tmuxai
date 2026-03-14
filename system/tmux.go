@@ -50,7 +50,6 @@ var reservedSplitWindowArgs = map[string]struct{}{
 var splitWindowFlagsWithValues = map[string]struct{}{
 	"-c": {},
 	"-e": {},
-	"-F": {},
 	"-l": {},
 }
 
