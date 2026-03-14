@@ -36,9 +36,6 @@ func (m *Manager) InitExecPane() error {
 		if availablePane.Id == "" {
 			availablePane = system.TmuxPaneDetails{Id: paneID}
 		}
-		if availablePane.Id == "" {
-			return fmt.Errorf("exec pane was created but could not be found afterwards")
-		}
 	}
 	m.ExecPane = &availablePane
 	return nil

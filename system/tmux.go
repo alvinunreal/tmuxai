@@ -48,6 +48,8 @@ var splitWindowFlagsWithValues = map[string]struct{}{
 	"-e": {},
 	"-l": {},
 	"-p": {},
+	"-x": {},
+	"-y": {},
 }
 
 func buildSplitWindowArgs(target string, splitArgs []string) ([]string, error) {

@@ -69,3 +69,15 @@ func TestBuildSplitWindowArgs_RejectsReservedFlagAfterValuePair(t *testing.T) {
 		t.Fatalf("expected reserved-flag error, got: %v", err)
 	}
 }
+
+func TestBuildSplitWindowArgs_AllowsReservedFlagAsValueForNewerTmuxFlags(t *testing.T) {
+	got, err := buildSplitWindowArgs("@1:2", []string{"-x", "-t"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{"split-window", "-x", "-t", "-t", "@1:2", "-P", "-F", "#{pane_id}"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected args\nwant: %#v\n got: %#v", want, got)
+	}
+}
