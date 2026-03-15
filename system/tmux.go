@@ -87,9 +87,6 @@ func TmuxPaneById(paneId string) (TmuxPaneDetails, error) {
 			return p, nil
 		}
 	}
-	if len(panes) > 0 {
-		return panes[0], nil
-	}
 	return TmuxPaneDetails{}, fmt.Errorf("pane %s not found", paneId)
 }
 

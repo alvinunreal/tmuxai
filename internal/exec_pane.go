@@ -12,11 +12,15 @@ import (
 	"github.com/alvinunreal/tmuxai/system"
 )
 
-// GetAvailablePane finds an available pane or creates a new one if none are available
+// GetAvailablePane finds an available pane in the current window.
+// It always reads from the current window, ignoring ReadPaneIds,
+// because this is used to select an exec pane (which is independent of read filtering).
 func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
-	panes, _ := m.GetTmuxPanes()
+	currentPaneId, _ := system.TmuxCurrentPaneId()
+	windowTarget, _ := system.TmuxCurrentWindowTarget()
+	panes, _ := system.TmuxPanesDetails(windowTarget)
 	for _, pane := range panes {
-		if !pane.IsTmuxAiPane {
+		if pane.Id != currentPaneId {
 			logger.Info("Found available pane: %s", pane.Id)
 			return pane
 		}
