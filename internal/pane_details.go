@@ -16,13 +16,18 @@ func (m *Manager) GetTmuxPanes() ([]system.TmuxPaneDetails, error) {
 
 	if len(m.ReadPaneIds) > 0 {
 		// Read only the specified panes (may be in different windows)
+		var failedPaneIds []string
 		for _, paneId := range m.ReadPaneIds {
 			pane, err := system.TmuxPaneById(paneId)
 			if err != nil {
 				logger.Error("Failed to get details for read pane %s: %v", paneId, err)
+				failedPaneIds = append(failedPaneIds, paneId)
 				continue
 			}
 			currentPanes = append(currentPanes, pane)
+		}
+		if len(failedPaneIds) > 0 {
+			return nil, fmt.Errorf("failed to get details for read pane(s): %s", strings.Join(failedPaneIds, ", "))
 		}
 	} else {
 		// Default: read all panes in current window
