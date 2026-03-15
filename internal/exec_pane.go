@@ -26,6 +26,18 @@ func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
 }
 
 func (m *Manager) InitExecPane() error {
+	// If a specific exec pane target was provided via CLI, use it directly
+	if m.ExecPaneTarget != "" {
+		pane, err := system.TmuxPaneById(m.ExecPaneTarget)
+		if err != nil {
+			return fmt.Errorf("exec pane target %q not found: %w", m.ExecPaneTarget, err)
+		}
+		m.ExecPane = &pane
+		logger.Info("Using exec pane target: %s", m.ExecPane.Id)
+		return nil
+	}
+
+	// Default behavior: find an available pane in the current window or create a split
 	availablePane := m.GetAvailablePane()
 	if availablePane.Id == "" {
 		paneID, err := system.TmuxCreateNewPane(m.PaneId, m.Config.Tmux.ExecSplitArgs)

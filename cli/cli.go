@@ -14,11 +14,13 @@ import (
 )
 
 var (
-	initMessage  string
-	taskFileFlag string
-	kbFlag       string
-	modelFlag    string
-	yoloFlag     bool
+	initMessage   string
+	taskFileFlag  string
+	kbFlag        string
+	modelFlag     string
+	yoloFlag      bool
+	execPaneFlag  string
+	readPanesFlag string
 )
 
 var rootCmd = &cobra.Command{
@@ -60,6 +62,29 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Set exec pane target from CLI flag
+		if execPaneFlag != "" {
+			mgr.ExecPaneTarget = execPaneFlag
+			logger.Info("Using exec pane target: %s", execPaneFlag)
+		}
+
+		// Set read panes from CLI flag
+		if readPanesFlag != "" {
+			for _, id := range strings.Split(readPanesFlag, ",") {
+				id = strings.TrimSpace(id)
+				if id != "" {
+					mgr.ReadPaneIds = append(mgr.ReadPaneIds, id)
+				}
+			}
+			logger.Info("Using read panes: %v", mgr.ReadPaneIds)
+		}
+
+		// Init exec pane after setting targets
+		if err := mgr.InitExecPane(); err != nil {
+			logger.Error("InitExecPane failed: %v", err)
+			os.Exit(1)
+		}
+
 		// Load knowledge bases from CLI flag
 		if kbFlag != "" {
 			kbNames := strings.Split(kbFlag, ",")
@@ -93,6 +118,8 @@ func init() {
 	rootCmd.Flags().StringVar(&kbFlag, "kb", "", "Comma-separated list of knowledge bases to load (e.g., --kb docker,git)")
 	rootCmd.Flags().StringVar(&modelFlag, "model", "", "AI model configuration to use (e.g., --model gpt4)")
 	rootCmd.Flags().BoolVar(&yoloFlag, "yolo", false, "Skip all confirmation prompts and execute commands directly")
+	rootCmd.Flags().StringVar(&execPaneFlag, "exec-pane", "", "Use an existing pane as exec target (e.g., %12) instead of creating a split")
+	rootCmd.Flags().StringVar(&readPanesFlag, "read-panes", "", "Comma-separated list of pane IDs to read (e.g., %12,%15). Defaults to all panes in current window.")
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
 }
 

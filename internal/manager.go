@@ -37,6 +37,8 @@ type Manager struct {
 	Status           string // running, waiting, done
 	PaneId           string
 	ExecPane         *system.TmuxPaneDetails
+	ExecPaneTarget   string   // CLI: use this pane ID as exec target instead of creating a split
+	ReadPaneIds      []string // CLI: only read these pane IDs; empty = all panes in current window
 	Messages         []ChatMessage
 	ExecHistory      []CommandExecHistory
 	WatchMode        bool
@@ -91,10 +93,6 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 
 	manager.confirmedToExec = manager.confirmedToExecFn
 	manager.getTmuxPanesInXml = manager.getTmuxPanesInXmlFn
-
-	if err := manager.InitExecPane(); err != nil {
-		return nil, err
-	}
 
 	// Auto-load knowledge bases from config
 	manager.autoLoadKBs()

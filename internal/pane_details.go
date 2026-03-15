@@ -5,18 +5,35 @@ import (
 	"strings"
 
 	"github.com/alvinunreal/tmuxai/config"
+	"github.com/alvinunreal/tmuxai/logger"
 	"github.com/alvinunreal/tmuxai/system"
 )
 
 func (m *Manager) GetTmuxPanes() ([]system.TmuxPaneDetails, error) {
 	currentPaneId, _ := system.TmuxCurrentPaneId()
-	windowTarget, _ := system.TmuxCurrentWindowTarget()
-	currentPanes, _ := system.TmuxPanesDetails(windowTarget)
+
+	var currentPanes []system.TmuxPaneDetails
+
+	if len(m.ReadPaneIds) > 0 {
+		// Read only the specified panes (may be in different windows)
+		for _, paneId := range m.ReadPaneIds {
+			pane, err := system.TmuxPaneById(paneId)
+			if err != nil {
+				logger.Error("Failed to get details for read pane %s: %v", paneId, err)
+				continue
+			}
+			currentPanes = append(currentPanes, pane)
+		}
+	} else {
+		// Default: read all panes in current window
+		windowTarget, _ := system.TmuxCurrentWindowTarget()
+		currentPanes, _ = system.TmuxPanesDetails(windowTarget)
+	}
 
 	for i := range currentPanes {
 		currentPanes[i].IsTmuxAiPane = currentPanes[i].Id == currentPaneId
-		currentPanes[i].IsTmuxAiExecPane = currentPanes[i].Id == m.ExecPane.Id
-		currentPanes[i].IsPrepared = currentPanes[i].Id == m.ExecPane.Id
+		currentPanes[i].IsTmuxAiExecPane = m.ExecPane != nil && currentPanes[i].Id == m.ExecPane.Id
+		currentPanes[i].IsPrepared = m.ExecPane != nil && currentPanes[i].Id == m.ExecPane.Id
 		if currentPanes[i].IsSubShell {
 			currentPanes[i].OS = "OS Unknown (subshell)"
 		} else {
@@ -31,6 +48,23 @@ func (m *Manager) getTmuxPanesInXmlFn(config *config.Config) string {
 	currentTmuxWindow := strings.Builder{}
 	currentTmuxWindow.WriteString("<current_tmux_window_state>\n")
 	panes, _ := m.GetTmuxPanes()
+
+	// If exec pane is remote (not in the read panes list), refresh it separately
+	if m.ExecPane != nil && m.ExecPane.Id != "" {
+		execInList := false
+		for _, p := range panes {
+			if p.Id == m.ExecPane.Id {
+				execInList = true
+				break
+			}
+		}
+		if !execInList {
+			if pane, err := system.TmuxPaneById(m.ExecPane.Id); err == nil {
+				pane.Refresh(m.GetMaxCaptureLines())
+				m.ExecPane = &pane
+			}
+		}
+	}
 
 	// Filter out tmuxai_pane
 	var filteredPanes []system.TmuxPaneDetails

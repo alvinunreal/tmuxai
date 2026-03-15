@@ -76,6 +76,23 @@ func buildSplitWindowArgs(target string, splitArgs []string) ([]string, error) {
 	return args, nil
 }
 
+// TmuxPaneById returns details for a single pane by its ID.
+func TmuxPaneById(paneId string) (TmuxPaneDetails, error) {
+	panes, err := TmuxPanesDetails(paneId)
+	if err != nil {
+		return TmuxPaneDetails{}, err
+	}
+	for _, p := range panes {
+		if p.Id == paneId {
+			return p, nil
+		}
+	}
+	if len(panes) > 0 {
+		return panes[0], nil
+	}
+	return TmuxPaneDetails{}, fmt.Errorf("pane %s not found", paneId)
+}
+
 // TmuxPanesDetails gets details for all panes in a target window
 var TmuxPanesDetails = func(target string) ([]TmuxPaneDetails, error) {
 	cmd := exec.Command("tmux", "list-panes", "-t", target, "-F", "#{pane_id},#{pane_active},#{pane_pid},#{pane_current_command},#{history_size},#{history_limit}")

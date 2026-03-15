@@ -576,8 +576,21 @@ You can start `tmuxai` with an initial message, task file, model configuration, 
   # Skip all confirmation prompts - commands execute immediately
   tmuxai --yolo "Install and configure nginx"
   ```
-  
+
   > **Warning**: Use `--yolo` with caution. This mode skips all safety confirmations and executes commands directly. Only use when you trust the AI's command suggestions completely.
+
+- **Remote Exec Pane:**
+  Use an existing pane as the exec target instead of creating a new split. Useful for popup windows, bottom bars, or custom layouts:
+
+  ```sh
+  # tmuxai in a popup, executing commands in pane %12
+  tmuxai --exec-pane %12
+
+  # Also limit which panes tmuxai reads for context
+  tmuxai --exec-pane %12 --read-panes %12,%15
+  ```
+
+  To find pane IDs, use `tmux list-panes -F '#{pane_id}'`.
 
 ## Configuration
 
