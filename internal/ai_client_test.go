@@ -272,6 +272,88 @@ func TestDetermineAPITypeGemini(t *testing.T) {
 	}
 }
 
+func TestBuildCopilotPrompt(t *testing.T) {
+	tests := []struct {
+		name                   string
+		messages               []Message
+		expectedPrompt         string
+		expectedSystemInstruct string
+		expectErr              bool
+	}{
+		{
+			name:      "empty messages returns error",
+			messages:  []Message{},
+			expectErr: true,
+		},
+		{
+			name: "system message only returns error",
+			messages: []Message{
+				{Role: "system", Content: "You are helpful"},
+			},
+			expectErr: true,
+		},
+		{
+			name: "single user message no system",
+			messages: []Message{
+				{Role: "user", Content: "hello"},
+			},
+			expectedPrompt:         "User: hello",
+			expectedSystemInstruct: "",
+		},
+		{
+			name: "single user message with system",
+			messages: []Message{
+				{Role: "system", Content: "You are a coding assistant"},
+				{Role: "user", Content: "write a function"},
+			},
+			expectedPrompt:         "User: write a function",
+			expectedSystemInstruct: "You are a coding assistant",
+		},
+		{
+			name: "multi-turn conversation",
+			messages: []Message{
+				{Role: "system", Content: "Be concise"},
+				{Role: "user", Content: "what is 2+2"},
+				{Role: "assistant", Content: "4"},
+				{Role: "user", Content: "and 3+3"},
+			},
+			expectedPrompt:         "User: what is 2+2\n\nAssistant: 4\n\nUser: and 3+3",
+			expectedSystemInstruct: "Be concise",
+		},
+		{
+			name: "multi-turn no system",
+			messages: []Message{
+				{Role: "user", Content: "ping"},
+				{Role: "assistant", Content: "pong"},
+				{Role: "user", Content: "again"},
+			},
+			expectedPrompt:         "User: ping\n\nAssistant: pong\n\nUser: again",
+			expectedSystemInstruct: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prompt, systemInstruct, err := buildCopilotPrompt(tt.messages)
+			if tt.expectErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if prompt != tt.expectedPrompt {
+				t.Errorf("prompt mismatch\n  got:  %q\n  want: %q", prompt, tt.expectedPrompt)
+			}
+			if systemInstruct != tt.expectedSystemInstruct {
+				t.Errorf("systemInstruction mismatch\n  got:  %q\n  want: %q", systemInstruct, tt.expectedSystemInstruct)
+			}
+		})
+	}
+}
+
 func TestGeminiProviderSelection(t *testing.T) {
 	tests := []struct {
 		name            string

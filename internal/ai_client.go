@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	copilot "github.com/github/copilot-sdk/go"
+
 	"github.com/alvinunreal/tmuxai/config"
 	"github.com/alvinunreal/tmuxai/logger"
 	"google.golang.org/genai"
@@ -24,6 +26,10 @@ type AiClient struct {
 	client       *http.Client
 	geminiClient *genai.Client
 	geminiMu     sync.Mutex
+
+	// GitHub Copilot SDK client (wraps the copilot CLI subprocess)
+	copilotClient *copilot.Client
+	copilotMu     sync.Mutex
 }
 
 // Message represents a chat message
@@ -125,6 +131,117 @@ func (c *AiClient) SetConfigManager(mgr *Manager) {
 	c.configMgr = mgr
 }
 
+// getOrCreateCopilotClient returns the cached Copilot SDK client, creating it if necessary.
+func (c *AiClient) getOrCreateCopilotClient(githubToken string) (*copilot.Client, error) {
+	c.copilotMu.Lock()
+	defer c.copilotMu.Unlock()
+
+	if c.copilotClient != nil {
+		return c.copilotClient, nil
+	}
+
+	opts := &copilot.ClientOptions{
+		LogLevel: "warning", // copilot CLI 1.x uses "warning" not "warn"
+	}
+	if githubToken != "" {
+		opts.GitHubToken = githubToken
+	}
+
+	cl := copilot.NewClient(opts)
+	c.copilotClient = cl
+	return cl, nil
+}
+
+// buildCopilotPrompt converts a slice of Messages into copilot-sdk/go required prompt format
+func buildCopilotPrompt(messages []Message) (prompt string, systemInstruction string, err error) {
+	if len(messages) == 0 {
+		return "", "", fmt.Errorf("no messages provided")
+	}
+
+	var conversationLines []string
+	for i, msg := range messages {
+		switch {
+		case i == 0 && msg.Role == "system":
+			systemInstruction = msg.Content
+		case msg.Role == "user":
+			conversationLines = append(conversationLines, "User: "+msg.Content)
+		case msg.Role == "assistant":
+			conversationLines = append(conversationLines, "Assistant: "+msg.Content)
+		}
+	}
+
+	prompt = strings.Join(conversationLines, "\n\n")
+	if prompt == "" {
+		return "", "", fmt.Errorf("no user/assistant messages to send")
+	}
+	return prompt, systemInstruction, nil
+}
+
+// CopilotGenerateContent sends via the copilot-sdk/go, converts the conversation history into a single-turn prompt
+func (c *AiClient) CopilotGenerateContent(ctx context.Context, messages []Message, model string) (string, error) {
+	// Resolve auth token and model from config
+	var githubToken string
+	if c.configMgr != nil {
+		if mc, exists := c.configMgr.GetCurrentModelConfig(); exists && mc.Provider == "github-copilot" {
+			githubToken = mc.APIKey
+		}
+	}
+
+	cl, err := c.getOrCreateCopilotClient(githubToken)
+	if err != nil {
+		return "", fmt.Errorf("failed to create Copilot client: %w", err)
+	}
+
+	prompt, systemInstruction, err := buildCopilotPrompt(messages)
+	if err != nil {
+		return "", err
+	}
+
+	// Build session config
+	sessionCfg := &copilot.SessionConfig{
+		ClientName:          "tmuxai/" + Version,
+		Model:               model,
+		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
+		// Disable infinite sessions — we want a lightweight one-shot session
+		InfiniteSessions: &copilot.InfiniteSessionConfig{
+			Enabled: copilot.Bool(false),
+		},
+	}
+	if systemInstruction != "" {
+		sessionCfg.SystemMessage = &copilot.SystemMessageConfig{
+			Mode:    "replace",
+			Content: systemInstruction,
+		}
+	}
+
+	logger.Debug("Creating Copilot session with model: %s", model)
+
+	session, err := cl.CreateSession(ctx, sessionCfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to create Copilot session: %w", err)
+	}
+	defer func() {
+		if dErr := session.Disconnect(); dErr != nil {
+			logger.Debug("Copilot session disconnect: %v", dErr)
+		}
+	}()
+
+	logger.Debug("Sending Copilot prompt (%d chars)", len(prompt))
+
+	event, err := session.SendAndWait(ctx, copilot.MessageOptions{Prompt: prompt})
+	if err != nil {
+		return "", fmt.Errorf("copilot request failed: %w", err)
+	}
+
+	if event == nil || event.Data.Content == nil {
+		return "", fmt.Errorf("no response content returned from Copilot (model: %s)", model)
+	}
+
+	responseText := *event.Data.Content
+	logger.Debug("Received Copilot response (%d characters)", len(responseText))
+	return responseText, nil
+}
+
 // determineAPIType determines which API to use based on the model and configuration
 func (c *AiClient) determineAPIType(model string) string {
 	// If we have a config manager, try to get the current model configuration
@@ -139,6 +256,8 @@ func (c *AiClient) determineAPIType(model string) string {
 				return "openrouter"
 			case "gemini":
 				return "gemini"
+			case "github-copilot":
+				return "github-copilot"
 			default:
 				return "openrouter"
 			}
@@ -199,6 +318,8 @@ func (c *AiClient) GetResponseFromChatMessages(ctx context.Context, chatMessages
 		response, err = c.ChatCompletion(ctx, aiMessages, model)
 	case "openrouter":
 		response, err = c.ChatCompletion(ctx, aiMessages, model)
+	case "github-copilot":
+		response, err = c.CopilotGenerateContent(ctx, aiMessages, model)
 	case "gemini":
 		response, err = c.GeminiGenerateContent(ctx, aiMessages, model)
 	default:
@@ -298,12 +419,6 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 
 	req.Header.Set("HTTP-Referer", "https://github.com/alvinunreal/tmuxai")
 	req.Header.Set("X-Title", "TmuxAI")
-
-	// Add GitHub Copilot-specific headers when using Copilot API
-	if strings.Contains(url, "githubcopilot.com") {
-		req.Header.Set("editor-version", "tmuxai/"+Version)
-		req.Header.Set("copilot-integration-id", "vscode-chat")
-	}
 
 	// Log the request details for debugging before sending
 	logger.Debug("Sending API request to: %s with model: %s", url, model)

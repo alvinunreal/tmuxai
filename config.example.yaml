@@ -72,6 +72,15 @@ models:
     model: "gemini-2.5-flash"
     api_key: "${GOOGLE_API_KEY}"
 
+  # GitHub Copilot (uses the official copilot-sdk/go — requires the `copilot` CLI in PATH)
+  # Install CLI: https://docs.github.com/en/copilot/github-copilot-in-the-cli
+  # Get token:   gh auth token
+  # api_key is optional if the CLI is already authenticated via `gh auth login`
+  copilot:
+    provider: "github-copilot"
+    model: "gpt-4o"
+    api_key: "${GITHUB_TOKEN}"
+
 # Confirm before AI executes a command
 exec_confirm: true
 

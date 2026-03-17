@@ -233,17 +233,17 @@ func (m *Manager) hasValidAIConfiguration() bool {
 	// Check new model configurations first
 	availableModels := m.GetAvailableModels()
 	if len(availableModels) > 0 {
-		// Check if any model has an API key
+		// Check if any model has an API key or is a keyless provider
 		for _, modelName := range availableModels {
 			if modelConfig, exists := m.GetModelConfig(modelName); exists {
-				if modelConfig.APIKey != "" {
+				if modelConfig.APIKey != "" || modelConfig.Provider == "github-copilot" {
 					return true
 				}
 			}
 		}
-		// Also check if current model has API key
+		// Also check if current model has API key or is a keyless provider
 		if currentModelConfig, exists := m.GetCurrentModelConfig(); exists {
-			if currentModelConfig.APIKey != "" {
+			if currentModelConfig.APIKey != "" || currentModelConfig.Provider == "github-copilot" {
 				return true
 			}
 		}

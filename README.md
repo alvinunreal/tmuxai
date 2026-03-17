@@ -452,11 +452,11 @@ models:
     api_key: "your-anthropic-api-key"
     base_url: "https://api.anthropic.com"
 
+  # GitHub Copilot — requires the `copilot` CLI in PATH and `gh auth login`
+  # No api_key needed; the CLI uses your existing gh auth credentials
   github-copilot:
-    provider: "openrouter"
+    provider: "github-copilot"
     model: "claude-sonnet-4.5"
-    api_key: "your-github-copilot-api-key"
-    base_url: "https://api.githubcopilot.com"
 
   local-llama:
     provider: "openrouter"
@@ -490,6 +490,23 @@ models:
 - `openrouter` - Universal Chat Completion API, defaults to openrouter base url
 - `azure` - Azure Chat Completions API
 - `gemini` - Google Gemini API (direct access via go-genai SDK)
+- `github-copilot` - GitHub Copilot (via official copilot-sdk/go — see setup below)
+
+### GitHub Copilot Setup
+
+TmuxAI integrates with GitHub Copilot via the [official Go SDK](https://github.com/github/copilot-sdk), which communicates with the `copilot` CLI. No `api_key` is required — authentication uses your existing `gh` credentials.
+
+Follow the [GitHub Copilot CLI installation guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli) to install and authenticate the CLI, then configure TmuxAI:
+
+```yaml
+models:
+  fast:
+    provider: "github-copilot"
+    model: "claude-haiku-4.5"
+  smart:
+    provider: "github-copilot"
+    model: "claude-sonnet-4.5"
+```
 
 **Interactive Commands:**
 ```bash

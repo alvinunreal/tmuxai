@@ -10,11 +10,11 @@ import (
 
 func TestModelConfiguration(t *testing.T) {
 	tests := []struct {
-		name           string
-		config         *config.Config
-		expectedModel  string
-		expectedValid  bool
-		expectedCount  int
+		name          string
+		config        *config.Config
+		expectedModel string
+		expectedValid bool
+		expectedCount int
 	}{
 		{
 			name: "multiple models with default",
@@ -179,8 +179,8 @@ func TestModelConfigurationWithSessionOverrides(t *testing.T) {
 
 func TestGetModel(t *testing.T) {
 	tests := []struct {
-		name           string
-		config         *config.Config
+		name          string
+		config        *config.Config
 		expectedModel string
 	}{
 		{
@@ -256,12 +256,84 @@ func TestGetModel(t *testing.T) {
 	}
 }
 
+func TestGitHubCopilotProvider(t *testing.T) {
+	t.Run("valid config with token", func(t *testing.T) {
+		cfg := &config.Config{
+			DefaultModel: "copilot",
+			Models: map[string]config.ModelConfig{
+				"copilot": {
+					Provider: "github-copilot",
+					Model:    "gpt-4o",
+					APIKey:   "ghu_sometoken",
+				},
+			},
+		}
+		manager := &Manager{
+			Config:           cfg,
+			SessionOverrides: make(map[string]interface{}),
+			LoadedKBs:        make(map[string]string),
+		}
+
+		assert.True(t, manager.hasValidAIConfiguration())
+
+		modelConfig, exists := manager.GetCurrentModelConfig()
+		require.True(t, exists)
+		assert.Equal(t, "github-copilot", modelConfig.Provider)
+		assert.Equal(t, "gpt-4o", modelConfig.Model)
+	})
+
+	t.Run("valid without api_key (keyless provider)", func(t *testing.T) {
+		cfg := &config.Config{
+			DefaultModel: "copilot",
+			Models: map[string]config.ModelConfig{
+				"copilot": {
+					Provider: "github-copilot",
+					Model:    "gpt-4o",
+					APIKey:   "",
+				},
+			},
+		}
+		manager := &Manager{
+			Config:           cfg,
+			SessionOverrides: make(map[string]interface{}),
+			LoadedKBs:        make(map[string]string),
+		}
+
+		// github-copilot is always valid regardless of api_key
+		assert.True(t, manager.hasValidAIConfiguration())
+	})
+
+	t.Run("determineAPIType routes to github-copilot", func(t *testing.T) {
+		cfg := &config.Config{
+			DefaultModel: "copilot",
+			Models: map[string]config.ModelConfig{
+				"copilot": {
+					Provider: "github-copilot",
+					Model:    "gpt-4o",
+					APIKey:   "ghu_sometoken",
+				},
+			},
+		}
+		manager := &Manager{
+			Config:           cfg,
+			SessionOverrides: make(map[string]interface{}),
+			LoadedKBs:        make(map[string]string),
+		}
+
+		aiClient := NewAiClient(cfg)
+		aiClient.SetConfigManager(manager)
+
+		apiType := aiClient.determineAPIType("gpt-4o")
+		assert.Equal(t, "github-copilot", apiType)
+	})
+}
+
 func TestLegacyModelConfig(t *testing.T) {
 	tests := []struct {
-		name           string
-		config         *config.Config
+		name             string
+		config           *config.Config
 		expectedProvider string
-		expectedModel   string
+		expectedModel    string
 	}{
 		{
 			name: "openai priority",
@@ -276,7 +348,7 @@ func TestLegacyModelConfig(t *testing.T) {
 				},
 			},
 			expectedProvider: "openai",
-			expectedModel:   "gpt-4",
+			expectedModel:    "gpt-4",
 		},
 		{
 			name: "azure priority over openrouter",
@@ -291,7 +363,7 @@ func TestLegacyModelConfig(t *testing.T) {
 				},
 			},
 			expectedProvider: "azure",
-			expectedModel:   "gpt-4o",
+			expectedModel:    "gpt-4o",
 		},
 		{
 			name: "openrouter fallback",
@@ -302,7 +374,7 @@ func TestLegacyModelConfig(t *testing.T) {
 				},
 			},
 			expectedProvider: "openrouter",
-			expectedModel:   "gemini-flash",
+			expectedModel:    "gemini-flash",
 		},
 	}
 
