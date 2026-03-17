@@ -29,6 +29,7 @@ type AiClient struct {
 
 	// GitHub Copilot SDK client (wraps the copilot CLI subprocess)
 	copilotClient *copilot.Client
+	copilotToken  string
 	copilotMu     sync.Mutex
 }
 
@@ -136,7 +137,8 @@ func (c *AiClient) getOrCreateCopilotClient(githubToken string) (*copilot.Client
 	c.copilotMu.Lock()
 	defer c.copilotMu.Unlock()
 
-	if c.copilotClient != nil {
+	// Reuse the cached client only if it was created with the same GitHub token.
+	if c.copilotClient != nil && c.copilotToken == githubToken {
 		return c.copilotClient, nil
 	}
 
@@ -149,6 +151,7 @@ func (c *AiClient) getOrCreateCopilotClient(githubToken string) (*copilot.Client
 
 	cl := copilot.NewClient(opts)
 	c.copilotClient = cl
+	c.copilotToken = githubToken
 	return cl, nil
 }
 
