@@ -10,6 +10,153 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestIncrementalPaneContent_Basic tests that only unseen command outputs are sent
+func TestIncrementalPaneContent_Basic(t *testing.T) {
+	manager := &Manager{
+		Config: &config.Config{
+			MaxCaptureLines:       1000,
+			IncrementalPaneContent: true,
+		},
+		PaneId:             "%1",
+		ExecPane:           &system.TmuxPaneDetails{Id: "%2"},
+		OS:                 "darwin",
+		ExecHistory: []CommandExecHistory{
+			{Command: "ls", Output: "file1.txt\nfile2.txt", Code: 0},
+			{Command: "cat file1.txt", Output: "hello world", Code: 0},
+		},
+		LastSentHistoryIndex: 1, // already sent the first entry
+		SessionOverrides:     make(map[string]interface{}),
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalCurrentPaneID := system.TmuxCurrentPaneId
+	originalPanesDetails := system.TmuxPanesDetails
+	originalCapturePane := system.TmuxCapturePane
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxCurrentPaneId = originalCurrentPaneID
+		system.TmuxPanesDetails = originalPanesDetails
+		system.TmuxCapturePane = originalCapturePane
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) { return "@1:1", nil }
+	system.TmuxCurrentPaneId = func() (string, error) { return "%1", nil }
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{
+			{Id: "%1", CurrentCommand: "tmuxai"},
+			{Id: "%2", CurrentCommand: "zsh", Shell: "zsh"},
+		}, nil
+	}
+	system.TmuxCapturePane = func(paneId string, maxLines int) (string, error) {
+		return "user@host:~[14:30][0]» ls\nfile1.txt\nfile2.txt\nuser@host:~[14:31][0]» cat file1.txt\nhello world\nuser@host:~[14:32][0]» ", nil
+	}
+
+	xml := manager.getTmuxPanesInXmlFn(manager.Config)
+
+	// Should contain the second command's output but NOT the first
+	assert.Contains(t, xml, "cat file1.txt")
+	assert.Contains(t, xml, "hello world")
+	assert.NotContains(t, xml, "<pane_content>", "Should NOT use pane_content tag in incremental mode")
+	assert.Contains(t, xml, "<command_output>")
+	assert.Contains(t, xml, "ExitCode: 0")
+	// LastSentHistoryIndex should now be updated to 2
+	assert.Equal(t, 2, manager.LastSentHistoryIndex)
+}
+
+// TestIncrementalPaneContent_FirstRequest falls back to full pane content when no history
+func TestIncrementalPaneContent_FirstRequest(t *testing.T) {
+	manager := &Manager{
+		Config: &config.Config{
+			MaxCaptureLines:       1000,
+			IncrementalPaneContent: true,
+		},
+		PaneId:               "%1",
+		ExecPane:             &system.TmuxPaneDetails{Id: "%2"},
+		OS:                   "darwin",
+		ExecHistory:          []CommandExecHistory{},
+		LastSentHistoryIndex: 0,
+		SessionOverrides:     make(map[string]interface{}),
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalCurrentPaneID := system.TmuxCurrentPaneId
+	originalPanesDetails := system.TmuxPanesDetails
+	originalCapturePane := system.TmuxCapturePane
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxCurrentPaneId = originalCurrentPaneID
+		system.TmuxPanesDetails = originalPanesDetails
+		system.TmuxCapturePane = originalCapturePane
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) { return "@1:1", nil }
+	system.TmuxCurrentPaneId = func() (string, error) { return "%1", nil }
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{
+			{Id: "%1", CurrentCommand: "tmuxai"},
+			{Id: "%2", CurrentCommand: "zsh", Shell: "zsh"},
+		}, nil
+	}
+	system.TmuxCapturePane = func(paneId string, maxLines int) (string, error) {
+		return "some existing pane content\nuser@host:~[14:30][0]» ", nil
+	}
+
+	xml := manager.getTmuxPanesInXmlFn(manager.Config)
+
+	// First request with no history should fall back to full pane content
+	assert.Contains(t, xml, "<pane_content>")
+	assert.Contains(t, xml, "some existing pane content")
+	assert.NotContains(t, xml, "<command_output>")
+}
+
+// TestIncrementalPaneContent_Disabled tests full pane content when feature is disabled
+func TestIncrementalPaneContent_Disabled(t *testing.T) {
+	manager := &Manager{
+		Config: &config.Config{
+			MaxCaptureLines:       1000,
+			IncrementalPaneContent: false,
+		},
+		PaneId:             "%1",
+		ExecPane:           &system.TmuxPaneDetails{Id: "%2"},
+		OS:                 "darwin",
+		ExecHistory: []CommandExecHistory{
+			{Command: "ls", Output: "file1.txt", Code: 0},
+		},
+		LastSentHistoryIndex: 0,
+		SessionOverrides:     make(map[string]interface{}),
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalCurrentPaneID := system.TmuxCurrentPaneId
+	originalPanesDetails := system.TmuxPanesDetails
+	originalCapturePane := system.TmuxCapturePane
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxCurrentPaneId = originalCurrentPaneID
+		system.TmuxPanesDetails = originalPanesDetails
+		system.TmuxCapturePane = originalCapturePane
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) { return "@1:1", nil }
+	system.TmuxCurrentPaneId = func() (string, error) { return "%1", nil }
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{
+			{Id: "%1", CurrentCommand: "tmuxai"},
+			{Id: "%2", CurrentCommand: "zsh", Shell: "zsh"},
+		}, nil
+	}
+	system.TmuxCapturePane = func(paneId string, maxLines int) (string, error) {
+		return "full pane content\nuser@host:~[14:30][0]» ", nil
+	}
+
+	xml := manager.getTmuxPanesInXmlFn(manager.Config)
+
+	// When disabled, always use full pane content
+	assert.Contains(t, xml, "<pane_content>")
+	assert.Contains(t, xml, "full pane content")
+	assert.NotContains(t, xml, "<command_output>")
+}
+
 // Test regex matching for bash shell prompts
 func TestParseExecPaneCommandHistory_Prompt(t *testing.T) {
 	manager := &Manager{

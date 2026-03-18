@@ -68,6 +68,8 @@ When responding to user messages:
 - is the pane busy running a command or is it idle
 - should you wait or you should proceed
 
+When in prepared mode, the exec pane will show <command_output> blocks instead of raw pane content. Each block contains the command that was run, its exit code, and the output. This is incremental — you only see output since your last action. Use the conversation history and the ExitCode to understand context.
+
 3. Based on your analysis, choose the most appropriate action required and call it at the end of your response with appropriate tool. Always should be at least 1 XML tag.
 4. Respond with user message with normal text and place function calls at the end of your response.
 

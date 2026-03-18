@@ -58,6 +58,10 @@ func (m *Manager) getTmuxPanesInXmlFn(config *config.Config) string {
 		}
 		if pane.IsTmuxAiExecPane {
 			m.ExecPane = &pane
+			// Re-parse exec history in prepared mode so incremental tracking stays current
+			if pane.IsPrepared && m.Config.IncrementalPaneContent {
+				m.parseExecPaneCommandHistory()
+			}
 		}
 
 		var title string
@@ -84,9 +88,29 @@ func (m *Manager) getTmuxPanesInXmlFn(config *config.Config) string {
 		fmt.Fprintf(&currentTmuxWindow, " - HistoryLimit: %d\n", pane.HistoryLimit)
 
 		if !pane.IsTmuxAiPane && pane.Content != "" {
-			currentTmuxWindow.WriteString("<pane_content>\n")
-			currentTmuxWindow.WriteString(pane.Content)
-			currentTmuxWindow.WriteString("\n</pane_content>\n")
+			if pane.IsTmuxAiExecPane && pane.IsPrepared && m.Config.IncrementalPaneContent && len(m.ExecHistory) > 0 {
+				// Incremental mode: send only the new command output since last request
+				unseen := m.ExecHistory[m.LastSentHistoryIndex:]
+				if len(unseen) > 0 {
+					for i, cmd := range unseen {
+						idx := m.LastSentHistoryIndex + i
+						currentTmuxWindow.WriteString("<command_output>\n")
+						fmt.Fprintf(&currentTmuxWindow, " - Index: %d\n", idx)
+						fmt.Fprintf(&currentTmuxWindow, " - Command: %s\n", cmd.Command)
+						fmt.Fprintf(&currentTmuxWindow, " - ExitCode: %d\n", cmd.Code)
+						currentTmuxWindow.WriteString(" - Output:\n")
+						currentTmuxWindow.WriteString(cmd.Output)
+						currentTmuxWindow.WriteString("\n</command_output>\n")
+					}
+					// Update the sentinel so next request only gets newer entries
+					m.LastSentHistoryIndex = len(m.ExecHistory)
+				}
+			} else {
+				// Default: send full pane content
+				currentTmuxWindow.WriteString("<pane_content>\n")
+				currentTmuxWindow.WriteString(pane.Content)
+				currentTmuxWindow.WriteString("\n</pane_content>\n")
+			}
 		}
 
 		fmt.Fprintf(&currentTmuxWindow, "</%s>\n\n", title)

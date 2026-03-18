@@ -44,6 +44,7 @@ type Manager struct {
 	ExecPane          *system.TmuxPaneDetails
 	Messages          []ChatMessage
 	ExecHistory       []CommandExecHistory
+	LastSentHistoryIndex int // tracks how many exec history entries have been sent to the AI
 	WatchMode         bool
 	OS                string
 	SessionOverrides  map[string]interface{} // session-only config overrides

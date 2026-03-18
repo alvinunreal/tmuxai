@@ -20,6 +20,7 @@ type Config struct {
 	SendKeysConfirm       bool                   `mapstructure:"send_keys_confirm"`
 	PasteMultilineConfirm bool                   `mapstructure:"paste_multiline_confirm"`
 	ExecConfirm           bool                   `mapstructure:"exec_confirm"`
+	IncrementalPaneContent bool                  `mapstructure:"incremental_pane_content"`
 	WhitelistPatterns     []string               `mapstructure:"whitelist_patterns"`
 	BlacklistPatterns     []string               `mapstructure:"blacklist_patterns"`
 	Tmux                  TmuxConfig             `mapstructure:"tmux"`
@@ -98,6 +99,7 @@ func DefaultConfig() *Config {
 		SendKeysConfirm:       true,
 		PasteMultilineConfirm: true,
 		ExecConfirm:           true,
+		IncrementalPaneContent: true,
 		WhitelistPatterns:     []string{},
 		BlacklistPatterns:     []string{},
 		Tmux: TmuxConfig{
