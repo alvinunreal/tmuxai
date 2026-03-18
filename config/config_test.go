@@ -1,17 +1,12 @@
 package config
 
 import (
-	"os"
 	"testing"
 )
 
 func TestResolveEnvKeyInConfig_MapValues(t *testing.T) {
-	_ = os.Setenv("TEST_API_KEY", "secret123")
-	_ = os.Setenv("TEST_MODEL", "test-model")
-	defer func() {
-		_ = os.Unsetenv("TEST_API_KEY")
-		_ = os.Unsetenv("TEST_MODEL")
-	}()
+	t.Setenv("TEST_API_KEY", "secret123")
+	t.Setenv("TEST_MODEL", "test-model")
 
 	cfg := DefaultConfig()
 	cfg.Models = map[string]ModelConfig{
@@ -37,8 +32,7 @@ func TestResolveEnvKeyInConfig_MapValues(t *testing.T) {
 }
 
 func TestResolveEnvKeyInConfig_NestedStruct(t *testing.T) {
-	_ = os.Setenv("TEST_OPENROUTER_KEY", "or-key-456")
-	defer func() { _ = os.Unsetenv("TEST_OPENROUTER_KEY") }()
+	t.Setenv("TEST_OPENROUTER_KEY", "or-key-456")
 
 	cfg := DefaultConfig()
 	cfg.OpenRouter.APIKey = "${TEST_OPENROUTER_KEY}"
