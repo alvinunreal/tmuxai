@@ -72,9 +72,9 @@ func (m *Manager) InitExecPane() error {
 		if err != nil {
 			return err
 		}
-		for _, pane := range panes {
-			if pane.Id == m.ForcedExecPaneID {
-				m.ExecPane = &pane
+		for i := range panes {
+			if panes[i].Id == m.ForcedExecPaneID {
+				m.ExecPane = &panes[i]
 				return nil
 			}
 		}
