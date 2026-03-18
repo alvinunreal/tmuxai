@@ -315,5 +315,41 @@ func resolveEnvKeyReferenceInValue(val reflect.Value) {
 		if !val.IsNil() {
 			resolveEnvKeyReferenceInValue(val.Elem())
 		}
+	case reflect.Map:
+		if val.IsNil() {
+			return
+		}
+		for _, key := range val.MapKeys() {
+			mapVal := val.MapIndex(key)
+			if mapVal.Kind() == reflect.Ptr && mapVal.IsNil() {
+				continue
+			}
+			resolved := resolveEnvValueDeepCopy(mapVal)
+			val.SetMapIndex(key, resolved)
+		}
+	}
+}
+
+// resolveEnvValueDeepCopy returns a new value with env vars expanded.
+// For non-addressable map values, we need to create a new copy.
+func resolveEnvValueDeepCopy(val reflect.Value) reflect.Value {
+	switch val.Kind() {
+	case reflect.String:
+		return reflect.ValueOf(os.ExpandEnv(val.String()))
+	case reflect.Struct:
+		cp := reflect.New(val.Type()).Elem()
+		cp.Set(val)
+		resolveEnvKeyReferenceInValue(cp)
+		return cp
+	case reflect.Ptr:
+		if val.IsNil() {
+			return val
+		}
+		elem := resolveEnvValueDeepCopy(val.Elem())
+		ptr := reflect.New(elem.Type())
+		ptr.Elem().Set(elem)
+		return ptr
+	default:
+		return val
 	}
 }
