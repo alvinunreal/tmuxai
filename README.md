@@ -155,7 +155,7 @@ TmuxAI running per window and organizes your workspace using the following pane 
 
 1. **Chat Pane**: This is where you interact with the AI. It features a REPL-like interface with syntax highlighting, auto-completion, and readline shortcuts.
 
-2. **Exec Pane**: TmuxAI selects (or creates) a pane where commands can be executed.
+2. **Exec Pane**: TmuxAI selects (or creates) a pane where commands can be executed. You can also force a specific exec pane with `--exec-pane`.
 
 3. **Read-Only Panes**: All other panes in the current window serve as additional context. TmuxAI can read their content but does not interact with them.
 
@@ -566,9 +566,27 @@ You can start `tmuxai` with an initial message, task file, model configuration, 
   tmuxai --kb docker-workflows,git-conventions
   ```
 
+- **Choose Tmux Panes Explicitly:**
+  ```sh
+  # Force a specific exec pane by tmux pane ID
+  tmuxai --exec-pane %3
+
+  # Restrict read context to specific panes
+  tmuxai --read-panes %1,%2
+
+  # Fully control both execution and read context
+  tmuxai --exec-pane %3 --read-panes %1,%2
+  ```
+
+  Notes:
+  - `--exec-pane` forces TmuxAI to use that pane for command execution and disables auto-picking or auto-creating an exec pane.
+  - `--read-panes` limits read context to the listed pane IDs in the current tmux window.
+  - The TmuxAI chat pane cannot be used as an exec pane or read pane.
+  - Pane IDs must exist in the current tmux window.
+
 - **Combine Options:**
   ```sh
-  tmuxai --model gpt4 --kb docker-workflows "Debug this Docker issue"
+  tmuxai --model gpt4 --kb docker-workflows --exec-pane %3 --read-panes %1,%2 "Debug this Docker issue"
   ```
 
 - **Yolo Mode (Skip Confirmations):**

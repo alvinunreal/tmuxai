@@ -14,11 +14,13 @@ import (
 )
 
 var (
-	initMessage  string
-	taskFileFlag string
-	kbFlag       string
-	modelFlag    string
-	yoloFlag     bool
+	initMessage   string
+	taskFileFlag  string
+	kbFlag        string
+	modelFlag     string
+	execPaneFlag  string
+	readPanesFlag string
+	yoloFlag      bool
 )
 
 var rootCmd = &cobra.Command{
@@ -54,7 +56,20 @@ var rootCmd = &cobra.Command{
 			logger.Info("Read request from file: %s", taskFileFlag)
 		}
 
-		mgr, err := internal.NewManager(cfg)
+		managerOptions := internal.ManagerOptions{
+			ForcedExecPaneID: strings.TrimSpace(execPaneFlag),
+		}
+		if readPanesFlag != "" {
+			for _, paneID := range strings.Split(readPanesFlag, ",") {
+				paneID = strings.TrimSpace(paneID)
+				if paneID == "" {
+					continue
+				}
+				managerOptions.ForcedReadPaneIDs = append(managerOptions.ForcedReadPaneIDs, paneID)
+			}
+		}
+
+		mgr, err := internal.NewManager(cfg, managerOptions)
 		if err != nil {
 			logger.Error("manager.NewManager failed: %v", err)
 			os.Exit(1)
@@ -92,6 +107,8 @@ func init() {
 	rootCmd.Flags().StringVarP(&taskFileFlag, "file", "f", "", "Read request from specified file")
 	rootCmd.Flags().StringVar(&kbFlag, "kb", "", "Comma-separated list of knowledge bases to load (e.g., --kb docker,git)")
 	rootCmd.Flags().StringVar(&modelFlag, "model", "", "AI model configuration to use (e.g., --model gpt4)")
+	rootCmd.Flags().StringVar(&execPaneFlag, "exec-pane", "", "Use the specified tmux pane ID as the exec pane (e.g., --exec-pane %3)")
+	rootCmd.Flags().StringVar(&readPanesFlag, "read-panes", "", "Comma-separated tmux pane IDs to use as read context (e.g., --read-panes %1,%2)")
 	rootCmd.Flags().BoolVar(&yoloFlag, "yolo", false, "Skip all confirmation prompts and execute commands directly")
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
 }

@@ -158,7 +158,7 @@ var TmuxCapturePane = func(paneId string, maxLines int) (string, error) {
 }
 
 // Return current tmux window target with session id and window id
-func TmuxCurrentWindowTarget() (string, error) {
+var TmuxCurrentWindowTarget = func() (string, error) {
 	paneId, err := TmuxCurrentPaneId()
 	if err != nil {
 		return "", err

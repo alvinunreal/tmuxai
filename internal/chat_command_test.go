@@ -25,11 +25,13 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 	originalTmuxSend := system.TmuxSendCommandToPane
 	originalTmuxCapture := system.TmuxCapturePane
 	originalTmuxCurrentPaneId := system.TmuxCurrentPaneId
+	originalTmuxCurrentWindowTarget := system.TmuxCurrentWindowTarget
 	originalTmuxPanesDetails := system.TmuxPanesDetails
 	defer func() {
 		system.TmuxSendCommandToPane = originalTmuxSend
 		system.TmuxCapturePane = originalTmuxCapture
 		system.TmuxCurrentPaneId = originalTmuxCurrentPaneId
+		system.TmuxCurrentWindowTarget = originalTmuxCurrentWindowTarget
 		system.TmuxPanesDetails = originalTmuxPanesDetails
 	}()
 
@@ -46,6 +48,9 @@ func TestProcessSubCommand_PrepareSubshell(t *testing.T) {
 	// Mock the system functions used by GetTmuxPanes to return the test pane
 	system.TmuxCurrentPaneId = func() (string, error) {
 		return "main-pane", nil
+	}
+	system.TmuxCurrentWindowTarget = func() (string, error) {
+		return "@1:1", nil
 	}
 	system.TmuxPanesDetails = func(windowTarget string) ([]system.TmuxPaneDetails, error) {
 		// Return the test pane as the only available pane
@@ -102,11 +107,13 @@ func TestProcessSubCommand_PrepareNormalShell(t *testing.T) {
 	originalTmuxSend := system.TmuxSendCommandToPane
 	originalTmuxCapture := system.TmuxCapturePane
 	originalTmuxCurrentPaneId := system.TmuxCurrentPaneId
+	originalTmuxCurrentWindowTarget := system.TmuxCurrentWindowTarget
 	originalTmuxPanesDetails := system.TmuxPanesDetails
 	defer func() {
 		system.TmuxSendCommandToPane = originalTmuxSend
 		system.TmuxCapturePane = originalTmuxCapture
 		system.TmuxCurrentPaneId = originalTmuxCurrentPaneId
+		system.TmuxCurrentWindowTarget = originalTmuxCurrentWindowTarget
 		system.TmuxPanesDetails = originalTmuxPanesDetails
 	}()
 
@@ -123,6 +130,9 @@ func TestProcessSubCommand_PrepareNormalShell(t *testing.T) {
 	// Mock the system functions used by GetTmuxPanes to return the test pane
 	system.TmuxCurrentPaneId = func() (string, error) {
 		return "main-pane", nil
+	}
+	system.TmuxCurrentWindowTarget = func() (string, error) {
+		return "@1:1", nil
 	}
 	system.TmuxPanesDetails = func(windowTarget string) ([]system.TmuxPaneDetails, error) {
 		// Return the test pane as the only available pane

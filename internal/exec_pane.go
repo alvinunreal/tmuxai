@@ -16,7 +16,7 @@ import (
 func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
 	panes, _ := m.GetTmuxPanes()
 	for _, pane := range panes {
-		if !pane.IsTmuxAiPane {
+		if !pane.IsTmuxAiPane && !m.ForcedReadPaneIDs[pane.Id] {
 			logger.Info("Found available pane: %s", pane.Id)
 			return pane
 		}
@@ -25,7 +25,62 @@ func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
 	return system.TmuxPaneDetails{}
 }
 
+func (m *Manager) resolvePaneSelection() ([]system.TmuxPaneDetails, error) {
+	windowTarget, err := system.TmuxCurrentWindowTarget()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine current tmux window: %w", err)
+	}
+
+	panes, err := system.TmuxPanesDetails(windowTarget)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tmux panes: %w", err)
+	}
+
+	available := make(map[string]system.TmuxPaneDetails, len(panes))
+	for _, pane := range panes {
+		available[pane.Id] = pane
+	}
+
+	if m.ForcedExecPaneID != "" {
+		if m.ForcedExecPaneID == m.PaneId {
+			return nil, fmt.Errorf("exec pane cannot be the TmuxAI chat pane (%s)", m.PaneId)
+		}
+		if _, ok := available[m.ForcedExecPaneID]; !ok {
+			return nil, fmt.Errorf("exec pane %s was not found in the current tmux window", m.ForcedExecPaneID)
+		}
+	}
+
+	for paneID := range m.ForcedReadPaneIDs {
+		if paneID == m.PaneId {
+			return nil, fmt.Errorf("read pane %s cannot be the TmuxAI chat pane", paneID)
+		}
+		if _, ok := available[paneID]; !ok {
+			return nil, fmt.Errorf("read pane %s was not found in the current tmux window", paneID)
+		}
+	}
+
+	return panes, nil
+}
+
 func (m *Manager) InitExecPane() error {
+	if _, err := m.resolvePaneSelection(); err != nil {
+		return err
+	}
+
+	if m.ForcedExecPaneID != "" {
+		panes, err := m.GetTmuxPanes()
+		if err != nil {
+			return err
+		}
+		for _, pane := range panes {
+			if pane.Id == m.ForcedExecPaneID {
+				m.ExecPane = &pane
+				return nil
+			}
+		}
+		return fmt.Errorf("exec pane %s could not be initialized", m.ForcedExecPaneID)
+	}
+
 	availablePane := m.GetAvailablePane()
 	if availablePane.Id == "" {
 		paneID, err := system.TmuxCreateNewPane(m.PaneId, m.Config.Tmux.ExecSplitArgs)

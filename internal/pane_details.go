@@ -27,6 +27,19 @@ func (m *Manager) GetTmuxPanes() ([]system.TmuxPaneDetails, error) {
 	return currentPanes, nil
 }
 
+func (m *Manager) shouldIncludeReadPane(pane system.TmuxPaneDetails) bool {
+	if pane.IsTmuxAiPane {
+		return false
+	}
+	if len(m.ForcedReadPaneIDs) == 0 {
+		return true
+	}
+	if pane.IsTmuxAiExecPane {
+		return true
+	}
+	return m.ForcedReadPaneIDs[pane.Id]
+}
+
 func (m *Manager) getTmuxPanesInXmlFn(config *config.Config) string {
 	currentTmuxWindow := strings.Builder{}
 	currentTmuxWindow.WriteString("<current_tmux_window_state>\n")
@@ -35,7 +48,7 @@ func (m *Manager) getTmuxPanesInXmlFn(config *config.Config) string {
 	// Filter out tmuxai_pane
 	var filteredPanes []system.TmuxPaneDetails
 	for _, p := range panes {
-		if !p.IsTmuxAiPane {
+		if m.shouldIncludeReadPane(p) {
 			filteredPanes = append(filteredPanes, p)
 		}
 	}

@@ -23,6 +23,11 @@ type AIResponse struct {
 	NoComment              bool
 }
 
+type ManagerOptions struct {
+	ForcedExecPaneID  string
+	ForcedReadPaneIDs []string
+}
+
 // Parsed only when pane is prepared
 type CommandExecHistory struct {
 	Command string
@@ -32,17 +37,19 @@ type CommandExecHistory struct {
 
 // Manager represents the TmuxAI manager agent
 type Manager struct {
-	Config           *config.Config
-	AiClient         *AiClient
-	Status           string // running, waiting, done
-	PaneId           string
-	ExecPane         *system.TmuxPaneDetails
-	Messages         []ChatMessage
-	ExecHistory      []CommandExecHistory
-	WatchMode        bool
-	OS               string
-	SessionOverrides map[string]interface{} // session-only config overrides
-	LoadedKBs        map[string]string      // Loaded knowledge bases (name -> content)
+	Config            *config.Config
+	AiClient          *AiClient
+	Status            string // running, waiting, done
+	PaneId            string
+	ExecPane          *system.TmuxPaneDetails
+	Messages          []ChatMessage
+	ExecHistory       []CommandExecHistory
+	WatchMode         bool
+	OS                string
+	SessionOverrides  map[string]interface{} // session-only config overrides
+	LoadedKBs         map[string]string      // Loaded knowledge bases (name -> content)
+	ForcedExecPaneID  string
+	ForcedReadPaneIDs map[string]bool
 
 	// Functions for mocking
 	confirmedToExec   func(command string, prompt string, edit bool) (bool, string)
@@ -50,7 +57,7 @@ type Manager struct {
 }
 
 // NewManager creates a new manager agent
-func NewManager(cfg *config.Config) (*Manager, error) {
+func NewManager(cfg *config.Config, options ManagerOptions) (*Manager, error) {
 
 	paneId, err := system.TmuxCurrentPaneId()
 	if err != nil {
@@ -76,14 +83,20 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	os := system.GetOSDetails()
 
 	manager := &Manager{
-		Config:           cfg,
-		AiClient:         aiClient,
-		PaneId:           paneId,
-		Messages:         []ChatMessage{},
-		ExecPane:         &system.TmuxPaneDetails{},
-		OS:               os,
-		SessionOverrides: make(map[string]interface{}),
-		LoadedKBs:        make(map[string]string),
+		Config:            cfg,
+		AiClient:          aiClient,
+		PaneId:            paneId,
+		Messages:          []ChatMessage{},
+		ExecPane:          &system.TmuxPaneDetails{},
+		OS:                os,
+		SessionOverrides:  make(map[string]interface{}),
+		LoadedKBs:         make(map[string]string),
+		ForcedExecPaneID:  options.ForcedExecPaneID,
+		ForcedReadPaneIDs: make(map[string]bool),
+	}
+
+	for _, paneID := range options.ForcedReadPaneIDs {
+		manager.ForcedReadPaneIDs[paneID] = true
 	}
 
 	// Set the config manager in the AI client

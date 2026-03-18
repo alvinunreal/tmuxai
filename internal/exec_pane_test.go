@@ -307,3 +307,155 @@ user@hostname:~[14:31][0]» `, nil
 	assert.Equal(t, "test successful", result.Output)
 	assert.Equal(t, "echo \"test successful\"", commandSent, "Should have sent the correct command")
 }
+
+func TestResolvePaneSelection_ForcedPaneValidation(t *testing.T) {
+	manager := &Manager{
+		PaneId:            "%1",
+		ForcedExecPaneID:  "%2",
+		ForcedReadPaneIDs: map[string]bool{"%3": true},
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalPanesDetails := system.TmuxPanesDetails
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxPanesDetails = originalPanesDetails
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) {
+		return "@1:1", nil
+	}
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{{Id: "%1"}, {Id: "%2"}, {Id: "%3"}}, nil
+	}
+
+	panes, err := manager.resolvePaneSelection()
+	assert.NoError(t, err)
+	assert.Len(t, panes, 3)
+
+	manager.ForcedExecPaneID = "%9"
+	_, err = manager.resolvePaneSelection()
+	assert.ErrorContains(t, err, "exec pane %9 was not found")
+
+	manager.ForcedExecPaneID = "%2"
+	manager.ForcedReadPaneIDs = map[string]bool{"%1": true}
+	_, err = manager.resolvePaneSelection()
+	assert.ErrorContains(t, err, "cannot be the TmuxAI chat pane")
+}
+
+func TestInitExecPane_ForcedExecPane(t *testing.T) {
+	manager := &Manager{
+		Config:            &config.Config{MaxCaptureLines: 1000},
+		PaneId:            "%1",
+		ExecPane:          &system.TmuxPaneDetails{},
+		ForcedExecPaneID:  "%3",
+		ForcedReadPaneIDs: map[string]bool{},
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalCurrentPaneID := system.TmuxCurrentPaneId
+	originalPanesDetails := system.TmuxPanesDetails
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxCurrentPaneId = originalCurrentPaneID
+		system.TmuxPanesDetails = originalPanesDetails
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) {
+		return "@1:1", nil
+	}
+	system.TmuxCurrentPaneId = func() (string, error) {
+		return "%1", nil
+	}
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{
+			{Id: "%1", CurrentCommand: "tmuxai"},
+			{Id: "%2", CurrentCommand: "zsh"},
+			{Id: "%3", CurrentCommand: "bash"},
+		}, nil
+	}
+
+	err := manager.InitExecPane()
+	assert.NoError(t, err)
+	assert.Equal(t, "%3", manager.ExecPane.Id)
+}
+
+func TestGetTmuxPanesInXML_ForcedReadPanes(t *testing.T) {
+	manager := &Manager{
+		Config:            &config.Config{MaxCaptureLines: 1000},
+		PaneId:            "%1",
+		ExecPane:          &system.TmuxPaneDetails{Id: "%4"},
+		OS:                "darwin",
+		ForcedReadPaneIDs: map[string]bool{"%2": true},
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalCurrentPaneID := system.TmuxCurrentPaneId
+	originalPanesDetails := system.TmuxPanesDetails
+	originalCapturePane := system.TmuxCapturePane
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxCurrentPaneId = originalCurrentPaneID
+		system.TmuxPanesDetails = originalPanesDetails
+		system.TmuxCapturePane = originalCapturePane
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) {
+		return "@1:1", nil
+	}
+	system.TmuxCurrentPaneId = func() (string, error) {
+		return "%1", nil
+	}
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{
+			{Id: "%1", CurrentCommand: "tmuxai"},
+			{Id: "%2", CurrentCommand: "vim"},
+			{Id: "%3", CurrentCommand: "htop"},
+			{Id: "%4", CurrentCommand: "bash"},
+		}, nil
+	}
+	system.TmuxCapturePane = func(paneId string, maxLines int) (string, error) {
+		return "captured from " + paneId, nil
+	}
+
+	xml := manager.getTmuxPanesInXmlFn(manager.Config)
+	assert.Contains(t, xml, " - Id: %2")
+	assert.Contains(t, xml, " - Id: %4")
+	assert.NotContains(t, xml, " - Id: %3")
+	assert.NotContains(t, xml, " - Id: %1")
+}
+
+func TestGetAvailablePane_SkipsForcedReadPanes(t *testing.T) {
+	manager := &Manager{
+		PaneId:            "%1",
+		ExecPane:          &system.TmuxPaneDetails{},
+		OS:                "darwin",
+		ForcedReadPaneIDs: map[string]bool{"%2": true},
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalCurrentPaneID := system.TmuxCurrentPaneId
+	originalPanesDetails := system.TmuxPanesDetails
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxCurrentPaneId = originalCurrentPaneID
+		system.TmuxPanesDetails = originalPanesDetails
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) {
+		return "@1:1", nil
+	}
+	system.TmuxCurrentPaneId = func() (string, error) {
+		return "%1", nil
+	}
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{
+			{Id: "%1", CurrentCommand: "tmuxai"},
+			{Id: "%2", CurrentCommand: "vim"},
+			{Id: "%3", CurrentCommand: "bash"},
+		}, nil
+	}
+
+	pane := manager.GetAvailablePane()
+	assert.Equal(t, "%3", pane.Id)
+}
