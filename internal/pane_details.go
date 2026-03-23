@@ -89,6 +89,19 @@ func (m *Manager) getTmuxPanesInXmlFn(config *config.Config) string {
 			currentTmuxWindow.WriteString("\n</pane_content>\n")
 		}
 
+			// Include exec pane content and command history
+		if pane.IsTmuxAiExecPane && len(m.ExecHistory) > 0 {
+			currentTmuxWindow.WriteString("<exec_pane_command_history>\n")
+			for _, entry := range m.ExecHistory {
+				fmt.Fprintf(&currentTmuxWindow, "  - Command: %s\n", entry.Command)
+				if entry.Output != "" {
+					fmt.Fprintf(&currentTmuxWindow, "    Output: %s\n", entry.Output)
+				}
+				fmt.Fprintf(&currentTmuxWindow, "    ExitCode: %d\n", entry.Code)
+			}
+			currentTmuxWindow.WriteString("</exec_pane_command_history>\n")
+		}
+
 		fmt.Fprintf(&currentTmuxWindow, "</%s>\n\n", title)
 	}
 
