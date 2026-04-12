@@ -124,25 +124,34 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Load loads the configuration from file or environment variables
-func Load() (*Config, error) {
+// Load loads the configuration from file or environment variables.
+// An optional configFilePath can be passed to load from a specific file.
+func Load(configFilePath ...string) (*Config, error) {
 	config := DefaultConfig()
 
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	viper.AddConfigPath(".")
-
-	configDir, err := GetConfigDir()
-	if err == nil {
-		viper.AddConfigPath(configDir)
+	// If a custom config file path is provided, use it directly
+	if len(configFilePath) > 0 && configFilePath[0] != "" {
+		viper.SetConfigFile(configFilePath[0])
+	} else if envPath := os.Getenv("TMUXAI_CONFIG"); envPath != "" {
+		// Support TMUXAI_CONFIG env var as well
+		viper.SetConfigFile(envPath)
 	} else {
-		viper.AddConfigPath(filepath.Join(homeDir, ".config", "tmuxai"))
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user home directory: %w", err)
+		}
+
+		viper.AddConfigPath(".")
+
+		configDir, err := GetConfigDir()
+		if err == nil {
+			viper.AddConfigPath(configDir)
+		} else {
+			viper.AddConfigPath(filepath.Join(homeDir, ".config", "tmuxai"))
+		}
 	}
 
 	// Environment variables
