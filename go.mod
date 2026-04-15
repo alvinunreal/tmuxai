@@ -7,7 +7,7 @@ require (
 	github.com/briandowns/spinner v1.23.2
 	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203
 	github.com/fatih/color v1.19.0
-	github.com/github/copilot-sdk/go v0.2.1
+	github.com/github/copilot-sdk/go v0.2.2
 	github.com/nyaosorg/go-readline-ny v1.14.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
