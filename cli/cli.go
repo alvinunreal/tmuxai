@@ -14,13 +14,14 @@ import (
 )
 
 var (
-	initMessage   string
-	taskFileFlag  string
-	kbFlag        string
-	modelFlag     string
-	execPaneFlag  string
-	readPanesFlag string
-	yoloFlag      bool
+	initMessage    string
+	taskFileFlag   string
+	kbFlag         string
+	modelFlag      string
+	execPaneFlag   string
+	readPanesFlag  string
+	yoloFlag       bool
+	configFileFlag string
 )
 
 var rootCmd = &cobra.Command{
@@ -34,7 +35,7 @@ var rootCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.Load()
+		cfg, err := config.Load(configFileFlag)
 		if err != nil {
 			logger.Error("Error loading configuration: %v", err)
 			fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
@@ -111,6 +112,7 @@ func init() {
 	rootCmd.Flags().StringVar(&readPanesFlag, "read-panes", "", "Comma-separated tmux pane IDs to use as read context (e.g., --read-panes %1,%2)")
 	rootCmd.Flags().BoolVar(&yoloFlag, "yolo", false, "Skip all confirmation prompts and execute commands directly")
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
+	rootCmd.Flags().StringVar(&configFileFlag, "config", "", "Path to config file (overrides default ~/.config/tmuxai/config.yaml, also settable via TMUXAI_CONFIG env var)")
 }
 
 func Execute() error {
