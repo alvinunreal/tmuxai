@@ -17,6 +17,7 @@ const helpMessage = `Available commands:
 - /reset: Reset the chat history
 - /prepare: Prepare the pane for TmuxAI automation
 - /watch <prompt>: Start watch mode
+- /exit-watch: Exit watch mode and return to chat mode
 - /squash: Summarize the chat history
 - /model: List available models and show current model
 - /model <name>: Switch to a different model
@@ -31,6 +32,7 @@ var commands = []string{
 	"/clear",
 	"/reset",
 	"/exit",
+	"/exit-watch",
 	"/info",
 	"/watch",
 	"/prepare",
@@ -151,6 +153,16 @@ func (m *Manager) ProcessSubCommand(command string) {
 	case prefixMatch(commandPrefix, "/exit"):
 		logger.Info("Exit command received, stopping watch mode (if active) and exiting.")
 		os.Exit(0)
+		return
+
+	case prefixMatch(commandPrefix, "/exit-watch"):
+		if !m.WatchMode {
+			m.Println("Not in watch mode.")
+			return
+		}
+		m.WatchMode = false
+		m.Status = ""
+		m.Println("Exited watch mode. Returning to chat mode.")
 		return
 
 	case prefixMatch(commandPrefix, "/squash"):
