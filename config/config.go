@@ -75,10 +75,23 @@ type PromptsConfig struct {
 	Watch                 string `mapstructure:"watch"`
 }
 
+// SkillsConfig holds skill system configuration
+type SkillsConfig struct {
+	Enabled            bool    `mapstructure:"enabled"`
+	AutoScan           bool    `mapstructure:"auto_scan"`
+	AutoMatch          bool    `mapstructure:"auto_match"`
+	AutoMatchThreshold float64 `mapstructure:"auto_match_threshold"`
+	MaxL1Chars         int     `mapstructure:"max_l1_chars"`
+	MaxLoadedChars     int     `mapstructure:"max_loaded_chars"`
+	MaxSkillChars      int     `mapstructure:"max_skill_chars"`
+	TruncateDescAt     int     `mapstructure:"truncate_desc_at"`
+}
+
 // KnowledgeBaseConfig holds knowledge base configuration
 type KnowledgeBaseConfig struct {
-	AutoLoad []string `mapstructure:"auto_load"`
-	Path     string   `mapstructure:"path"`
+	AutoLoad []string     `mapstructure:"auto_load"`
+	Path     string       `mapstructure:"path"`
+	Skills   SkillsConfig `mapstructure:"skills"`
 }
 
 // TmuxConfig holds tmux-specific behavior settings.
@@ -120,6 +133,16 @@ func DefaultConfig() *Config {
 		KnowledgeBase: KnowledgeBaseConfig{
 			AutoLoad: []string{},
 			Path:     "",
+			Skills: SkillsConfig{
+				Enabled:            false,
+				AutoScan:           true,
+				AutoMatch:          false,
+				AutoMatchThreshold: 0.1,
+				MaxL1Chars:         8000,
+				MaxLoadedChars:     32000,
+				MaxSkillChars:      20000,
+				TruncateDescAt:     200,
+			},
 		},
 	}
 }

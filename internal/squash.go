@@ -18,6 +18,11 @@ func (m *Manager) needSquash() bool {
 	totalTokens += system.EstimateTokenCount(m.chatAssistantPrompt(isPrepared).Content)
 	totalTokens += m.getTotalLoadedKBTokens()
 
+	// Count loaded skill content toward squash budget.
+	for _, content := range m.LoadedSkills {
+		totalTokens += system.EstimateTokenCount(content)
+	}
+
 	for _, msg := range m.Messages {
 		totalTokens += system.EstimateTokenCount(msg.Content)
 	}

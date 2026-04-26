@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"fmt"
 	"strings"
 	"time"
 )
@@ -44,6 +43,13 @@ DO NOT WRITE MORE TEXT AFTER THE TOOL CALLS IN A RESPONSE. You can wait until th
 func (m *Manager) chatAssistantPrompt(prepared bool) ChatMessage {
 	var builder strings.Builder
 	builder.WriteString(m.baseSystemPrompt())
+
+	// Inject L1 skill registry (after base system, before XML tool docs)
+	if m.Skills != nil && m.Skills.L1Block != "" {
+		builder.WriteString(m.Skills.L1Block)
+		builder.WriteString("\n")
+	}
+
 	builder.WriteString(`
 Your primary function is to assist users by interpreting their requests and executing appropriate actions.
 You have access to the following XML tags to control the tmux pane:
@@ -153,8 +159,17 @@ I'll wait for it to complete before proceeding.
 }
 
 func (m *Manager) watchPrompt() ChatMessage {
-	chatPrompt := fmt.Sprintf(`
-%s
+	var builder strings.Builder
+	builder.WriteString("\n")
+	builder.WriteString(m.baseSystemPrompt())
+
+	// Inject L1 skill registry (after base system, before watch-mode instructions)
+	if m.Skills != nil && m.Skills.L1Block != "" {
+		builder.WriteString(m.Skills.L1Block)
+		builder.WriteString("\n")
+	}
+
+	builder.WriteString(`
 You are current in watch mode and assisting user by watching the pane content.
 Use your common sense to decide if when it's actually valuable and needed to respond for the given watch goal.
 
@@ -165,14 +180,14 @@ Keep your response short and concise, but they should be informative and valuabl
 If no response is needed, output:
 <NoComment>1</NoComment>
 
-`, m.baseSystemPrompt())
+`)
 
 	if m.Config.Prompts.Watch != "" {
-		chatPrompt = chatPrompt + "\n\n" + m.Config.Prompts.Watch
+		builder.WriteString(m.Config.Prompts.Watch)
 	}
 
 	return ChatMessage{
-		Content:   chatPrompt,
+		Content:   builder.String(),
 		Timestamp: time.Now(),
 		FromUser:  false,
 	}

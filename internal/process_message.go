@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/alvinunreal/tmuxai/logger"
@@ -39,6 +40,24 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		Timestamp: time.Now(),
 	}
 
+	// Auto-match skills against incoming message
+	if m.Skills != nil && m.Config.KnowledgeBase.Skills.AutoMatch {
+		matches := m.Skills.AutoMatch(currentMessage.Content)
+		anyLoaded := false
+		for _, skill := range matches {
+			if err := m.Skills.Load(skill.Name); err != nil {
+				logger.Debug("auto-match load failed for '%s': %v", skill.Name, err)
+				continue
+			}
+			m.LoadedSkills[skill.Name] = skill.Body
+			logger.Info("auto-matched skill: %s", skill.Name)
+			anyLoaded = true
+		}
+		if anyLoaded {
+			m.Skills.L1Block = m.Skills.BuildL1Block()
+		}
+	}
+
 	// build current chat history
 	var history []ChatMessage
 	switch {
@@ -59,7 +78,24 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		})
 	}
 
+	// Inject loaded skill bodies (m.LoadedSkills map)
+	// Sort keys for deterministic injection order
+	skillNames := make([]string, 0, len(m.LoadedSkills))
+	for skillName := range m.LoadedSkills {
+		skillNames = append(skillNames, skillName)
+	}
+	sort.Strings(skillNames)
+	for _, skillName := range skillNames {
+		skillContent := m.LoadedSkills[skillName]
+		history = append(history, ChatMessage{
+			Content:   fmt.Sprintf("=== Skill: %s ===\n%s", skillName, skillContent),
+			FromUser:  false,
+			Timestamp: time.Now(),
+		})
+	}
+
 	history = append(history, m.Messages...)
+
 
 	sending := append(history, currentMessage)
 

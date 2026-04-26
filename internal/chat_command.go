@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,6 +25,12 @@ const helpMessage = `Available commands:
 - /kb load <name>: Load a knowledge base
 - /kb unload <name>: Unload a knowledge base
 - /kb unload --all: Unload all knowledge bases
+- /skill: List available skills
+- /skill load <name>: Load a skill
+- /skill unload <name>: Unload a skill
+- /skill unload --all: Unload all skills
+- /skill info <name>: Show skill details
+- /skill validate: Re-scan and validate skills
 - /exit: Exit the application`
 
 var commands = []string{
@@ -38,6 +45,7 @@ var commands = []string{
 	"/squash",
 	"/model",
 	"/kb",
+	"/skill",
 }
 
 // checks if the given content is a command
@@ -307,6 +315,184 @@ Watch for: ` + watchDesc
 			return
 		}
 
+	case prefixMatch(commandPrefix, "/skill"):
+		// Feature gate
+		if m.Skills == nil || !m.Config.KnowledgeBase.Skills.Enabled {
+			m.Println("Skills system is not enabled. Set knowledge_base.skills.enabled: true in config.")
+			return
+		}
+
+		// /skill or /skill list → show all skills
+		if len(parts) == 1 || (len(parts) == 2 && parts[1] == "list") {
+			names := make([]string, 0, len(m.Skills.Skills))
+			for name := range m.Skills.Skills {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+
+			if len(names) == 0 {
+				m.Println("No skills discovered.")
+				return
+			}
+
+			m.Println("Available skills:")
+			for _, name := range names {
+				s := m.Skills.Skills[name]
+				loaded := "[ ]"
+				if s.Loaded {
+					loaded = "[✓]"
+				}
+				disabled := ""
+				if s.Disabled {
+					disabled = " [manual]"
+				}
+				charInfo := ""
+				if s.Loaded {
+					charInfo = fmt.Sprintf(" (%d chars)", s.BodyLength)
+				}
+				m.Println(fmt.Sprintf("  %s %-25s%s%s", loaded, name, disabled, charInfo))
+			}
+			total := len(names)
+			loadedCount := 0
+			usedChars := 0
+			for _, s := range m.Skills.Skills {
+				if s.Loaded {
+					loadedCount++
+					usedChars += s.BodyLength
+				}
+			}
+			if loadedCount > 0 {
+				m.Println("")
+				m.Println(fmt.Sprintf("Loaded: %d/%d skill(s), %d/%d chars",
+					loadedCount, total, usedChars, m.Config.KnowledgeBase.Skills.MaxLoadedChars))
+			}
+			return
+		}
+
+		// /skill load <name>
+		if len(parts) >= 2 && parts[1] == "load" {
+			if len(parts) < 3 {
+				m.Println("Usage: /skill load <name>")
+				return
+			}
+			name := parts[2]
+			if _, ok := m.Skills.Skills[name]; !ok {
+				m.Println(fmt.Sprintf("Skill '%s' not found", name))
+				return
+			}
+			if m.Skills.Skills[name].Loaded {
+				m.Println(fmt.Sprintf("Skill '%s' is already loaded", name))
+				return
+			}
+			if err := m.Skills.Load(name); err != nil {
+				m.Println(fmt.Sprintf("Error loading skill '%s': %v", name, err))
+				return
+			}
+			m.Skills.L1Block = m.Skills.BuildL1Block()
+			m.LoadedSkills[name] = m.Skills.Skills[name].Body
+			m.Println(fmt.Sprintf("✓ Loaded skill: %s (%d chars)", name, m.Skills.Skills[name].BodyLength))
+			return
+		}
+
+		// /skill unload <name> or /skill unload --all
+		if len(parts) >= 2 && parts[1] == "unload" {
+			if len(parts) >= 3 && parts[2] == "--all" {
+				names := make([]string, 0, len(m.Skills.Skills))
+				for _, s := range m.Skills.Skills {
+					if s.Loaded {
+						names = append(names, s.Name)
+					}
+				}
+				if len(names) == 0 {
+					m.Println("No skills are currently loaded")
+					return
+				}
+				for _, name := range names {
+					m.Skills.Unload(name)
+					delete(m.LoadedSkills, name)
+				}
+				m.Skills.L1Block = m.Skills.BuildL1Block()
+				m.Println(fmt.Sprintf("✓ Unloaded all skills (%d skill(s))", len(names)))
+				return
+			}
+			if len(parts) < 3 {
+				m.Println("Usage: /skill unload <name> or /skill unload --all")
+				return
+			}
+			name := parts[2]
+			if err := m.Skills.Unload(name); err != nil {
+				m.Println(fmt.Sprintf("Error: %v", err))
+				return
+			}
+			delete(m.LoadedSkills, name)
+			m.Skills.L1Block = m.Skills.BuildL1Block()
+			m.Println(fmt.Sprintf("✓ Unloaded skill: %s", name))
+			return
+		}
+
+		// /skill info <name>
+		if len(parts) >= 2 && parts[1] == "info" {
+			if len(parts) < 3 {
+				m.Println("Usage: /skill info <name>")
+				return
+			}
+			name := parts[2]
+			skill, ok := m.Skills.Skills[name]
+			if !ok {
+				m.Println(fmt.Sprintf("Skill '%s' not found", name))
+				return
+			}
+			m.Println(fmt.Sprintf("Name:        %s", skill.Name))
+			m.Println(fmt.Sprintf("Description: %s", skill.Description))
+			m.Println(fmt.Sprintf("Disabled:    %v", skill.Disabled))
+			m.Println(fmt.Sprintf("Loaded:      %v", skill.Loaded))
+			m.Println(fmt.Sprintf("Body Size:   %d chars", skill.BodyLength))
+			m.Println(fmt.Sprintf("Directory:   %s", skill.DirPath))
+			m.Println(fmt.Sprintf("File:        %s", skill.FilePath))
+			// Show ancillary files
+			manifest := skill.BuildManifest()
+			if manifest != "" {
+				m.Println("")
+				m.Println(manifest)
+			}
+			return
+		}
+
+		// /skill validate
+		if len(parts) == 2 && parts[1] == "validate" {
+			names := make([]string, 0, len(m.Skills.Skills))
+			for name := range m.Skills.Skills {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+
+			m.Println(fmt.Sprintf("Validated %d skill(s):", len(names)))
+			for _, name := range names {
+				s := m.Skills.Skills[name]
+				status := "✓ OK"
+				if s.Name == "" {
+					status = "✗ missing name"
+				} else if s.Description == "" {
+					status = "✗ missing description"
+				}
+				m.Println(fmt.Sprintf("  %s  %s", status, name))
+			}
+
+			// Re-scan to detect new/unregistered skills
+			newReg, err := InitSkills(&m.Config.KnowledgeBase.Skills)
+			if err != nil {
+				m.Println(fmt.Sprintf("Re-scan error: %v", err))
+				return
+			}
+			if len(newReg.Skills) != len(m.Skills.Skills) {
+				m.Println(fmt.Sprintf("\nNote: %d skill(s) discovered during re-scan (currently %d)", len(newReg.Skills), len(m.Skills.Skills)))
+			}
+			return
+		}
+
+		m.Println("Usage: /skill [list|load <name>|unload <name>|unload --all|info <name>|validate]")
+		return
+
 	default:
 		m.Println(fmt.Sprintf("Unknown command: %s. Type '/help' to see available commands.", command))
 		return
@@ -378,6 +564,11 @@ func (m *Manager) formatInfo() {
 	if len(m.LoadedKBs) > 0 {
 		kbTokens := m.getTotalLoadedKBTokens()
 		formatLine("Loaded KBs", fmt.Sprintf("%d (%d tokens)", len(m.LoadedKBs), kbTokens))
+	}
+
+	// Display loaded skills information
+	if m.Skills != nil && len(m.LoadedSkills) > 0 {
+		formatLine("Loaded Skills", fmt.Sprintf("%d (%d chars)", len(m.LoadedSkills), m.Skills.UsedChars))
 	}
 
 	// Display tmux panes section
