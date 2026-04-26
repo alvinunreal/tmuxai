@@ -65,11 +65,38 @@ var skillNameRegex = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // ParseSkillMd splits a SKILL.md byte slice into YAML frontmatter and body.
 //
 // Rules (§14.2):
-//   - Leading "---" (LF or CRLF) signals frontmatter.
-//   - SplitN on "---" yields at most 3 parts: ["", "frontmatter", "body"].
-//   - Body may contain further "---" horizontal rules (handled safely by SplitN).
+//   - Opening/closing "---" lines signal frontmatter (matched line-by-line via splitFrontmatter).
+//   - Standalone "---" lines (trimmed) serve as fences; embedded "---" in YAML values is preserved.
+//   - Body may contain further "---" horizontal rules (not mistaken for fences unless alone on a line).
 //   - No frontmatter → nil meta, entire content as body.
 //   - Malformed YAML → error (caller should reject the skill).
+func splitFrontmatter(content string) (frontmatter, body string, ok bool) {
+	lines := strings.Split(content, "\n")
+	// Find opening ---
+	openIdx := -1
+	for i, l := range lines {
+		if strings.TrimSpace(l) == "---" {
+			openIdx = i
+			break
+		}
+	}
+	if openIdx == -1 {
+		return "", "", false
+	}
+	// Find closing ---
+	closeIdx := -1
+	for i := openIdx + 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			closeIdx = i
+			break
+		}
+	}
+	if closeIdx == -1 {
+		return "", "", false
+	}
+	return strings.Join(lines[openIdx+1:closeIdx], "\n"), strings.Join(lines[closeIdx+1:], "\n"), true
+}
+
 func ParseSkillMd(raw []byte) (meta map[string]any, body string, err error) {
 	content := string(raw)
 
@@ -77,13 +104,13 @@ func ParseSkillMd(raw []byte) (meta map[string]any, body string, err error) {
 		return nil, content, nil
 	}
 
-	parts := strings.SplitN(content, "---", 3)
-	if len(parts) < 3 {
+	fmStr, bodyStr, ok := splitFrontmatter(content)
+	if !ok {
 		return nil, content, nil
 	}
 
-	fmStr := strings.TrimSpace(parts[1])
-	bodyStr := strings.TrimSpace(parts[2])
+	fmStr = strings.TrimSpace(fmStr)
+	bodyStr = strings.TrimSpace(bodyStr)
 
 	if fmStr == "" {
 		return nil, bodyStr, nil
@@ -260,7 +287,7 @@ func (r *SkillRegistry) BuildL1Block() string {
 
 		line := fmt.Sprintf(
 			"  <skill loaded=\"%v\">\n    <name>%s%s</name>\n    <description>%s</description>\n    <location>%s</location>\n  </skill>\n",
-			s.Loaded, s.Name, marker, html.EscapeString(desc), s.FilePath)
+			s.Loaded, s.Name, marker, html.EscapeString(desc), html.EscapeString(s.FilePath))
 
 		if buf.Len()+len(line) > maxChars {
 			buf.WriteString("  <!-- remaining skills omitted due to L1 budget -->\n")

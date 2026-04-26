@@ -45,6 +45,13 @@ func TestParseSKILL_FrontmatterValid(t *testing.T) {
 			wantDisable: false,
 		},
 		{
+			name:        "YAML value containing dashes",
+			input:       "---\nname: dash-in-value\ndescription: \"Setup --- and teardown\"\n---\nBody content\n",
+			wantName:    "dash-in-value",
+			wantDesc:    "Setup --- and teardown",
+			wantDisable: false,
+		},
+		{
 			name:        "multi-line description",
 			input:       "---\nname: multi-desc\ndescription: |\n  Line one\n  Line two\n---\nBody content\n",
 			wantName:    "multi-desc",

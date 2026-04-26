@@ -547,7 +547,7 @@ knowledge_base:
   skills:
     enabled: true
     auto_match: true
-    threshold: 0.1  # Match sensitivity (0.0–1.0, lower = more aggressive)
+    auto_match_threshold: 0.1  # Match sensitivity (0.0–1.0, lower = more aggressive)
 ```
 
 With auto-match enabled, TmuxAI analyzes incoming messages and loads relevant skills based on term frequency and description relevance. Skills marked `[manual]` (via `disable-model-invocation: true`) require explicit loading.
@@ -569,6 +569,7 @@ Use `/info` to monitor context usage with skills loaded.
 - The L1 discovery block tells the model which skills exist and their load status
 - Body content is only loaded on demand (lazy loading)
 - A 1MB cap per SKILL.md prevents runaway memory usage
+- SKILL.md frontmatter fences (`---`) are matched line-by-line; standalone `---` lines in multi-line YAML values will be misinterpreted as the closing fence
 
 ## Model Configuration
 

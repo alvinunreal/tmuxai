@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/alvinunreal/tmuxai/logger"
@@ -78,7 +79,14 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 	}
 
 	// Inject loaded skill bodies (m.LoadedSkills map)
-	for skillName, skillContent := range m.LoadedSkills {
+	// Sort keys for deterministic injection order
+	skillNames := make([]string, 0, len(m.LoadedSkills))
+	for skillName := range m.LoadedSkills {
+		skillNames = append(skillNames, skillName)
+	}
+	sort.Strings(skillNames)
+	for _, skillName := range skillNames {
+		skillContent := m.LoadedSkills[skillName]
 		history = append(history, ChatMessage{
 			Content:   fmt.Sprintf("=== Skill: %s ===\n%s", skillName, skillContent),
 			FromUser:  false,
