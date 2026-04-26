@@ -48,6 +48,8 @@ type Manager struct {
 	OS                string
 	SessionOverrides  map[string]interface{} // session-only config overrides
 	LoadedKBs         map[string]string      // Loaded knowledge bases (name -> content)
+	LoadedSkills      map[string]string      // Loaded skill bodies + manifests (name -> content)
+	Skills            *SkillRegistry         // Skill registry (discovery, L1, budget)
 	ForcedExecPaneID  string
 	ForcedReadPaneIDs map[string]bool
 
@@ -91,6 +93,7 @@ func NewManager(cfg *config.Config, options ManagerOptions) (*Manager, error) {
 		OS:                os,
 		SessionOverrides:  make(map[string]interface{}),
 		LoadedKBs:         make(map[string]string),
+		LoadedSkills:      make(map[string]string),
 		ForcedExecPaneID:  options.ForcedExecPaneID,
 		ForcedReadPaneIDs: make(map[string]bool),
 	}
@@ -111,6 +114,16 @@ func NewManager(cfg *config.Config, options ManagerOptions) (*Manager, error) {
 
 	// Auto-load knowledge bases from config
 	manager.autoLoadKBs()
+
+	// Initialize skill registry if enabled
+	if manager.Config.KnowledgeBase.Skills.Enabled {
+		reg, err := InitSkills(&manager.Config.KnowledgeBase.Skills)
+		if err != nil {
+			logger.Info("Skill initialization failed: %v", err)
+		} else {
+			manager.Skills = reg
+		}
+	}
 
 	return manager, nil
 }

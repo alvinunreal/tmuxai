@@ -288,6 +288,44 @@ func (c *CLIInterface) newCompleter() *completion.CmdCompletionOrList2 {
 					return availableModels, availableModels
 				}
 			}
+
+			// Handle /skill subcommands
+			if len(field) > 0 && field[0] == "/skill" {
+				if len(field) == 1 || (len(field) == 2 && !strings.HasSuffix(field[1], " ")) {
+					return []string{"list ", "load ", "unload ", "info ", "validate "}, []string{"list ", "load ", "unload ", "info ", "validate "}
+				} else if len(field) >= 2 && field[1] == "load" {
+					// Complete with skill names
+					if c.manager.Skills != nil {
+						var skillNames []string
+						for name := range c.manager.Skills.Skills {
+							skillNames = append(skillNames, name)
+						}
+						return skillNames, skillNames
+					}
+				} else if len(field) >= 2 && field[1] == "info" {
+					// Complete with skill names
+					if c.manager.Skills != nil {
+						var skillNames []string
+						for name := range c.manager.Skills.Skills {
+							skillNames = append(skillNames, name)
+						}
+						return skillNames, skillNames
+					}
+				} else if len(field) >= 2 && field[1] == "unload" {
+					// Complete with loaded skill names and --all
+					var unloadTargets []string
+					unloadTargets = append(unloadTargets, "--all ")
+					if c.manager.Skills != nil {
+						for name, skill := range c.manager.Skills.Skills {
+							if skill.Loaded {
+								unloadTargets = append(unloadTargets, name+" ")
+							}
+						}
+					}
+					return unloadTargets, unloadTargets
+				}
+			}
+
 			return nil, nil
 		},
 	}
