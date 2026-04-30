@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/alvinunreal/tmuxai/config"
+	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 func TestAzureOpenAIEndpoint(t *testing.T) {
@@ -272,6 +273,39 @@ func TestDetermineAPITypeGemini(t *testing.T) {
 	}
 }
 
+func TestDetermineAPITypeBedrock(t *testing.T) {
+	cfg := &config.Config{
+		DefaultModel: "claude-sonnet-bedrock",
+		Models: map[string]config.ModelConfig{
+			"claude-sonnet-bedrock": {
+				Provider: "bedrock",
+				Model:    "anthropic.claude-3-5-sonnet-20241022-v2:0",
+				Region:   "us-east-1",
+			},
+		},
+	}
+
+	manager := &Manager{
+		Config:           cfg,
+		SessionOverrides: make(map[string]interface{}),
+		LoadedKBs:        make(map[string]string),
+	}
+
+	client := NewAiClient(cfg)
+	client.SetConfigManager(manager)
+
+	apiType := client.determineAPIType("anthropic.claude-3-5-sonnet-20241022-v2:0")
+	if apiType != "bedrock" {
+		t.Errorf("expected 'bedrock', got %s", apiType)
+	}
+
+	// Bedrock is a keyless provider (creds come from AWS chain); confirm the
+	// manager accepts it as a valid configuration.
+	if !manager.hasValidAIConfiguration() {
+		t.Errorf("bedrock provider should be considered a valid AI configuration")
+	}
+}
+
 func TestBuildCopilotPrompt(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -349,6 +383,56 @@ func TestBuildCopilotPrompt(t *testing.T) {
 			}
 			if systemInstruct != tt.expectedSystemInstruct {
 				t.Errorf("systemInstruction mismatch\n  got:  %q\n  want: %q", systemInstruct, tt.expectedSystemInstruct)
+			}
+		})
+	}
+}
+
+func TestBuildBedrockInferenceConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		cfg         config.ModelConfig
+		wantMax     int32
+		wantTempSet bool
+		wantTemp    float32
+	}{
+		{
+			name:    "defaults applied when unset",
+			cfg:     config.ModelConfig{Provider: "bedrock"},
+			wantMax: defaultBedrockMaxTokens,
+		},
+		{
+			name:    "user-supplied max_tokens honored",
+			cfg:     config.ModelConfig{Provider: "bedrock", MaxTokens: 1024},
+			wantMax: 1024,
+		},
+		{
+			name:        "temperature passed through when >0",
+			cfg:         config.ModelConfig{Provider: "bedrock", Temperature: 0.5},
+			wantMax:     defaultBedrockMaxTokens,
+			wantTempSet: true,
+			wantTemp:    0.5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildBedrockInferenceConfig(tt.cfg)
+			if got.MaxTokens == nil {
+				t.Fatalf("expected MaxTokens to be set")
+			}
+			if aws.ToInt32(got.MaxTokens) != tt.wantMax {
+				t.Errorf("MaxTokens: got %d, want %d", aws.ToInt32(got.MaxTokens), tt.wantMax)
+			}
+			if tt.wantTempSet {
+				if got.Temperature == nil {
+					t.Fatalf("expected Temperature to be set")
+				}
+				if aws.ToFloat32(got.Temperature) != tt.wantTemp {
+					t.Errorf("Temperature: got %v, want %v", aws.ToFloat32(got.Temperature), tt.wantTemp)
+				}
+			} else if got.Temperature != nil {
+				t.Errorf("Temperature should be unset, got %v", aws.ToFloat32(got.Temperature))
 			}
 		})
 	}

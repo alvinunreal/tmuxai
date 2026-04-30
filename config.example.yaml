@@ -72,6 +72,19 @@ models:
     model: "gemini-2.5-flash"
     api_key: "${GOOGLE_API_KEY}"
 
+  # AWS Bedrock (uses the Converse API — works across all Bedrock-hosted models:
+  # Anthropic, Meta, Mistral, Amazon Nova/Titan, Cohere, AI21, etc.)
+  # Credentials flow through the standard AWS chain: env vars, shared config
+  # (~/.aws/credentials), IAM role, SSO, etc. No api_key is required.
+  bedrock-claude:
+    provider: "bedrock"
+    model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    region: "us-east-1"          # optional if AWS_REGION is set
+    aws_profile: "default"       # optional — named profile from ~/.aws/credentials
+    max_tokens: 4096             # optional — default is 4096 (several model families
+                                 # default to a small limit and will silently truncate)
+    temperature: 0.0             # optional — model default is used when unset
+
   # GitHub Copilot (uses the official copilot-sdk/go — requires the `copilot` CLI in PATH)
   # Install CLI: https://docs.github.com/en/copilot/github-copilot-in-the-cli
   # Get token:   gh auth token

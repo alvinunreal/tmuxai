@@ -65,6 +65,21 @@ type ModelConfig struct {
 	APIBase        string `mapstructure:"api_base"`
 	APIVersion     string `mapstructure:"api_version"`
 	DeploymentName string `mapstructure:"deployment_name"`
+
+	// AWS Bedrock-specific fields
+	// Region is the AWS region (e.g. "us-east-1"). If empty, falls back to
+	// AWS_REGION / AWS_DEFAULT_REGION from the environment.
+	// AWSProfile optionally selects a named profile from ~/.aws/credentials.
+	// Credentials are otherwise resolved via the default AWS credential chain
+	// (environment variables, shared config, IAM roles, SSO, etc.).
+	Region     string `mapstructure:"region"`
+	AWSProfile string `mapstructure:"aws_profile"`
+
+	// Inference parameters (used by Bedrock today; other providers may adopt
+	// them later). Zero values mean "unset"; the provider layer supplies a
+	// safe default where one is required.
+	MaxTokens   int32   `mapstructure:"max_tokens"`
+	Temperature float32 `mapstructure:"temperature"`
 }
 
 // PromptsConfig holds customizable prompt templates

@@ -498,6 +498,33 @@ models:
 - `azure` - Azure Chat Completions API
 - `gemini` - Google Gemini API (direct access via go-genai SDK)
 - `github-copilot` - GitHub Copilot (via official copilot-sdk/go — see setup below)
+- `bedrock` - AWS Bedrock (via the Converse API — supports Anthropic, Meta, Mistral, Amazon Nova/Titan, Cohere, AI21, etc.)
+
+### AWS Bedrock Setup
+
+TmuxAI talks to AWS Bedrock via the [Converse API](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html), which provides a unified interface across all Bedrock-hosted model families. No `api_key` is required — credentials flow through the standard AWS credential chain (environment variables, `~/.aws/credentials`, IAM role, SSO, etc.).
+
+Before first use:
+
+1. Request access to the models you want in the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/) (Model access → Enable models).
+2. Ensure your AWS credentials are configured (`aws configure`, `aws sso login`, an IAM role, or `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars).
+3. Add a model config:
+
+```yaml
+models:
+  claude-bedrock:
+    provider: "bedrock"
+    model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    region: "us-east-1"      # optional if AWS_REGION is set
+    aws_profile: "default"   # optional — named profile from ~/.aws/credentials
+
+  nova-pro:
+    provider: "bedrock"
+    model: "amazon.nova-pro-v1:0"
+    region: "us-east-1"
+```
+
+The `model` field must be a Bedrock model ID (or inference-profile ARN). See the [Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) for a full list.
 
 ### GitHub Copilot Setup
 

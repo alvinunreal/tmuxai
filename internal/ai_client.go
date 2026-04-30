@@ -17,6 +17,8 @@ import (
 	"github.com/alvinunreal/tmuxai/config"
 	"github.com/alvinunreal/tmuxai/logger"
 	"google.golang.org/genai"
+
+	bedrockruntime "github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 )
 
 // AiClient represents an AI client for interacting with OpenAI-compatible APIs including Azure OpenAI
@@ -31,6 +33,11 @@ type AiClient struct {
 	copilotClient *copilot.Client
 	copilotToken  string
 	copilotMu     sync.Mutex
+
+	// AWS Bedrock runtime client
+	bedrockClient *bedrockruntime.Client
+	bedrockKey    string // cache key: region|profile
+	bedrockMu     sync.Mutex
 }
 
 // Message represents a chat message
@@ -261,6 +268,8 @@ func (c *AiClient) determineAPIType(model string) string {
 				return "gemini"
 			case "github-copilot":
 				return "github-copilot"
+			case "bedrock":
+				return "bedrock"
 			default:
 				return "openrouter"
 			}
@@ -325,6 +334,14 @@ func (c *AiClient) GetResponseFromChatMessages(ctx context.Context, chatMessages
 		response, err = c.CopilotGenerateContent(ctx, aiMessages, model)
 	case "gemini":
 		response, err = c.GeminiGenerateContent(ctx, aiMessages, model)
+	case "bedrock":
+		var bedrockCfg config.ModelConfig
+		if c.configMgr != nil {
+			if mc, exists := c.configMgr.GetCurrentModelConfig(); exists && mc.Provider == "bedrock" {
+				bedrockCfg = mc
+			}
+		}
+		response, err = c.BedrockConverse(ctx, aiMessages, model, bedrockCfg)
 	default:
 		return "", fmt.Errorf("unknown API type: %s", apiType)
 	}
