@@ -33,10 +33,10 @@ type Skill struct {
 
 // SkillRegistry manages discovery, storage, and lazy loading of skills.
 type SkillRegistry struct {
-	Skills    map[string]*Skill       // keyed by name
-	Config    *config.SkillsConfig    // pointer to config for budget enforcement
-	L1Block   string                  // pre-rendered <available_skills> XML block
-	UsedChars int                     // aggregate chars of currently loaded skills
+	Skills    map[string]*Skill    // keyed by name
+	Config    *config.SkillsConfig // pointer to config for budget enforcement
+	L1Block   string               // pre-rendered <available_skills> XML block
+	UsedChars int                  // aggregate chars of currently loaded skills
 }
 
 // ============================================================================
@@ -49,10 +49,10 @@ const (
 )
 
 const (
-	DefaultMaxL1Chars    = 8000
-	DefaultMaxLoadedChars = 32000
-	DefaultMaxSkillChars  = 20000
-	DefaultTruncateDescAt = 200
+	DefaultMaxL1Chars      = 8000
+	DefaultMaxLoadedChars  = 32000
+	DefaultMaxSkillChars   = 20000
+	DefaultTruncateDescAt  = 200
 	DefaultAutoMatchThresh = 0.1
 )
 
