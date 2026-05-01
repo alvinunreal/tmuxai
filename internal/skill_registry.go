@@ -162,6 +162,11 @@ func InitSkills(sc *config.SkillsConfig) (*SkillRegistry, error) {
 		Skills: make(map[string]*Skill),
 		Config: sc,
 	}
+	reg.L1Block = reg.BuildL1Block()
+
+	if sc != nil && !sc.AutoScan {
+		return reg, nil
+	}
 
 	skillsDir := resolveSkillsDir()
 	entries, err := os.ReadDir(skillsDir)
@@ -383,9 +388,10 @@ func (r *SkillRegistry) Load(name string) error {
 
 	bodyChars := len(content)
 
-	// Per-skill cap.
+	// Per-skill cap. A configured value of 0 means unlimited; the 1MB
+	// SKILL.md hard cap above still applies.
 	maxSkill := r.budgetMaxSkill()
-	if bodyChars > maxSkill {
+	if maxSkill > 0 && bodyChars > maxSkill {
 		content = content[:maxSkill] + "\n\n...[skill body truncated]"
 		bodyChars = maxSkill
 	}
@@ -551,7 +557,13 @@ func (r *SkillRegistry) budgetMaxLoaded() int {
 }
 
 func (r *SkillRegistry) budgetMaxSkill() int {
-	if r.Config == nil || r.Config.MaxSkillChars <= 0 {
+	if r.Config == nil {
+		return DefaultMaxSkillChars
+	}
+	if r.Config.MaxSkillChars == 0 {
+		return 0
+	}
+	if r.Config.MaxSkillChars < 0 {
 		return DefaultMaxSkillChars
 	}
 	return r.Config.MaxSkillChars

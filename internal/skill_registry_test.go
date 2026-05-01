@@ -380,6 +380,49 @@ func TestLoadBudgetEnforcement(t *testing.T) {
 	}
 }
 
+func TestLoadMaxSkillCharsZeroMeansUnlimited(t *testing.T) {
+	tempDir := t.TempDir()
+	skillDir := filepath.Join(tempDir, "unlimited-skill")
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	const bodyLen = DefaultMaxSkillChars + 500
+	bodyContent := strings.Repeat("x", bodyLen)
+	skillFile := filepath.Join(skillDir, "SKILL.md")
+	skillContent := "---\nname: unlimited-skill\ndescription: Per-skill cap disabled\n---\n" + bodyContent
+	if err := os.WriteFile(skillFile, []byte(skillContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := &SkillRegistry{
+		Skills: map[string]*Skill{
+			"unlimited-skill": {
+				Name:        "unlimited-skill",
+				Description: "Per-skill cap disabled",
+				DirPath:     skillDir,
+				FilePath:    skillFile,
+			},
+		},
+		Config: &config.SkillsConfig{
+			MaxLoadedChars: bodyLen + 1000,
+			MaxSkillChars:  0,
+		},
+	}
+
+	if err := reg.Load("unlimited-skill"); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	loaded := reg.Skills["unlimited-skill"]
+	if loaded.BodyLength != bodyLen {
+		t.Fatalf("BodyLength = %d, want %d", loaded.BodyLength, bodyLen)
+	}
+	if strings.Contains(loaded.Body, "...[skill body truncated]") {
+		t.Fatal("max_skill_chars: 0 should not truncate skill body")
+	}
+}
+
 // =====================================================================
 // TestLoadIdempotent
 // =====================================================================
@@ -765,6 +808,7 @@ func TestValidateDiscoverAndCapErrors(t *testing.T) {
 			t.Cleanup(func() { os.Setenv("HOME", origHome) })
 
 			sc := &config.SkillsConfig{
+				AutoScan:           true,
 				MaxL1Chars:         8000,
 				MaxLoadedChars:     32000,
 				MaxSkillChars:      20000,
@@ -810,6 +854,37 @@ func TestValidateDiscoverAndCapErrors(t *testing.T) {
 				t.Error("L1Block should not be empty")
 			}
 		})
+	}
+}
+
+func TestInitSkillsHonorsAutoScanFalse(t *testing.T) {
+	baseTemp := t.TempDir()
+	configDir := filepath.Join(baseTemp, ".config", "tmuxai")
+	skillsDir := filepath.Join(configDir, "skills")
+	skillDir := filepath.Join(skillsDir, "valid-skill")
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	skillContent := "---\nname: valid-skill\ndescription: A valid skill that should not be scanned\n---\nBody\n"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", baseTemp)
+	t.Cleanup(func() { os.Setenv("HOME", origHome) })
+
+	reg, err := InitSkills(&config.SkillsConfig{
+		AutoScan:       false,
+		MaxL1Chars:     8000,
+		MaxLoadedChars: 32000,
+		MaxSkillChars:  20000,
+	})
+	if err != nil {
+		t.Fatalf("InitSkills returned error: %v", err)
+	}
+	if len(reg.Skills) != 0 {
+		t.Fatalf("AutoScan false discovered skills: %v", skillNames(reg))
 	}
 }
 

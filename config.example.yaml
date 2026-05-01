@@ -107,7 +107,7 @@ knowledge_base:
   skills:
     enabled: false  # Disabled by default; set true to enable
     auto_scan: true
-    auto_match: true
+    auto_match: false
     auto_match_threshold: 0.1  # Match sensitivity (0.0–1.0, lower = more aggressive)
     max_l1_chars: 8000        # L1 discovery block char budget
     max_loaded_chars: 32000   # Total loaded skill bodies char budget
