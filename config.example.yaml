@@ -111,7 +111,7 @@ knowledge_base:
     auto_match_threshold: 0.1  # Match sensitivity (0.0–1.0, lower = more aggressive)
     max_l1_chars: 8000        # L1 discovery block char budget
     max_loaded_chars: 32000   # Total loaded skill bodies char budget
-    max_skill_chars: 0        # Per-skill char cap (0 = unlimited, 1MB hard limit)
+    max_skill_chars: 20000    # Per-skill char cap (set 0 for unlimited; 1MB hard limit)
     truncate_desc_at: 200     # Truncate descriptions in L1 block
 
 # Prompts customization, see prompts.go for more details

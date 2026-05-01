@@ -33,10 +33,11 @@ type Skill struct {
 
 // SkillRegistry manages discovery, storage, and lazy loading of skills.
 type SkillRegistry struct {
-	Skills    map[string]*Skill    // keyed by name
-	Config    *config.SkillsConfig // pointer to config for budget enforcement
-	L1Block   string               // pre-rendered <available_skills> XML block
-	UsedChars int                  // aggregate chars of currently loaded skills
+	Skills            map[string]*Skill    // keyed by name
+	Config            *config.SkillsConfig // pointer to config for budget enforcement
+	L1Block           string               // pre-rendered <available_skills> XML block
+	UsedChars         int                  // aggregate chars of currently loaded skills
+	DiscoveryWarnings []string             // non-fatal validation warnings from discovery
 }
 
 // ============================================================================
@@ -159,8 +160,9 @@ func validateSkillName(name string) bool {
 // directory that GetKBDir() uses.
 func InitSkills(sc *config.SkillsConfig) (*SkillRegistry, error) {
 	reg := &SkillRegistry{
-		Skills: make(map[string]*Skill),
-		Config: sc,
+		Skills:            make(map[string]*Skill),
+		Config:            sc,
+		DiscoveryWarnings: []string{},
 	}
 	reg.L1Block = reg.BuildL1Block()
 
@@ -185,36 +187,48 @@ func InitSkills(sc *config.SkillsConfig) (*SkillRegistry, error) {
 		dirPath := filepath.Join(skillsDir, entry.Name())
 		skillFile := findSkillMd(dirPath)
 		if skillFile == "" {
+			reg.addDiscoveryWarning(entry.Name(), "missing SKILL.md")
 			continue
 		}
 
 		fi, statErr := os.Stat(skillFile)
 		if statErr != nil {
+			reg.addDiscoveryWarning(entry.Name(), fmt.Sprintf("cannot stat SKILL.md: %v", statErr))
 			continue
 		}
 		if fi.Size() > 1<<20 {
+			reg.addDiscoveryWarning(entry.Name(), "SKILL.md exceeds 1MB cap")
 			logger.Info("SKILL.md %s exceeds 1MB cap, skipping", skillFile)
 			continue
 		}
 
 		raw, err := os.ReadFile(skillFile)
 		if err != nil {
+			reg.addDiscoveryWarning(entry.Name(), fmt.Sprintf("cannot read SKILL.md: %v", err))
 			continue
 		}
 
 		meta, body, err := ParseSkillMd(raw)
 		if err != nil {
+			reg.addDiscoveryWarning(entry.Name(), fmt.Sprintf("invalid frontmatter: %v", err))
 			continue
 		}
 
 		name, description, disabled := extractSkillMeta(meta)
-		if name == "" || description == "" {
+		if name == "" {
+			reg.addDiscoveryWarning(entry.Name(), "missing required frontmatter field: name")
+			continue
+		}
+		if description == "" {
+			reg.addDiscoveryWarning(entry.Name(), "missing required frontmatter field: description")
 			continue
 		}
 		if !validateSkillName(name) {
+			reg.addDiscoveryWarning(entry.Name(), fmt.Sprintf("invalid skill name %q", name))
 			continue
 		}
 		if name != entry.Name() {
+			reg.addDiscoveryWarning(entry.Name(), fmt.Sprintf("frontmatter name %q does not match directory name", name))
 			continue
 		}
 
@@ -232,6 +246,10 @@ func InitSkills(sc *config.SkillsConfig) (*SkillRegistry, error) {
 
 	reg.L1Block = reg.BuildL1Block()
 	return reg, nil
+}
+
+func (r *SkillRegistry) addDiscoveryWarning(skillDir, reason string) {
+	r.DiscoveryWarnings = append(r.DiscoveryWarnings, fmt.Sprintf("%s: %s", skillDir, reason))
 }
 
 // resolveSkillsDir locates the skills directory at ~/.config/tmuxai/skills/

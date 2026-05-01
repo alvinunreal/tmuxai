@@ -460,32 +460,33 @@ Watch for: ` + watchDesc
 
 		// /skill validate
 		if len(parts) == 2 && parts[1] == "validate" {
-			names := make([]string, 0, len(m.Skills.Skills))
-			for name := range m.Skills.Skills {
+			// Re-scan even when startup auto_scan is disabled so validate reports
+			// all valid and invalid on-disk skills.
+			validateConfig := m.Config.KnowledgeBase.Skills
+			validateConfig.AutoScan = true
+			newReg, err := InitSkills(&validateConfig)
+			if err != nil {
+				m.Println(fmt.Sprintf("Validation error: %v", err))
+				return
+			}
+
+			names := make([]string, 0, len(newReg.Skills))
+			for name := range newReg.Skills {
 				names = append(names, name)
 			}
 			sort.Strings(names)
 
 			m.Println(fmt.Sprintf("Validated %d skill(s):", len(names)))
 			for _, name := range names {
-				s := m.Skills.Skills[name]
-				status := "✓ OK"
-				if s.Name == "" {
-					status = "✗ missing name"
-				} else if s.Description == "" {
-					status = "✗ missing description"
-				}
-				m.Println(fmt.Sprintf("  %s  %s", status, name))
+				m.Println(fmt.Sprintf("  ✓ OK  %s", name))
 			}
 
-			// Re-scan to detect new/unregistered skills
-			newReg, err := InitSkills(&m.Config.KnowledgeBase.Skills)
-			if err != nil {
-				m.Println(fmt.Sprintf("Re-scan error: %v", err))
-				return
-			}
-			if len(newReg.Skills) != len(m.Skills.Skills) {
-				m.Println(fmt.Sprintf("\nNote: %d skill(s) discovered during re-scan (currently %d)", len(newReg.Skills), len(m.Skills.Skills)))
+			if len(newReg.DiscoveryWarnings) > 0 {
+				m.Println("")
+				m.Println(fmt.Sprintf("Warnings (%d):", len(newReg.DiscoveryWarnings)))
+				for _, warning := range newReg.DiscoveryWarnings {
+					m.Println(fmt.Sprintf("  ✗ %s", warning))
+				}
 			}
 			return
 		}

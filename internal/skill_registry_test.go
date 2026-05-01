@@ -836,6 +836,22 @@ func TestValidateDiscoverAndCapErrors(t *testing.T) {
 				}
 			}
 
+			if len(reg.DiscoveryWarnings) != len(tc.wantNotFound) {
+				t.Errorf("DiscoveryWarnings length = %d, want %d: %v", len(reg.DiscoveryWarnings), len(tc.wantNotFound), reg.DiscoveryWarnings)
+			}
+			for _, notWant := range tc.wantNotFound {
+				foundWarning := false
+				for _, warning := range reg.DiscoveryWarnings {
+					if strings.HasPrefix(warning, notWant+":") {
+						foundWarning = true
+						break
+					}
+				}
+				if !foundWarning {
+					t.Errorf("expected discovery warning for %q, got %v", notWant, reg.DiscoveryWarnings)
+				}
+			}
+
 			// Valid skill attributes
 			if s, ok := reg.Skills["valid-skill"]; ok {
 				if s.Description != "A perfectly valid skill for testing" {
@@ -885,6 +901,9 @@ func TestInitSkillsHonorsAutoScanFalse(t *testing.T) {
 	}
 	if len(reg.Skills) != 0 {
 		t.Fatalf("AutoScan false discovered skills: %v", skillNames(reg))
+	}
+	if len(reg.DiscoveryWarnings) != 0 {
+		t.Fatalf("AutoScan false should not validate skills, got warnings: %v", reg.DiscoveryWarnings)
 	}
 }
 

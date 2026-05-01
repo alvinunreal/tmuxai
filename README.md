@@ -487,7 +487,7 @@ EOF
 | `description` | Yes | Brief description shown in L1 discovery block and `/skill list` |
 | `disable-model-invocation` | No | If `true`, disables auto-match — skill must be loaded manually |
 
-Optional ancillary files (`.sh`, `.txt`, `.py`, `.json`) can be placed alongside `SKILL.md` and are automatically included when the skill is loaded.
+Optional ancillary files (`.sh`, `.txt`, `.py`, `.json`) can be placed alongside `SKILL.md`. When a skill is loaded, TmuxAI includes a manifest listing those helper file paths so the model can request them if needed.
 
 ### Using Skills
 
@@ -499,7 +499,7 @@ Available skills:
   [ ] git-hooks                [manual]
   [ ] terraform-best-practices
 
-# Load a skill (lazy-load body + ancillary files)
+# Load a skill (lazy-load body + ancillary file manifest)
 TmuxAI » /skill load git-hooks
 ✓ Loaded skill: git-hooks (1,240 chars)
 
@@ -560,7 +560,7 @@ Skills share context budget with your conversation. Defaults:
 |---------|---------|-------------|
 | `max_l1_chars` | 8,000 | Maximum chars for the L1 discovery block |
 | `max_loaded_chars` | 32,000 | Maximum chars across all loaded skill bodies |
-| `max_skill_chars` | 20,000 | Maximum chars per individual skill body |
+| `max_skill_chars` | 20,000 | Maximum chars per individual skill body; set to `0` to disable the per-skill cap |
 
 Use `/info` to monitor context usage with skills loaded.
 
