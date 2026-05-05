@@ -819,17 +819,20 @@ func (m *Manager) handleWebFetch(rawURL string) {
 	// Use unified fallback chain
 	resp := FetchWithFallbacks(ctx, rawURL, cfg.MaxChars, cfg.TimeoutSeconds, cfg.AllowedRedirects)
 
+	// Guard: skip injecting empty/minimal content into LLM context.
+	// Symmetric with auto-fetch path (websearch -f N).
+	// Threshold 150 matches auto-fetch; needsFallback uses 80 for a different purpose.
+	charCount := utf8.RuneCountInString(resp.Content)
+	if resp.Source == "" && charCount < 150 {
+		m.Println(fmt.Sprintf("⚠ %s — all fetch methods returned minimal content (%d chars). This page may require JavaScript rendering.", rawURL, charCount))
+		return
+	}
+
 	// Build source label for display
 	sourceLabel := ""
 	switch resp.Source {
 	case "wayback":
 		sourceLabel = " (wayback archive)"
-	}
-
-	charCount := utf8.RuneCountInString(resp.Content)
-	if resp.Source == "" && needsFallback(resp.Content) {
-		m.Println(fmt.Sprintf("⚠ %s — all fetch methods returned minimal content (%d chars). This page may require JavaScript rendering.", rawURL, charCount))
-		return
 	}
 
 	// Inject FULL content into chat history so the LLM can see it
@@ -842,13 +845,7 @@ func (m *Manager) handleWebFetch(rawURL string) {
 
 	// Print condensed status to terminal (full content stays in LLM context)
 	tokenEstimate := (charCount + 3) / 4
-
-	if resp.Source == "" {
-		// All fallbacks exhausted
-		m.Println(fmt.Sprintf("⚠ %s — all fetch methods returned minimal content (%d chars). This page may require JavaScript rendering.", rawURL, charCount))
-	} else {
-		m.Println(fmt.Sprintf("✓ Fetched %d chars (≈%d tokens)%s from %s", charCount, tokenEstimate, sourceLabel, rawURL))
-	}
+	m.Println(fmt.Sprintf("✓ Fetched %d chars (≈%d tokens)%s from %s", charCount, tokenEstimate, sourceLabel, rawURL))
 }
 
 // --- web search command handlers below this line ---
