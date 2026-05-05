@@ -595,8 +595,9 @@ Watch for: ` + watchDesc
 					sourceLabel = " via fallback: wayback"
 				}
 				chrs := utf8.RuneCountInString(fetchResp.Content)
-				// Skip appending garbage content to LLM context
-				if fetchResp.Source == "" && needsFallback(fetchResp.Content) {
+				// Skip appending garbage content to LLM context.
+				// Symmetric with direct fetch (/webfetch): Source == "" && chars < 150
+				if fetchResp.Source == "" && chrs < 150 {
 					fmt.Printf("...%s: all fetch methods returned minimal content, skipping\n", urlStr)
 					continue
 				}
