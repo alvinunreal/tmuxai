@@ -53,6 +53,8 @@ type Manager struct {
 	ForcedExecPaneID  string
 	ForcedReadPaneIDs map[string]bool
 
+	SearchEngine *SearchEngine
+
 	// Functions for mocking
 	confirmedToExec   func(command string, prompt string, edit bool) (bool, string)
 	getTmuxPanesInXml func(config *config.Config) string
@@ -124,6 +126,9 @@ func NewManager(cfg *config.Config, options ManagerOptions) (*Manager, error) {
 			manager.Skills = reg
 		}
 	}
+
+	// Initialize web search engine if enabled
+	manager.initSearchEngine()
 
 	return manager, nil
 }
@@ -218,3 +223,55 @@ func (ai *AIResponse) String() string {
 		ai.NoComment,
 	)
 }
+
+// initSearchEngine initializes the web search engine if enabled in config.
+func (m *Manager) initSearchEngine() {
+	cfg := m.Config.WebSearch
+	if !cfg.Enabled {
+		return
+	}
+
+	providers := make([]WebSearchProvider, 0)
+
+	// Build providers list, putting default_provider first
+	defaultProv := cfg.DefaultProvider
+	if defaultProv == "" {
+		defaultProv = "brave"
+	}
+
+	// Add default provider first
+	if pcfg, ok := cfg.Providers[defaultProv]; ok {
+		switch defaultProv {
+		case "brave":
+			providers = append(providers, NewBraveProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
+		case "searxng":
+			if prov, err := NewSearXNGProvider(pcfg.BaseURL, nil, cfg.TimeoutSeconds); err == nil {
+				providers = append(providers, prov)
+			} else {
+				logger.Debug("Failed to init SearXNG provider: %v", err)
+			}
+		}
+	}
+
+	// Add remaining providers
+	for name, pcfg := range cfg.Providers {
+		if name == defaultProv {
+			continue
+		}
+		switch name {
+		case "brave":
+			providers = append(providers, NewBraveProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
+		case "searxng":
+			if prov, err := NewSearXNGProvider(pcfg.BaseURL, nil, cfg.TimeoutSeconds); err == nil {
+				providers = append(providers, prov)
+			} else {
+				logger.Debug("Failed to init SearXNG provider: %v", err)
+			}
+		}
+	}
+
+	if len(providers) > 0 {
+		m.SearchEngine = NewSearchEngine(providers, cfg.MaxResults, cfg.MaxResultChars)
+	}
+}
+

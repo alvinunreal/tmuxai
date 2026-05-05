@@ -1,8 +1,19 @@
 package internal
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
+)
+
+// WARN-1: Precompile regexes used in sanitizeFetchContent().
+var (
+	b64DataURIRx = regexp.MustCompile(`(?i)data:[^\s,]*;base64,[A-Za-z0-9+/]+={0,2}`)
+	longB64Rx    = regexp.MustCompile(`(?i)base64[,:=]\s*[A-Za-z0-9+/]{256,}={0,2}`)
 )
 
 func (m *Manager) baseSystemPrompt() string {
@@ -191,4 +202,89 @@ If no response is needed, output:
 		Timestamp: time.Now(),
 		FromUser:  false,
 	}
+}
+
+// FormatSearchResultsBlock formats search results as a delimited context block.
+// Template:
+//
+//	[Web search results for "{query}" ({provider}, {count} results)]
+//	1. **{Title}** — {URL}
+//	   {Snippet}
+//	[/Web search results]
+func FormatSearchResultsBlock(query string, provider string, results []SearchResult) string {
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "[Web search results for \"%s\" (%s, %d results)]\n", query, provider, len(results))
+	for i, r := range results {
+		fmt.Fprintf(&buf, "%d. **%s** — %s\n   %s\n", i+1, r.Title, r.URL, r.Snippet)
+	}
+	buf.WriteString("[/Web search results]\n")
+	return buf.String()
+}
+
+// FormatFetchResultsBlock formats fetched content as a delimited context block.
+// Template:
+//
+//	<<<EXTERNAL_UNTRUSTED_CONTENT id="{random_hex}" source="{url}" chars="{chars}">>>
+//	{extracted_content}
+//	<<<END_EXTERNAL_UNTRUSTED_CONTENT id="{random_hex}">>>
+func FormatFetchResultsBlock(fetchURL string, content string) string {
+	// CRIT-3: Sanitize fetched content before LLM injection
+	cleaned := sanitizeFetchContent(content)
+	boundaryID := newFetchBoundaryID()
+	cleaned = strings.ReplaceAll(cleaned, boundaryID, "[removed boundary id]")
+	cleaned = strings.ReplaceAll(cleaned, "<<<EXTERNAL_UNTRUSTED_CONTENT", "[neutralized external marker")
+	cleaned = strings.ReplaceAll(cleaned, "<<<END_EXTERNAL_UNTRUSTED_CONTENT", "[neutralized external end marker")
+	charCount := utf8.RuneCountInString(cleaned)
+	// CRIT-3: Provenance delimiters distinguish fetched content from user input.
+	// The per-block nonce prevents a fetched page from spoofing the closing marker.
+	return fmt.Sprintf("<<<EXTERNAL_UNTRUSTED_CONTENT id=%q source=%q chars=%d>>>\n%s\n<<<END_EXTERNAL_UNTRUSTED_CONTENT id=%q>>>\n", boundaryID, fetchURL, charCount, cleaned, boundaryID)
+}
+
+func newFetchBoundaryID() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err == nil {
+		return hex.EncodeToString(buf)
+	}
+	return fmt.Sprintf("%x", time.Now().UnixNano())
+}
+
+// sanitizeFetchContent strips zero-width characters, invisible Unicode entities,
+// and base64 blobs from fetched text before injecting into LLM context.
+// CRIT-3: Defense against prompt injection via malicious webpage content.
+func sanitizeFetchContent(content string) string {
+	// Strip zero-width characters and other invisible Unicode codepoints
+	result := make([]rune, 0, len(content))
+	for _, r := range content {
+		// Zero-width space, non-joiners, word joiner
+		if r >= 0x200B && r <= 0x200F {
+			continue
+		}
+		// BOM / zero-width no-break space
+		if r == 0xFEFF {
+			continue
+		}
+		// Directional formatting marks
+		if r >= 0x202A && r <= 0x202E {
+			continue
+		}
+		// Various invisible control characters
+		if r >= 0x2060 && r <= 0x2069 {
+			continue
+		}
+		// C0 control chars except standard whitespace
+		if r < 0x20 && r != '\n' && r != '\r' && r != '\t' {
+			continue
+		}
+		result = append(result, r)
+	}
+
+	cleaned := string(result)
+
+	// Strip inline base64 data URIs (potential XSS/injection vectors)
+	cleaned = b64DataURIRx.ReplaceAllString(cleaned, "[removed base64 blob]")
+
+	// Strip very long explicitly labeled base64 blobs without removing normal hashes/slugs.
+	cleaned = longB64Rx.ReplaceAllString(cleaned, "[removed long base64]")
+
+	return cleaned
 }

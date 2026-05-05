@@ -30,6 +30,8 @@ type Config struct {
 	Models                map[string]ModelConfig `mapstructure:"models"`
 	Prompts               PromptsConfig          `mapstructure:"prompts"`
 	KnowledgeBase         KnowledgeBaseConfig    `mapstructure:"knowledge_base"`
+	WebSearch             WebSearchConfig        `mapstructure:"web_search"`
+	WebFetch              WebFetchConfig         `mapstructure:"web_fetch"`
 }
 
 // OpenRouterConfig holds OpenRouter API configuration
@@ -109,6 +111,31 @@ type KnowledgeBaseConfig struct {
 	Skills   SkillsConfig `mapstructure:"skills"`
 }
 
+// WebSearchConfig holds web search configuration.
+type WebSearchConfig struct {
+	Enabled         bool                            `mapstructure:"enabled"`
+	DefaultProvider string                          `mapstructure:"default_provider"`
+	MaxResults      int                             `mapstructure:"max_results"`
+	MaxResultChars  int                             `mapstructure:"max_result_chars"`
+	FetchMaxChars   int                             `mapstructure:"fetch_max_chars"`
+	TimeoutSeconds  int                             `mapstructure:"timeout_seconds"`
+	Providers       map[string]WebSearchProviderCfg `mapstructure:"providers"`
+}
+
+// WebSearchProviderCfg holds per-provider configuration.
+type WebSearchProviderCfg struct {
+	APIKey  string `mapstructure:"api_key"`
+	BaseURL string `mapstructure:"base_url"`
+}
+
+// WebFetchConfig holds web fetch configuration.
+type WebFetchConfig struct {
+	Enabled          bool `mapstructure:"enabled"`
+	MaxChars         int  `mapstructure:"max_chars"`
+	TimeoutSeconds   int  `mapstructure:"timeout_seconds"`
+	AllowedRedirects bool `mapstructure:"allowed_redirects"`
+}
+
 // TmuxConfig holds tmux-specific behavior settings.
 // ExecSplitArgs are raw args passed to `tmux split-window` before target/format flags.
 type TmuxConfig struct {
@@ -158,6 +185,21 @@ func DefaultConfig() *Config {
 				MaxSkillChars:      20000,
 				TruncateDescAt:     200,
 			},
+		},
+		WebSearch: WebSearchConfig{
+			Enabled:         false,
+			DefaultProvider: "brave",
+			MaxResults:      5,
+			MaxResultChars:  6000,
+			FetchMaxChars:   15000,
+			TimeoutSeconds:  10,
+			Providers:       make(map[string]WebSearchProviderCfg),
+		},
+		WebFetch: WebFetchConfig{
+			Enabled:          false,
+			MaxChars:         25000,
+			TimeoutSeconds:   8,
+			AllowedRedirects: true,
 		},
 	}
 }
@@ -351,6 +393,13 @@ func ResolveEnvKeyInConfig(cfg *Config) {
 }
 
 func resolveEnvKeyReferenceInValue(val reflect.Value) {
+	if isReflectPtr(val.Kind()) {
+		if !val.IsNil() {
+			resolveEnvKeyReferenceInValue(val.Elem())
+		}
+		return
+	}
+
 	switch val.Kind() {
 	case reflect.String:
 		val.SetString(os.ExpandEnv(val.String()))
@@ -358,17 +407,13 @@ func resolveEnvKeyReferenceInValue(val reflect.Value) {
 		for i := 0; i < val.NumField(); i++ {
 			resolveEnvKeyReferenceInValue(val.Field(i))
 		}
-	case reflect.Ptr:
-		if !val.IsNil() {
-			resolveEnvKeyReferenceInValue(val.Elem())
-		}
 	case reflect.Map:
 		if val.IsNil() {
 			return
 		}
 		for _, key := range val.MapKeys() {
 			mapVal := val.MapIndex(key)
-			if mapVal.Kind() == reflect.Ptr && mapVal.IsNil() {
+			if isReflectPtr(mapVal.Kind()) && mapVal.IsNil() {
 				continue
 			}
 			resolved := resolveEnvValueDeepCopy(mapVal)
@@ -380,6 +425,16 @@ func resolveEnvKeyReferenceInValue(val reflect.Value) {
 // resolveEnvValueDeepCopy returns a new value with env vars expanded.
 // For non-addressable map values, we need to create a new copy.
 func resolveEnvValueDeepCopy(val reflect.Value) reflect.Value {
+	if isReflectPtr(val.Kind()) {
+		if val.IsNil() {
+			return val
+		}
+		elem := resolveEnvValueDeepCopy(val.Elem())
+		ptr := reflect.New(elem.Type())
+		ptr.Elem().Set(elem)
+		return ptr
+	}
+
 	switch val.Kind() {
 	case reflect.String:
 		return reflect.ValueOf(os.ExpandEnv(val.String()))
@@ -388,15 +443,11 @@ func resolveEnvValueDeepCopy(val reflect.Value) reflect.Value {
 		cp.Set(val)
 		resolveEnvKeyReferenceInValue(cp)
 		return cp
-	case reflect.Ptr:
-		if val.IsNil() {
-			return val
-		}
-		elem := resolveEnvValueDeepCopy(val.Elem())
-		ptr := reflect.New(elem.Type())
-		ptr.Elem().Set(elem)
-		return ptr
 	default:
 		return val
 	}
+}
+
+func isReflectPtr(kind reflect.Kind) bool {
+	return kind.String() == "ptr"
 }
