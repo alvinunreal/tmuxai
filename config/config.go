@@ -30,6 +30,8 @@ type Config struct {
 	Models                map[string]ModelConfig `mapstructure:"models"`
 	Prompts               PromptsConfig          `mapstructure:"prompts"`
 	KnowledgeBase         KnowledgeBaseConfig    `mapstructure:"knowledge_base"`
+	WebSearch             WebSearchConfig        `mapstructure:"web_search"`
+	WebFetch              WebFetchConfig         `mapstructure:"web_fetch"`
 }
 
 // OpenRouterConfig holds OpenRouter API configuration
@@ -109,6 +111,31 @@ type KnowledgeBaseConfig struct {
 	Skills   SkillsConfig `mapstructure:"skills"`
 }
 
+// WebSearchConfig holds web search configuration.
+type WebSearchConfig struct {
+	Enabled         bool                         `mapstructure:"enabled"`
+	DefaultProvider string                       `mapstructure:"default_provider"`
+	MaxResults      int                          `mapstructure:"max_results"`
+	MaxResultChars  int                          `mapstructure:"max_result_chars"`
+	FetchMaxChars    int                          `mapstructure:"fetch_max_chars"`
+	TimeoutSeconds  int                          `mapstructure:"timeout_seconds"`
+	Providers       map[string]WebSearchProviderCfg `mapstructure:"providers"`
+}
+
+// WebSearchProviderCfg holds per-provider configuration.
+type WebSearchProviderCfg struct {
+	APIKey  string `mapstructure:"api_key"`
+	BaseURL string `mapstructure:"base_url"`
+}
+
+// WebFetchConfig holds web fetch configuration.
+type WebFetchConfig struct {
+	Enabled          bool `mapstructure:"enabled"`
+	MaxChars         int  `mapstructure:"max_chars"`
+	TimeoutSeconds   int  `mapstructure:"timeout_seconds"`
+	AllowedRedirects bool `mapstructure:"allowed_redirects"`
+}
+
 // TmuxConfig holds tmux-specific behavior settings.
 // ExecSplitArgs are raw args passed to `tmux split-window` before target/format flags.
 type TmuxConfig struct {
@@ -158,6 +185,21 @@ func DefaultConfig() *Config {
 				MaxSkillChars:      20000,
 				TruncateDescAt:     200,
 			},
+		},
+		WebSearch: WebSearchConfig{
+			Enabled:         false,
+			DefaultProvider: "brave",
+			MaxResults:      5,
+			MaxResultChars:  6000,
+			FetchMaxChars:    15000,
+			TimeoutSeconds:  10,
+			Providers:       make(map[string]WebSearchProviderCfg),
+		},
+		WebFetch: WebFetchConfig{
+			Enabled:          false,
+			MaxChars:         25000,
+			TimeoutSeconds:   8,
+			AllowedRedirects: true,
 		},
 	}
 }

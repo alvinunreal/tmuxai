@@ -65,6 +65,7 @@
   - [What is Squashing?](#what-is-squashing)
   - [Manual Squashing](#manual-squashing)
 - [Multiline Input](#multiline-input)
+- [Web Search & Fetch](#web-search-and-fetch)
 - [Core Commands](#core-commands)
 - [Command-Line Usage](#command-line-usage)
 - [Configuration](#configuration)
@@ -708,6 +709,29 @@ TmuxAI » /model claude-sonnet
 TmuxAI [claude-sonnet] »
 ```
 
+## Web Search & Fetch
+
+TmuxAI can search the web and fetch webpage content without leaving your terminal.
+Search and fetch are manual, non-agentic. You initiate when to search and fetch to add
+to TmuxAI context.
+
+```
+TmuxAI » /websearch how to set up WireGuard
+TmuxAI » /websearch -f 3 latest tmux best practices
+TmuxAI » /webfetch https://example.com/docs
+```
+
+- **Providers:** Brave Search API (primary) or self-hosted SearXNG
+- **Fallback chain:** direct fetch → Wayback Machine → Google Cache
+- **Safety:** Fetched content is sanitized and injected as assistant context, not user input
+- Configure providers and limits under `web_search` and `web_fetch` in `config.yaml` (see [Configuration](#configuration))
+
+> **Note:** Using `/websearch -f N` auto-fetches the top N search results and injects them
+> into TmuxAI's context. Each fetch is capped by `web_fetch.max_chars` (default 25000 for direct
+> `/webfetch`, or `web_search.fetch_max_chars` default 15000 for auto-fetched search results). The
+> cumulative total is not capped. With `-f 5` or higher on large pages, this can consume a
+> significant portion of the context window. Prefer `-f 1` to `-f 3` unless you need broader coverage.
+
 ## Core Commands
 
 | Command                     | Description                                                      |
@@ -726,6 +750,8 @@ TmuxAI [claude-sonnet] »
 | `/kb load <name>`           | Load a knowledge base into conversation context                  |
 | `/kb unload <name>`         | Unload a specific knowledge base                                 |
 | `/kb unload --all`          | Unload all knowledge bases                                       |
+| `/websearch [-f N] <query>` | Search the web via Brave or SearXNG; use `-f N` to auto-fetch top N results |
+| `/webfetch <url>`           | Fetch readable content from a URL, with Wayback Machine fallback                |
 | `/exit`                     | Exit TmuxAI                                                      |
 
 ## Command-Line Usage
@@ -815,6 +841,30 @@ tmux split-window <exec_split_args...> -t <target> -P -F "#{pane_id}"
 Reserved flags `-t`, `-P`, and `-F` are managed internally and must not be included in `exec_split_args`.
 
 If omitted, TmuxAI uses the legacy default: `-d -h`.
+
+### Web Search & Fetch Configuration
+
+Enable web search (via Brave or SearXNG) and web fetching (with Wayback/Google Cache fallback):
+
+```yaml
+web_search:
+  enabled: true
+  default_provider: brave
+  max_results: 5
+  max_result_chars: 6000
+  timeout_seconds: 10
+  providers:
+    brave:
+      api_key: "YOUR_BRAVE_API_KEY"
+    searxng:
+      base_url: "http://127.0.0.1:8888"
+
+web_fetch:
+  enabled: true
+  max_chars: 25000
+  timeout_seconds: 8
+  allowed_redirects: false
+```
 
 ### Environment Variables
 

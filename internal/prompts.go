@@ -1,8 +1,17 @@
 package internal
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
+)
+
+// WARN-1: Precompile regexes used in sanitizeFetchContent().
+var (
+	b64DataURIRx = regexp.MustCompile(`data:[^;,]*;base64,[A-Za-z0-9+/=]{32,}`)
+	longB64Rx    = regexp.MustCompile(`[A-Za-z0-9+/=]{256,}`)
 )
 
 func (m *Manager) baseSystemPrompt() string {
@@ -191,4 +200,76 @@ If no response is needed, output:
 		Timestamp: time.Now(),
 		FromUser:  false,
 	}
+}
+
+// FormatSearchResultsBlock formats search results as a delimited context block.
+// Template:
+//
+//	[Web search results for "{query}" ({provider}, {count} results)]
+//	1. **{Title}** — {URL}
+//	   {Snippet}
+//	[/Web search results]
+func FormatSearchResultsBlock(query string, provider string, results []SearchResult) string {
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("[Web search results for \"%s\" (%s, %d results)]\n", query, provider, len(results)))
+	for i, r := range results {
+		buf.WriteString(fmt.Sprintf("%d. **%s** — %s\n   %s\n", i+1, r.Title, r.URL, r.Snippet))
+	}
+	buf.WriteString("[/Web search results]\n")
+	return buf.String()
+}
+
+// FormatFetchResultsBlock formats fetched content as a delimited context block.
+// Template:
+//
+//	[Web fetch: {url} ({chars} chars)]
+//	{extracted_content}
+//	[/Web fetch]
+func FormatFetchResultsBlock(fetchURL string, content string) string {
+	// CRIT-3: Sanitize fetched content before LLM injection
+	cleaned := sanitizeFetchContent(content)
+	charCount := utf8.RuneCountInString(cleaned)
+	// CRIT-3: Provenance delimiters distinguish fetched content from user input
+	return fmt.Sprintf("[Fetched from: %s (%d chars)]\n%s\n[/Fetched]\n", fetchURL, charCount, cleaned)
+}
+
+// sanitizeFetchContent strips zero-width characters, invisible Unicode entities,
+// and base64 blobs from fetched text before injecting into LLM context.
+// CRIT-3: Defense against prompt injection via malicious webpage content.
+func sanitizeFetchContent(content string) string {
+	// Strip zero-width characters and other invisible Unicode codepoints
+	result := make([]rune, 0, len(content))
+	for _, r := range content {
+		// Zero-width space, non-joiners, word joiner
+		if r >= 0x200B && r <= 0x200F {
+			continue
+		}
+		// BOM / zero-width no-break space
+		if r == 0xFEFF {
+			continue
+		}
+		// Directional formatting marks
+		if r >= 0x202A && r <= 0x202E {
+			continue
+		}
+		// Various invisible control characters
+		if r >= 0x2060 && r <= 0x2069 {
+			continue
+		}
+		// C0 control chars except standard whitespace
+		if r < 0x20 && r != '\n' && r != '\r' && r != '\t' {
+			continue
+		}
+		result = append(result, r)
+	}
+
+	cleaned := string(result)
+
+	// Strip inline base64 data URIs (potential XSS/injection vectors)
+	cleaned = b64DataURIRx.ReplaceAllString(cleaned, "[removed base64 blob]")
+
+	// Strip very long base64-like strings (>256 chars of pure b64 alphabet)
+	cleaned = longB64Rx.ReplaceAllString(cleaned, "[removed long base64]")
+
+	return cleaned
 }

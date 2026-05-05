@@ -140,3 +140,27 @@ prompts:
 
   watch: |
      xxx
+
+# Web search: search the web via Brave Search API or self-hosted SearXNG
+# Use /websearch <query> or /websearch -f N <query> to auto-fetch top N results
+web_search:
+  enabled: false
+  default_provider: brave
+  max_results: 5
+  max_result_chars: 6000     # Total char budget for search result snippets
+  fetch_max_chars: 15000    # Per-result char limit when auto-fetching with /websearch -f N
+  timeout_seconds: 10
+  providers:
+    brave:
+      api_key: "${BRAVE_API_KEY}"
+    searxng:
+      base_url: "http://127.0.0.1:8888"
+
+# Web fetch: extract readable content from a URL
+# Fallback chain: direct -> Wayback Machine -> Google Cache
+# Use /webfetch <url>
+web_fetch:
+  enabled: false
+  max_chars: 25000           # Char limit for /webfetch (direct URL fetch)
+  timeout_seconds: 8
+  allowed_redirects: false

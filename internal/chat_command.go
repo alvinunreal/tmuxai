@@ -1,11 +1,14 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/alvinunreal/tmuxai/config"
 	"github.com/alvinunreal/tmuxai/logger"
@@ -31,6 +34,8 @@ const helpMessage = `Available commands:
 - /skill unload --all: Unload all skills
 - /skill info <name>: Show skill details
 - /skill validate: Re-scan and validate skills
+- /websearch [-f N] <query>: Search the web (use -f N to auto-fetch top N results)
+- /webfetch <url>: Fetch and extract content from a URL
 - /exit: Exit the application`
 
 var commands = []string{
@@ -46,6 +51,8 @@ var commands = []string{
 	"/model",
 	"/kb",
 	"/skill",
+	"/websearch",
+	"/webfetch",
 }
 
 // checks if the given content is a command
@@ -495,6 +502,126 @@ Watch for: ` + watchDesc
 		}
 
 		m.Println("Usage: /skill [list|load <name>|unload <name>|unload --all|info <name>|validate]")
+
+	case prefixMatch(commandPrefix, "/websearch"):
+		if !m.Config.WebSearch.Enabled {
+			m.Println("Web search is not enabled. Configure web_search.enabled: true in your config.")
+			return
+		}
+		if m.SearchEngine == nil {
+			m.Println("Web search engine not initialized. Check your configuration.")
+			return
+		}
+		// Parse -f N flag
+		var fetchCount int
+		hasFetchFlag := false
+		for i, p := range parts[1:] {
+			if p == "-f" && i+1 < len(parts[1:]) {
+				n, err := strconv.Atoi(parts[1:][i+1])
+				if err != nil || n < 1 {
+					m.Println("Usage: /websearch [-f N] <query>")
+					return
+				}
+				fetchCount = n
+				hasFetchFlag = true
+				break
+			}
+		}
+		if !hasFetchFlag {
+			if len(parts) < 2 {
+				m.Println("Usage: /websearch [-f N] <query>")
+				return
+			}
+			query := strings.Join(parts[1:], " ")
+			m.handleWebSearch(query)
+			return
+		}
+		// Extract the actual query (everything except -f and its argument)
+		remainingQuery := make([]string, 0)
+		skipNext := false
+		for _, p := range parts[1:] {
+			if skipNext {
+				skipNext = false
+				continue
+			}
+			if p == "-f" {
+				skipNext = true
+				continue
+			}
+			remainingQuery = append(remainingQuery, p)
+		}
+		if len(remainingQuery) < 1 {
+			m.Println("Usage: /websearch [-f N] <query>")
+			return
+		}
+		// Perform search (budget still enforced by SearchEngine)
+		query := strings.Join(remainingQuery, " ")
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(m.Config.WebSearch.TimeoutSeconds)*time.Second)
+		defer cancel()
+		searchResp := m.SearchEngine.Search(ctx, query)
+		if searchResp.Error != nil {
+			m.Println(fmt.Sprintf("Search failed: %v", searchResp.Error))
+			return
+		}
+		formatted := FormatSearchResultsBlock(query, searchResp.Provider, searchResp.Results)
+		fmt.Println(formatted)
+		m.Messages = append(m.Messages, ChatMessage{
+			Content:   formatted,
+			FromUser:  false,
+			Timestamp: time.Now(),
+		})
+		// Auto-fetch top N results
+		actualCount := fetchCount
+		if actualCount > len(searchResp.Results) {
+			actualCount = len(searchResp.Results)
+		}
+		if actualCount > 0 {
+			fmt.Printf("\nFetching top %d result(s)...\n", actualCount)
+			fetchMaxChars := m.Config.WebSearch.FetchMaxChars
+			if fetchMaxChars <= 0 {
+				fetchMaxChars = m.Config.WebFetch.MaxChars
+			}
+			for i := 0; i < actualCount; i++ {
+				urlStr := searchResp.Results[i].URL
+				// M3: Each fetch gets its own fresh context with full timeout budget.
+				fetchCtx, fetchCancel := context.WithTimeout(
+					context.Background(),
+					time.Duration(m.Config.WebFetch.TimeoutSeconds)*time.Second,
+				)
+				fetchResp := FetchWithFallbacks(fetchCtx, urlStr, fetchMaxChars, m.Config.WebFetch.TimeoutSeconds, false)
+				fetchCancel()
+				sourceLabel := ""
+				if fetchResp.Source == "wayback" {
+					sourceLabel = " via fallback: wayback"
+				}
+				chrs := utf8.RuneCountInString(fetchResp.Content)
+				// Skip appending garbage content to LLM context
+				if fetchResp.Source == "" && chrs < 150 {
+					fmt.Printf("...%s: all fetch methods returned minimal content, skipping\n", urlStr)
+					continue
+				}
+				fmt.Printf("...fetched: %s (%d chars)%s\n", urlStr, chrs, sourceLabel)
+				formatted := FormatFetchResultsBlock(urlStr, fetchResp.Content)
+				m.Messages = append(m.Messages, ChatMessage{
+					Content:   formatted,
+					FromUser:  false,
+					Timestamp: time.Now(),
+				})
+			}
+		}
+		return
+
+	case prefixMatch(commandPrefix, "/webfetch"):
+		if !m.Config.WebFetch.Enabled {
+			m.Println("Web fetch is not enabled. Configure web_fetch.enabled: true in your config.")
+			return
+		}
+		if len(parts) < 2 {
+			m.Println("Usage: /webfetch <url>")
+			return
+		}
+		urlStr := strings.Join(parts[1:], " ")
+		m.handleWebFetch(urlStr)
 		return
 
 	default:
@@ -653,3 +780,70 @@ func (m *Manager) switchModel(modelName string) {
 
 	m.Println(fmt.Sprintf("✓ Switched to %s (%s: %s)", modelName, modelConfig.Provider, modelConfig.Model))
 }
+
+// handleWebSearch performs a web search and injects results into context.
+func (m *Manager) handleWebSearch(query string) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(m.Config.WebSearch.TimeoutSeconds)*time.Second)
+	defer cancel()
+
+	fmt.Printf("Searching for \"%s\"...\n", query)
+
+	resp := m.SearchEngine.Search(ctx, query)
+	if resp.Error != nil {
+		m.Println(fmt.Sprintf("Search failed: %v", resp.Error))
+		return
+	}
+
+	formatted := FormatSearchResultsBlock(query, resp.Provider, resp.Results)
+	fmt.Println(formatted)
+
+	// Inject into chat history so the LLM can see results on the next interaction
+	m.Messages = append(m.Messages, ChatMessage{
+		Content:   formatted,
+		FromUser:  false,
+		Timestamp: time.Now(),
+	})
+}
+
+// handleWebFetch fetches content from a URL and injects it into context.
+// Uses the full fallback chain: direct → Wayback Machine.
+func (m *Manager) handleWebFetch(rawURL string) {
+	cfg := m.Config.WebFetch
+	// Progress feedback before blocking network call
+	fmt.Printf("Fetching %s...\n", rawURL)
+
+	// Wrap with context timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutSeconds)*time.Second)
+	defer cancel()
+
+	// Use unified fallback chain
+	resp := FetchWithFallbacks(ctx, rawURL, cfg.MaxChars, cfg.TimeoutSeconds, cfg.AllowedRedirects)
+
+	// Build source label for display
+	sourceLabel := ""
+	switch resp.Source {
+	case "wayback":
+		sourceLabel = " (wayback archive)"
+	}
+
+	// Inject FULL content into chat history so the LLM can see it
+	formatted := FormatFetchResultsBlock(rawURL, resp.Content)
+	m.Messages = append(m.Messages, ChatMessage{
+		Content:   formatted,
+		FromUser:  false,
+		Timestamp: time.Now(),
+	})
+
+	// Print condensed status to terminal (full content stays in LLM context)
+	charCount := utf8.RuneCountInString(resp.Content)
+	tokenEstimate := (charCount + 3) / 4
+
+	if resp.Source == "" {
+		// All fallbacks exhausted
+		m.Println(fmt.Sprintf("⚠ %s — all fetch methods returned minimal content (%d chars). This page may require JavaScript rendering.", rawURL, charCount))
+	} else {
+		m.Println(fmt.Sprintf("✓ Fetched %d chars (≈%d tokens)%s from %s", charCount, tokenEstimate, sourceLabel, rawURL))
+	}
+}
+
+// --- web search command handlers below this line ---
