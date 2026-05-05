@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const reflectPtrKind = reflect.Ptr
+var reflectPtrKind = reflect.Ptr
 
 // Config holds the application configuration
 type Config struct {
