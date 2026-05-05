@@ -10,8 +10,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-var reflectPtrKind = reflect.Ptr
-
 // Config holds the application configuration
 type Config struct {
 	Debug                 bool                   `mapstructure:"debug"`
@@ -395,6 +393,13 @@ func ResolveEnvKeyInConfig(cfg *Config) {
 }
 
 func resolveEnvKeyReferenceInValue(val reflect.Value) {
+	if isReflectPtr(val.Kind()) {
+		if !val.IsNil() {
+			resolveEnvKeyReferenceInValue(val.Elem())
+		}
+		return
+	}
+
 	switch val.Kind() {
 	case reflect.String:
 		val.SetString(os.ExpandEnv(val.String()))
@@ -402,17 +407,13 @@ func resolveEnvKeyReferenceInValue(val reflect.Value) {
 		for i := 0; i < val.NumField(); i++ {
 			resolveEnvKeyReferenceInValue(val.Field(i))
 		}
-	case reflectPtrKind:
-		if !val.IsNil() {
-			resolveEnvKeyReferenceInValue(val.Elem())
-		}
 	case reflect.Map:
 		if val.IsNil() {
 			return
 		}
 		for _, key := range val.MapKeys() {
 			mapVal := val.MapIndex(key)
-			if mapVal.Kind() == reflectPtrKind && mapVal.IsNil() {
+			if isReflectPtr(mapVal.Kind()) && mapVal.IsNil() {
 				continue
 			}
 			resolved := resolveEnvValueDeepCopy(mapVal)
@@ -424,6 +425,16 @@ func resolveEnvKeyReferenceInValue(val reflect.Value) {
 // resolveEnvValueDeepCopy returns a new value with env vars expanded.
 // For non-addressable map values, we need to create a new copy.
 func resolveEnvValueDeepCopy(val reflect.Value) reflect.Value {
+	if isReflectPtr(val.Kind()) {
+		if val.IsNil() {
+			return val
+		}
+		elem := resolveEnvValueDeepCopy(val.Elem())
+		ptr := reflect.New(elem.Type())
+		ptr.Elem().Set(elem)
+		return ptr
+	}
+
 	switch val.Kind() {
 	case reflect.String:
 		return reflect.ValueOf(os.ExpandEnv(val.String()))
@@ -432,15 +443,11 @@ func resolveEnvValueDeepCopy(val reflect.Value) reflect.Value {
 		cp.Set(val)
 		resolveEnvKeyReferenceInValue(cp)
 		return cp
-	case reflectPtrKind:
-		if val.IsNil() {
-			return val
-		}
-		elem := resolveEnvValueDeepCopy(val.Elem())
-		ptr := reflect.New(elem.Type())
-		ptr.Elem().Set(elem)
-		return ptr
 	default:
 		return val
 	}
+}
+
+func isReflectPtr(kind reflect.Kind) bool {
+	return kind.String() == "ptr"
 }
