@@ -596,7 +596,7 @@ Watch for: ` + watchDesc
 				}
 				chrs := utf8.RuneCountInString(fetchResp.Content)
 				// Skip appending garbage content to LLM context
-				if fetchResp.Source == "" && chrs < 150 {
+				if fetchResp.Source == "" && needsFallback(fetchResp.Content) {
 					fmt.Printf("...%s: all fetch methods returned minimal content, skipping\n", urlStr)
 					continue
 				}
@@ -826,6 +826,12 @@ func (m *Manager) handleWebFetch(rawURL string) {
 		sourceLabel = " (wayback archive)"
 	}
 
+	charCount := utf8.RuneCountInString(resp.Content)
+	if resp.Source == "" && needsFallback(resp.Content) {
+		m.Println(fmt.Sprintf("⚠ %s — all fetch methods returned minimal content (%d chars). This page may require JavaScript rendering.", rawURL, charCount))
+		return
+	}
+
 	// Inject FULL content into chat history so the LLM can see it
 	formatted := FormatFetchResultsBlock(rawURL, resp.Content)
 	m.Messages = append(m.Messages, ChatMessage{
@@ -835,7 +841,6 @@ func (m *Manager) handleWebFetch(rawURL string) {
 	})
 
 	// Print condensed status to terminal (full content stays in LLM context)
-	charCount := utf8.RuneCountInString(resp.Content)
 	tokenEstimate := (charCount + 3) / 4
 
 	if resp.Source == "" {

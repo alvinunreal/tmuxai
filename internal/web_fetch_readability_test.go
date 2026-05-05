@@ -166,7 +166,7 @@ func Test_Readability_ArticleTag_HighPriority(t *testing.T) {
 
 	assertContains(t, content, "Testing in Go is first-class", "should contain article body")
 	assertContains(t, content, "Table-Driven Tests", "should contain section heading")
-	
+
 	// Side content should not dominate
 	sideItems := []string{"Subscribe to our newsletter", "Built with Jekyll"}
 	for _, item := range sideItems {
@@ -341,11 +341,14 @@ func Test_SearchFetch_MultipleResults_RespectLimits(t *testing.T) {
 
 func Test_FormatFetchResultsBlock_ProperDelimiters(t *testing.T) {
 	block := FormatFetchResultsBlock("https://example.com/article", "Some content here")
-	if !strings.HasPrefix(block, "[Fetched from: https://example.com") {
+	if !strings.HasPrefix(block, "<<<EXTERNAL_UNTRUSTED_CONTENT") {
 		t.Errorf("missing delimiter prefix: %s", truncateShow(block, 100))
 	}
-	if !strings.HasSuffix(block, "[/Fetched]\n") {
-		t.Errorf("missing delimiter suffix: %s", truncateShow(block, 100))
+	if !strings.Contains(block, "<<<END_EXTERNAL_UNTRUSTED_CONTENT id=\"") {
+		t.Errorf("missing closing delimiter: %s", truncateShow(block, 100))
+	}
+	if !strings.HasSuffix(block, ">>>\n") {
+		t.Errorf("missing delimiter suffix '>>>\\n': %s", truncateShow(block, 100))
 	}
 	if !strings.Contains(block, "Some content here") {
 		t.Error("content not in block")
@@ -468,11 +471,11 @@ func Test_WebFetch_NormalizeURL_BareHostname(t *testing.T) {
 	fetcher := newWebFetcher(nil, 25000, 8, true)
 
 	tests := []struct {
-		name    string
-		input   string
-		wantHost string
+		name       string
+		input      string
+		wantHost   string
 		wantScheme string
-		wantErr  bool
+		wantErr    bool
 	}{
 		{"bare hostname", "example.com", "example.com", "https", false},
 		{"bare hostname with path", "example.com/path/to/page", "example.com", "https", false},

@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
@@ -10,8 +12,8 @@ import (
 
 // WARN-1: Precompile regexes used in sanitizeFetchContent().
 var (
-	b64DataURIRx = regexp.MustCompile(`data:[^;,]*;base64,[A-Za-z0-9+/=]{32,}`)
-	longB64Rx    = regexp.MustCompile(`[A-Za-z0-9+/=]{256,}`)
+	b64DataURIRx = regexp.MustCompile(`(?i)data:[^\s,]*;base64,[A-Za-z0-9+/]+={0,2}`)
+	longB64Rx    = regexp.MustCompile(`(?i)base64[,:=]\s*[A-Za-z0-9+/]{256,}={0,2}`)
 )
 
 func (m *Manager) baseSystemPrompt() string {
@@ -211,9 +213,9 @@ If no response is needed, output:
 //	[/Web search results]
 func FormatSearchResultsBlock(query string, provider string, results []SearchResult) string {
 	var buf strings.Builder
-	buf.WriteString(fmt.Sprintf("[Web search results for \"%s\" (%s, %d results)]\n", query, provider, len(results)))
+	fmt.Fprintf(&buf, "[Web search results for \"%s\" (%s, %d results)]\n", query, provider, len(results))
 	for i, r := range results {
-		buf.WriteString(fmt.Sprintf("%d. **%s** — %s\n   %s\n", i+1, r.Title, r.URL, r.Snippet))
+		fmt.Fprintf(&buf, "%d. **%s** — %s\n   %s\n", i+1, r.Title, r.URL, r.Snippet)
 	}
 	buf.WriteString("[/Web search results]\n")
 	return buf.String()
@@ -222,15 +224,28 @@ func FormatSearchResultsBlock(query string, provider string, results []SearchRes
 // FormatFetchResultsBlock formats fetched content as a delimited context block.
 // Template:
 //
-//	[Web fetch: {url} ({chars} chars)]
+//	<<<EXTERNAL_UNTRUSTED_CONTENT id="{random_hex}" source="{url}" chars="{chars}">>>
 //	{extracted_content}
-//	[/Web fetch]
+//	<<<END_EXTERNAL_UNTRUSTED_CONTENT id="{random_hex}">>>
 func FormatFetchResultsBlock(fetchURL string, content string) string {
 	// CRIT-3: Sanitize fetched content before LLM injection
 	cleaned := sanitizeFetchContent(content)
+	boundaryID := newFetchBoundaryID()
+	cleaned = strings.ReplaceAll(cleaned, boundaryID, "[removed boundary id]")
+	cleaned = strings.ReplaceAll(cleaned, "<<<EXTERNAL_UNTRUSTED_CONTENT", "[neutralized external marker")
+	cleaned = strings.ReplaceAll(cleaned, "<<<END_EXTERNAL_UNTRUSTED_CONTENT", "[neutralized external end marker")
 	charCount := utf8.RuneCountInString(cleaned)
-	// CRIT-3: Provenance delimiters distinguish fetched content from user input
-	return fmt.Sprintf("[Fetched from: %s (%d chars)]\n%s\n[/Fetched]\n", fetchURL, charCount, cleaned)
+	// CRIT-3: Provenance delimiters distinguish fetched content from user input.
+	// The per-block nonce prevents a fetched page from spoofing the closing marker.
+	return fmt.Sprintf("<<<EXTERNAL_UNTRUSTED_CONTENT id=%q source=%q chars=%d>>>\n%s\n<<<END_EXTERNAL_UNTRUSTED_CONTENT id=%q>>>\n", boundaryID, fetchURL, charCount, cleaned, boundaryID)
+}
+
+func newFetchBoundaryID() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err == nil {
+		return hex.EncodeToString(buf)
+	}
+	return fmt.Sprintf("%x", time.Now().UnixNano())
 }
 
 // sanitizeFetchContent strips zero-width characters, invisible Unicode entities,
@@ -268,7 +283,7 @@ func sanitizeFetchContent(content string) string {
 	// Strip inline base64 data URIs (potential XSS/injection vectors)
 	cleaned = b64DataURIRx.ReplaceAllString(cleaned, "[removed base64 blob]")
 
-	// Strip very long base64-like strings (>256 chars of pure b64 alphabet)
+	// Strip very long explicitly labeled base64 blobs without removing normal hashes/slugs.
 	cleaned = longB64Rx.ReplaceAllString(cleaned, "[removed long base64]")
 
 	return cleaned

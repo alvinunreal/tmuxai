@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+const reflectPtrKind = reflect.Ptr
+
 // Config holds the application configuration
 type Config struct {
 	Debug                 bool                   `mapstructure:"debug"`
@@ -113,12 +115,12 @@ type KnowledgeBaseConfig struct {
 
 // WebSearchConfig holds web search configuration.
 type WebSearchConfig struct {
-	Enabled         bool                         `mapstructure:"enabled"`
-	DefaultProvider string                       `mapstructure:"default_provider"`
-	MaxResults      int                          `mapstructure:"max_results"`
-	MaxResultChars  int                          `mapstructure:"max_result_chars"`
-	FetchMaxChars    int                          `mapstructure:"fetch_max_chars"`
-	TimeoutSeconds  int                          `mapstructure:"timeout_seconds"`
+	Enabled         bool                            `mapstructure:"enabled"`
+	DefaultProvider string                          `mapstructure:"default_provider"`
+	MaxResults      int                             `mapstructure:"max_results"`
+	MaxResultChars  int                             `mapstructure:"max_result_chars"`
+	FetchMaxChars   int                             `mapstructure:"fetch_max_chars"`
+	TimeoutSeconds  int                             `mapstructure:"timeout_seconds"`
 	Providers       map[string]WebSearchProviderCfg `mapstructure:"providers"`
 }
 
@@ -191,7 +193,7 @@ func DefaultConfig() *Config {
 			DefaultProvider: "brave",
 			MaxResults:      5,
 			MaxResultChars:  6000,
-			FetchMaxChars:    15000,
+			FetchMaxChars:   15000,
 			TimeoutSeconds:  10,
 			Providers:       make(map[string]WebSearchProviderCfg),
 		},
@@ -400,7 +402,7 @@ func resolveEnvKeyReferenceInValue(val reflect.Value) {
 		for i := 0; i < val.NumField(); i++ {
 			resolveEnvKeyReferenceInValue(val.Field(i))
 		}
-	case reflect.Ptr:
+	case reflectPtrKind:
 		if !val.IsNil() {
 			resolveEnvKeyReferenceInValue(val.Elem())
 		}
@@ -410,7 +412,7 @@ func resolveEnvKeyReferenceInValue(val reflect.Value) {
 		}
 		for _, key := range val.MapKeys() {
 			mapVal := val.MapIndex(key)
-			if mapVal.Kind() == reflect.Ptr && mapVal.IsNil() {
+			if mapVal.Kind() == reflectPtrKind && mapVal.IsNil() {
 				continue
 			}
 			resolved := resolveEnvValueDeepCopy(mapVal)
@@ -430,7 +432,7 @@ func resolveEnvValueDeepCopy(val reflect.Value) reflect.Value {
 		cp.Set(val)
 		resolveEnvKeyReferenceInValue(cp)
 		return cp
-	case reflect.Ptr:
+	case reflectPtrKind:
 		if val.IsNil() {
 			return val
 		}

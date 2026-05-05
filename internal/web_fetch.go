@@ -54,12 +54,13 @@ func newWebFetcher(hc *http.Client, maxChars, timeoutSeconds int, allowedRedirec
 	}
 	if hc == nil {
 		hc = &http.Client{
-			Timeout: time.Duration(timeoutSeconds) * time.Second,
+			Transport: secureHTTPTransport(timeoutSeconds),
+			Timeout:   time.Duration(timeoutSeconds) * time.Second,
 		}
 	} else {
 		// FIX: Shallow copy to avoid mutating the caller's client
 		hc = &http.Client{
-			Transport:     hc.Transport,
+			Transport:     secureRoundTripper(hc.Transport, timeoutSeconds),
 			CheckRedirect: hc.CheckRedirect,
 			Jar:           hc.Jar,
 			Timeout:       hc.Timeout,
@@ -133,7 +134,7 @@ func (wf *webFetcher) doFetchURL(ctx context.Context, u *url.URL, redirectsLeft 
 	if err != nil {
 		return WebFetchResponse{Error: fmt.Errorf("request failed: %w", err)}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Handle redirects
 	if wf.allowedRedirects && resp.StatusCode >= 300 && resp.StatusCode < 400 {
@@ -245,6 +246,80 @@ func (wf *webFetcher) checkSSRF(u *url.URL) error {
 	return nil
 }
 
+func secureRoundTripper(rt http.RoundTripper, timeoutSeconds int) http.RoundTripper {
+	if tr, ok := rt.(*http.Transport); ok {
+		cloned := tr.Clone()
+		cloned.Proxy = nil
+		cloned.DialContext = ssrfSafeDialContext(timeoutSeconds)
+		//nolint:staticcheck // Clear deprecated TLS dial hook so it cannot bypass DialContext.
+		cloned.DialTLS = nil
+		cloned.DialTLSContext = nil
+		return cloned
+	}
+	if rt == nil {
+		return secureHTTPTransport(timeoutSeconds)
+	}
+	// A custom RoundTripper cannot be hardened safely; fail closed by replacing it.
+	return secureHTTPTransport(timeoutSeconds)
+}
+
+func secureHTTPTransport(timeoutSeconds int) *http.Transport {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.Proxy = nil
+	tr.DialContext = ssrfSafeDialContext(timeoutSeconds)
+	//nolint:staticcheck // Clear deprecated TLS dial hook so it cannot bypass DialContext.
+	tr.DialTLS = nil
+	tr.DialTLSContext = nil
+	return tr
+}
+
+func ssrfSafeDialContext(timeoutSeconds int) func(context.Context, string, string) (net.Conn, error) {
+	timeout := time.Duration(timeoutSeconds) * time.Second
+	if timeoutSeconds <= 0 {
+		timeout = 8 * time.Second
+	}
+	resolver := net.DefaultResolver
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, fmt.Errorf("invalid dial address: %w", err)
+		}
+
+		ips, err := resolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, fmt.Errorf("DNS resolution failed: %w", err)
+		}
+		if len(ips) == 0 {
+			return nil, fmt.Errorf("DNS resolution failed: no addresses")
+		}
+
+		for _, ipAddr := range ips {
+			ip := ipAddr.IP
+			if mapped := ip.To4(); mapped != nil {
+				ip = mapped
+			}
+			if isBlockedIP(ip) {
+				return nil, fmt.Errorf("blocked: private network access denied")
+			}
+		}
+
+		var lastErr error
+		for _, ipAddr := range ips {
+			ip := ipAddr.IP
+			if mapped := ip.To4(); mapped != nil {
+				ip = mapped
+			}
+			dialer := &net.Dialer{Timeout: timeout}
+			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+		return nil, lastErr
+	}
+}
+
 // isBlockedIP returns true for all private, loopback, unspecified,
 // link-local, and multicast addresses. No exceptions.
 // CRIT-2: Explicit IPv6 ULA (fd00::/8) and link-local (fe80::/10) CIDRs added.
@@ -271,10 +346,7 @@ func isBlockedIP(ip net.IP) bool {
 	}
 	// CRIT-2: Explicit IPv6 link-local (fe80::/10) block
 	fe80Net := net.IPNet{IP: net.ParseIP("fe80::"), Mask: net.CIDRMask(10, 128)}
-	if fe80Net.Contains(ip) {
-		return true
-	}
-	return false
+	return fe80Net.Contains(ip)
 }
 
 // sanitizeContentType extracts the media type from Content-Type.
@@ -424,7 +496,7 @@ type FetchResult struct {
 // needsFallback returns true if content is too short/useless to be meaningful.
 // Thresholds:
 //   - 0 chars: definitely empty (JS-rendered page returned nothing)
-//   - <150 chars: likely a redirect stub or empty shell
+//   - <80 chars: likely a redirect stub or empty shell
 //   - <300 chars AND contains known junk patterns: soft-404
 func needsFallback(content string) bool {
 	trimmed := strings.TrimSpace(content)
@@ -540,4 +612,3 @@ func FetchWithFallbacks(ctx context.Context, rawURL string, maxChars, timeoutSec
 		URL:     rawURL,
 	}
 }
-

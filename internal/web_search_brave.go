@@ -69,7 +69,7 @@ func (bp *BraveProvider) Search(ctx context.Context, query string, maxResults in
 		logger.Error("Brave: request failed for query %q: %v", query, err)
 		return SearchResponse{Error: fmt.Errorf("brave: request failed: %w", err)}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
 	if err != nil {
