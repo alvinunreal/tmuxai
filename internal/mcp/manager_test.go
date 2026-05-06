@@ -366,7 +366,7 @@ func TestMCPManagerContextCancelledOnShutdown(t *testing.T) {
 	}
 }
 
-// D2/T2: Test lazy reconnect for unknown server fails gracefully
+// TestLazyReconnectUnknownServer verifies that reconnecting a nonexistent server fails gracefully.
 func TestLazyReconnectUnknownServer(t *testing.T) {
 	cfg := &MCPConfig{MCPServers: map[string]ServerConfig{}}
 	mgr := NewMCPManager(cfg)
@@ -376,7 +376,7 @@ func TestLazyReconnectUnknownServer(t *testing.T) {
 	}
 }
 
-// Fix #4: Test in-flight call tracking
+// TestTrackCallStartEnd verifies in-flight call tracking and drain behavior.
 func TestTrackCallStartEnd(t *testing.T) {
 	cfg := &MCPConfig{MCPServers: map[string]ServerConfig{}}
 	mgr := NewMCPManager(cfg)
@@ -397,7 +397,7 @@ func TestTrackCallStartEnd(t *testing.T) {
 	mgr.waitForDrain("srv", 1*time.Second)
 }
 
-// Fix #2: Test that initServer pre-registers server on failure
+// TestInitServerRegistersOnFailure verifies that a failed server still appears in GetServerInfo as unhealthy.
 func TestInitServerRegistersOnFailure(t *testing.T) {
 	cfg := &MCPConfig{MCPServers: map[string]ServerConfig{
 		"badserver": {Command: "/nonexistent/binary/path"},

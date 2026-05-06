@@ -322,7 +322,7 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 	}
 
 	// Process MCP tool calls (sequential execution)
-	// Fix #15: Store each tool result as a separate ChatMessage
+	// Store each tool result as a separate ChatMessage for proper conversation flow
 	if len(r.MCPToolCalls) > 0 && m.McpManager != nil {
 		s.Restart()
 
@@ -446,7 +446,7 @@ func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
 	return "", true
 }
 
-// Fix #8: Escape only XML-significant characters (<, >, &) in tool result text.
+// sanitizeXML escapes XML-significant characters in tool result text.
 // Do NOT use html.EscapeString — it also escapes " and ' which corrupts
 // tool output containing quotes (the LLM sees &#34; instead of ").
 func sanitizeXML(s string) string {

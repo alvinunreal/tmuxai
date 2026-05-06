@@ -9,7 +9,7 @@ import (
 	"github.com/alvinunreal/tmuxai/internal/mcp"
 )
 
-// Fix #10: Pre-compile all tag regex patterns at package level
+// Pre-compiled regex patterns for each XML tag, avoiding recompilation per response.
 type tagRegexes struct {
 	tag       *regexp.Regexp
 	codeBlock *regexp.Regexp
@@ -37,7 +37,7 @@ var tagPatterns = func() map[string]*tagRegexes {
 	return patterns
 }()
 
-// Fix #13: Pre-compile MCPToolCall code-block stripping patterns
+// Pre-compiled patterns for stripping MCPToolCall tags from code blocks and backticks.
 var (
 	mcpCodeBlockRe = regexp.MustCompile(`(?s)` + "```(?:xml)?\\s*<MCPToolCall>.*?</MCPToolCall>\\s*```")
 	mcpBacktickRe  = regexp.MustCompile("`<MCPToolCall>.*?</MCPToolCall>`")
@@ -95,7 +95,7 @@ func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
 		}
 	}
 
-	// Fix #13: Unwrap code-fenced MCPToolCall tags before parsing
+	// Unwrap code-fenced MCPToolCall tags so they're parseable
 	cleanForMcp := mcpCodeBlockRe.ReplaceAllStringFunc(clean, func(match string) string {
 		if inner := mcpTagRe.FindString(match); inner != "" {
 			return inner
@@ -105,7 +105,7 @@ func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
 	mcpCalls, _ := mcp.ParseMCPToolCalls(cleanForMcp)
 	r.MCPToolCalls = mcpCalls
 
-	// Fix #13: Strip code-block-wrapped MCPToolCall from display message
+	// Strip MCPToolCall tags (including code-block-wrapped) from display message
 	cleanForMsg = mcpCodeBlockRe.ReplaceAllString(cleanForMsg, "")
 	cleanForMsg = mcpBacktickRe.ReplaceAllString(cleanForMsg, "")
 	_, cleanForMsg = mcp.ParseMCPToolCalls(cleanForMsg)

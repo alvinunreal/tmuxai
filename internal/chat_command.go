@@ -648,7 +648,6 @@ Watch for: ` + watchDesc
 		} else if len(parts) >= 2 && parts[1] == "tools" {
 			serverFilter := ""
 			if len(parts) >= 3 {
-				// Fix #11: Remove deprecated strings.Title; showMcpTools uses EqualFold
 			serverFilter = parts[2]
 			}
 			m.showMcpTools(serverFilter)
@@ -744,7 +743,7 @@ func (m *Manager) formatInfo() {
 	}
 
 	// Display MCP information
-	// Fix #5: Single MCP section (removed duplicate from Context section)
+	// MCP server status and tool count summary
 	if m.McpManager != nil {
 		servers := m.McpManager.GetServerInfo()
 		if len(servers) > 0 {
@@ -764,7 +763,7 @@ func (m *Manager) formatInfo() {
 					disabled++
 				}
 			}
-			// Fix #9: Use actual token estimate from tool definitions, not tool count
+			// Estimate tokens from the actual tool definitions text
 			mcpTokens := system.EstimateTokenCount(m.ensureMcpToolDefs())
 			fmt.Println(formatter.FormatSection("\nMCP"))
 			formatLine("Active", fmt.Sprintf("%d (total tools: %d, ~%d tokens)", active, totalTools, mcpTokens))

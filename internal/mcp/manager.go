@@ -92,7 +92,7 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 	ctx, cancel := context.WithTimeout(m.processLife, timeout)
 	defer cancel()
 
-	// Fix #2: Pre-register server so it appears in /mcp list even on failure
+	// Pre-register server so it appears in /mcp list even on failure
 	m.mu.Lock()
 	m.servers[name] = &ServerInfo{
 		Name:      name,
@@ -134,7 +134,6 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
-		// Fix #2: Mark unhealthy on connect failure
 		m.mu.Lock()
 		m.servers[name].Status = StatusUnhealthy
 		m.servers[name].ErrMsg = fmt.Sprintf("connect: %v", err)
@@ -145,7 +144,6 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 	tools, err := m.listSessionTools(ctx, session)
 	if err != nil {
 		_ = session.Close()
-		// Fix #2: Mark unhealthy on tool listing failure
 		m.mu.Lock()
 		m.servers[name].Status = StatusUnhealthy
 		m.servers[name].ErrMsg = fmt.Sprintf("list tools: %v", err)
@@ -158,7 +156,7 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 	si.Status = StatusHealthy
 	si.Tools = tools
 	m.sessions[name] = session
-	// Fix #3: Store cmd for process group cleanup
+	// Store cmd for process group cleanup on shutdown
 	if cmd != nil {
 		m.cmds[name] = cmd
 	}
@@ -200,7 +198,7 @@ func (m *MCPManager) Shutdown() {
 		}
 		delete(m.sessions, name)
 	}
-	// Fix #3: Kill process groups for all stdio servers
+	// Kill process groups for all stdio servers
 	for name := range m.cmds {
 		m.killProcessGroup(name)
 	}
@@ -363,18 +361,19 @@ func (t *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 }
 
 func (m *MCPManager) shutdownServer(name string) {
-	// Fix #4: Wait for in-flight calls to drain before closing
+	// Wait for in-flight calls to drain before closing
 	m.waitForDrain(name, 5*time.Second)
 	if session, ok := m.sessions[name]; ok {
 		_ = session.Close()
 		delete(m.sessions, name)
 	}
-	// Fix #3: Kill process group for stdio servers
+	// Kill process group for stdio servers
 	m.killProcessGroup(name)
 	delete(m.servers, name)
 }
 
-// Fix #3: Kill the entire process group for a stdio server
+// killProcessGroup sends SIGKILL to the entire process group of a stdio server,
+// cleaning up any grandchild processes that the SDK's Close() might miss.
 func (m *MCPManager) killProcessGroup(name string) {
 	cmd, ok := m.cmds[name]
 	if !ok || cmd == nil || cmd.Process == nil {
@@ -387,20 +386,20 @@ func (m *MCPManager) killProcessGroup(name string) {
 	delete(m.cmds, name)
 }
 
-// Fix #4: Track in-flight tool call start
+// TrackCallStart increments the in-flight call counter for a server.
 func (m *MCPManager) TrackCallStart(serverName string) {
 	v, _ := m.inFlight.LoadOrStore(serverName, &atomic.Int32{})
 	v.(*atomic.Int32).Add(1)
 }
 
-// Fix #4: Track in-flight tool call end
+// TrackCallEnd decrements the in-flight call counter for a server.
 func (m *MCPManager) TrackCallEnd(serverName string) {
 	if v, ok := m.inFlight.Load(serverName); ok {
 		v.(*atomic.Int32).Add(-1)
 	}
 }
 
-// Fix #4: Wait for in-flight calls to drain (up to timeout)
+// waitForDrain blocks until all in-flight calls for a server complete, or timeout expires.
 func (m *MCPManager) waitForDrain(serverName string, timeout time.Duration) {
 	v, ok := m.inFlight.Load(serverName)
 	if !ok {
@@ -418,7 +417,9 @@ func (m *MCPManager) waitForDrain(serverName string, timeout time.Duration) {
 	}
 }
 
-// Fix #7: Restructured Reload — collect work under lock, execute unlocked, apply results under lock.
+// Reload diffs the current config against newCfg, shutting down removed servers,
+// restarting changed ones, and initializing new ones. Work is collected under lock,
+// then server init runs without holding the lock to avoid blocking other operations.
 func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept int, firstErr error) {
 	m.mu.Lock()
 	m.cacheDirty = true
@@ -535,14 +536,14 @@ func configEqual(a, b ServerConfig) bool {
 	return true
 }
 
-// Fix #14: Hold write lock across read-close to prevent TOCTOU race
+// ReconnectServer tears down and reinitializes a server's session.
 func (m *MCPManager) ReconnectServer(serverName string) error {
 	sc, ok := m.config.MCPServers[serverName]
 	if !ok {
 		return fmt.Errorf("unknown server: %s", serverName)
 	}
 
-	// Fix #4: Wait for in-flight calls before reconnecting
+	// Wait for in-flight calls before reconnecting
 	m.waitForDrain(serverName, 5*time.Second)
 
 	// Close existing session under write lock

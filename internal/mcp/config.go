@@ -55,7 +55,7 @@ func LoadConfig(path string) (*MCPConfig, error) {
 	return &cfg, nil
 }
 
-// Fix #16: Use regex capture group instead of brittle string slicing
+// ExpandEnv replaces ${VAR} patterns in env map values with their OS environment values.
 func ExpandEnv(env map[string]string) map[string]string {
 	expanded := make(map[string]string, len(env))
 	for k, v := range env {

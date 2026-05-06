@@ -25,7 +25,7 @@ func ExecuteToolCall(ctx context.Context, mgr *MCPManager, reg *Registry, fqName
 		return fmt.Sprintf("(tool not found: %s)", fqName), true
 	}
 
-	// Fix #4: Track in-flight calls for reload safety
+	// Track in-flight calls so reload/shutdown can wait for completion
 	mgr.TrackCallStart(entry.ServerName)
 	defer mgr.TrackCallEnd(entry.ServerName)
 
@@ -52,7 +52,6 @@ func ExecuteToolCall(ctx context.Context, mgr *MCPManager, reg *Registry, fqName
 		}
 	}
 
-	// Fix #1: Pass mgr to callWithRetry so lazy reconnect works
 	result, err := callWithRetry(callCtx, mgr, session, entry, arguments)
 	if err != nil {
 		if callCtx.Err() == context.DeadlineExceeded {
@@ -65,7 +64,7 @@ func ExecuteToolCall(ctx context.Context, mgr *MCPManager, reg *Registry, fqName
 	return SanitizeResult(raw), result.IsError
 }
 
-// Fix #1: Accept mgr directly so lazy reconnect actually works
+// callWithRetry attempts a tool call and, on failure, tries one lazy reconnect before giving up.
 func callWithRetry(ctx context.Context, mgr *MCPManager, session *mcpsdk.ClientSession, entry ToolEntry, arguments map[string]any) (*mcpsdk.CallToolResult, error) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name:      entry.ToolName,

@@ -2,7 +2,8 @@ package mcp
 
 import "sort"
 
-// Fix #12: ServerInfo is a value copy (not pointer) to avoid stale pointer fragility
+// ToolEntry maps a fully-qualified tool name to its server and tool metadata.
+// ServerInfo is stored as a value copy to avoid stale pointer references.
 type ToolEntry struct {
 	ServerName string
 	ToolName   string
