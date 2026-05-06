@@ -5,6 +5,8 @@ import (
 	"html"
 	"regexp"
 	"strings"
+
+	"github.com/alvinunreal/tmuxai/internal/mcp"
 )
 
 func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
@@ -69,6 +71,10 @@ func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
 			t.setField(&r, "1")
 		}
 	}
+
+	mcpCalls, _ := mcp.ParseMCPToolCalls(clean)
+	r.MCPToolCalls = mcpCalls
+	_, cleanForMsg = mcp.ParseMCPToolCalls(cleanForMsg)
 
 	// Message: trim, collapse multiple newlines
 	msg := strings.TrimSpace(cleanForMsg)
