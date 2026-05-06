@@ -2,10 +2,11 @@ package mcp
 
 import "sort"
 
+// Fix #12: ServerInfo is a value copy (not pointer) to avoid stale pointer fragility
 type ToolEntry struct {
 	ServerName string
 	ToolName   string
-	ServerInfo *ServerInfo
+	ServerInfo ServerInfo
 }
 
 type Registry struct {
@@ -16,7 +17,7 @@ func NewRegistry(manager *MCPManager) *Registry {
 	r := &Registry{tools: make(map[string]ToolEntry)}
 	servers := manager.GetServerInfo()
 	for i := range servers {
-		si := &servers[i]
+		si := servers[i]
 		if si.Status != StatusHealthy {
 			continue
 		}

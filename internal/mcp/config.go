@@ -55,11 +55,16 @@ func LoadConfig(path string) (*MCPConfig, error) {
 	return &cfg, nil
 }
 
+// Fix #16: Use regex capture group instead of brittle string slicing
 func ExpandEnv(env map[string]string) map[string]string {
 	expanded := make(map[string]string, len(env))
 	for k, v := range env {
 		expanded[k] = envPattern.ReplaceAllStringFunc(v, func(match string) string {
-			varName := match[2 : len(match)-1]
+			subs := envPattern.FindStringSubmatch(match)
+			if len(subs) < 2 {
+				return match
+			}
+			varName := subs[1]
 			val, ok := os.LookupEnv(varName)
 			if !ok {
 				logger.Info("MCP config: environment variable %s not set, using empty string", varName)

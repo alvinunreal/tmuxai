@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestTransportType(t *testing.T) {
@@ -344,7 +345,7 @@ func TestHeaderRoundTripper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if capturedHeaders.Get("X-Custom") != "test-value" {
 		t.Errorf("Expected X-Custom header, got %v", capturedHeaders.Get("X-Custom"))
 	}
@@ -362,6 +363,61 @@ func TestMCPManagerContextCancelledOnShutdown(t *testing.T) {
 	case <-ctx.Done():
 	default:
 		t.Error("Expected processLife context to be cancelled after shutdown")
+	}
+}
+
+// D2/T2: Test lazy reconnect for unknown server fails gracefully
+func TestLazyReconnectUnknownServer(t *testing.T) {
+	cfg := &MCPConfig{MCPServers: map[string]ServerConfig{}}
+	mgr := NewMCPManager(cfg)
+	ok := LazyReconnect(mgr, "nonexistent")
+	if ok {
+		t.Error("Expected LazyReconnect to fail for unknown server")
+	}
+}
+
+// Fix #4: Test in-flight call tracking
+func TestTrackCallStartEnd(t *testing.T) {
+	cfg := &MCPConfig{MCPServers: map[string]ServerConfig{}}
+	mgr := NewMCPManager(cfg)
+
+	mgr.TrackCallStart("srv")
+	mgr.TrackCallStart("srv")
+
+	// waitForDrain should block briefly then succeed after TrackCallEnd
+	done := make(chan bool, 1)
+	go func() {
+		mgr.TrackCallEnd("srv")
+		mgr.TrackCallEnd("srv")
+		done <- true
+	}()
+	<-done
+
+	// After all calls end, drain should succeed immediately
+	mgr.waitForDrain("srv", 1*time.Second)
+}
+
+// Fix #2: Test that initServer pre-registers server on failure
+func TestInitServerRegistersOnFailure(t *testing.T) {
+	cfg := &MCPConfig{MCPServers: map[string]ServerConfig{
+		"badserver": {Command: "/nonexistent/binary/path"},
+	}}
+	mgr := NewMCPManager(cfg)
+	err := mgr.initServer("badserver", cfg.MCPServers["badserver"])
+	if err == nil {
+		t.Fatal("Expected error from initServer with bad command")
+	}
+
+	// Server should still be registered as unhealthy
+	servers := mgr.GetServerInfo()
+	if len(servers) != 1 {
+		t.Fatalf("Expected 1 server registered, got %d", len(servers))
+	}
+	if servers[0].Status != StatusUnhealthy {
+		t.Errorf("Expected StatusUnhealthy, got %s", servers[0].Status)
+	}
+	if servers[0].ErrMsg == "" {
+		t.Error("Expected ErrMsg to be set")
 	}
 }
 

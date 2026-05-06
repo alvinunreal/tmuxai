@@ -109,8 +109,7 @@ func TestLoadConfigEmptyServers(t *testing.T) {
 }
 
 func TestExpandEnvSet(t *testing.T) {
-	os.Setenv("TEST_MCP_KEY", "secret123")
-	defer os.Unsetenv("TEST_MCP_KEY")
+	t.Setenv("TEST_MCP_KEY", "secret123")
 	env := map[string]string{"API_KEY": "${TEST_MCP_KEY}"}
 	result := ExpandEnv(env)
 	if result["API_KEY"] != "secret123" {
@@ -119,7 +118,9 @@ func TestExpandEnvSet(t *testing.T) {
 }
 
 func TestExpandEnvUnset(t *testing.T) {
-	os.Unsetenv("TEST_MCP_MISSING_VAR")
+	// t.Setenv registers cleanup; Unsetenv makes it truly absent for ExpandEnv
+	t.Setenv("TEST_MCP_MISSING_VAR", "")
+	_ = os.Unsetenv("TEST_MCP_MISSING_VAR")
 	env := map[string]string{"API_KEY": "${TEST_MCP_MISSING_VAR}"}
 	result := ExpandEnv(env)
 	if result["API_KEY"] != "" {
@@ -128,8 +129,7 @@ func TestExpandEnvUnset(t *testing.T) {
 }
 
 func TestExpandEnvMixed(t *testing.T) {
-	os.Setenv("TEST_MCP_HOST", "example.com")
-	defer os.Unsetenv("TEST_MCP_HOST")
+	t.Setenv("TEST_MCP_HOST", "example.com")
 	env := map[string]string{"URL": "https://${TEST_MCP_HOST}/path", "PLAIN": "no-vars-here"}
 	result := ExpandEnv(env)
 	if result["URL"] != "https://example.com/path" {
@@ -201,8 +201,7 @@ func TestValidateValidURLOnly(t *testing.T) {
 }
 
 func TestLoadConfigWithEnvExpansion(t *testing.T) {
-	os.Setenv("TEST_MCP_SECRET", "mytoken")
-	defer os.Unsetenv("TEST_MCP_SECRET")
+	t.Setenv("TEST_MCP_SECRET", "mytoken")
 	dir := t.TempDir()
 	p := filepath.Join(dir, "mcp.json")
 	input := `{

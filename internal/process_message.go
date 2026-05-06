@@ -322,10 +322,13 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 	}
 
 	// Process MCP tool calls (sequential execution)
+	// Fix #15: Store each tool result as a separate ChatMessage
 	if len(r.MCPToolCalls) > 0 && m.McpManager != nil {
 		s.Restart()
 
-		var resultParts []string
+		// Append user message and AI response first
+		m.Messages = append(m.Messages, currentMessage, responseMsg)
+
 		for _, call := range r.MCPToolCalls {
 			displayName := strings.TrimPrefix(call.Name, "mcp__")
 			displayName = strings.ReplaceAll(displayName, "__", ".")
@@ -337,21 +340,16 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 			}
 			safeResult := sanitizeXML(result)
 
-			resultParts = append(resultParts, fmt.Sprintf(
-				"<ToolResult name=\"%s\">%s</ToolResult>",
-				call.Name, safeResult,
-			))
+			// Each tool result as separate message
+			m.Messages = append(m.Messages, ChatMessage{
+				Content:   fmt.Sprintf("<ToolResult name=\"%s\">%s</ToolResult>", call.Name, safeResult),
+				FromUser:  false,
+				Timestamp: time.Now(),
+			})
 			logger.Debug("MCP result for %s: %s", call.Name, safeResult)
 		}
 
 		s.Stop()
-
-		toolResultMsg := ChatMessage{
-			Content:   strings.Join(resultParts, "\n"),
-			FromUser:  false,
-			Timestamp: time.Now(),
-		}
-		m.Messages = append(m.Messages, currentMessage, responseMsg, toolResultMsg)
 
 		depth := mcpDepthFromCtx(ctx) + 1
 		mcpCtx := ctxWithMcpDepth(ctx, depth)
@@ -448,6 +446,9 @@ func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
 	return "", true
 }
 
+// Fix #8: Escape only XML-significant characters (<, >, &) in tool result text.
+// Do NOT use html.EscapeString — it also escapes " and ' which corrupts
+// tool output containing quotes (the LLM sees &#34; instead of ").
 func sanitizeXML(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")

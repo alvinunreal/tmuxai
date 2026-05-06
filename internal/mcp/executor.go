@@ -25,6 +25,10 @@ func ExecuteToolCall(ctx context.Context, mgr *MCPManager, reg *Registry, fqName
 		return fmt.Sprintf("(tool not found: %s)", fqName), true
 	}
 
+	// Fix #4: Track in-flight calls for reload safety
+	mgr.TrackCallStart(entry.ServerName)
+	defer mgr.TrackCallEnd(entry.ServerName)
+
 	timeout := defaultCallTimeout
 	if entry.ServerInfo.Config.TimeoutSeconds > 0 {
 		timeout = time.Duration(entry.ServerInfo.Config.TimeoutSeconds) * time.Second
@@ -48,7 +52,8 @@ func ExecuteToolCall(ctx context.Context, mgr *MCPManager, reg *Registry, fqName
 		}
 	}
 
-	result, err := callWithRetry(callCtx, session, entry, arguments)
+	// Fix #1: Pass mgr to callWithRetry so lazy reconnect works
+	result, err := callWithRetry(callCtx, mgr, session, entry, arguments)
 	if err != nil {
 		if callCtx.Err() == context.DeadlineExceeded {
 			return fmt.Sprintf("(timed out: %s.%s)", entry.ServerName, entry.ToolName), true
@@ -60,15 +65,15 @@ func ExecuteToolCall(ctx context.Context, mgr *MCPManager, reg *Registry, fqName
 	return SanitizeResult(raw), result.IsError
 }
 
-func callWithRetry(ctx context.Context, session *mcpsdk.ClientSession, entry ToolEntry, arguments map[string]any) (*mcpsdk.CallToolResult, error) {
+// Fix #1: Accept mgr directly so lazy reconnect actually works
+func callWithRetry(ctx context.Context, mgr *MCPManager, session *mcpsdk.ClientSession, entry ToolEntry, arguments map[string]any) (*mcpsdk.CallToolResult, error) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name:      entry.ToolName,
 		Arguments: arguments,
 	})
 	if err != nil {
 		logger.Info("MCP CallTool failed for %s.%s: %v, attempting reconnect", entry.ServerName, entry.ToolName, err)
-		mgr := getManagerFromSession(entry)
-		if mgr != nil && LazyReconnect(mgr, entry.ServerName) {
+		if LazyReconnect(mgr, entry.ServerName) {
 			session = mgr.GetSession(entry.ServerName)
 			if session != nil {
 				result, err = session.CallTool(ctx, &mcpsdk.CallToolParams{
@@ -79,13 +84,6 @@ func callWithRetry(ctx context.Context, session *mcpsdk.ClientSession, entry Too
 		}
 	}
 	return result, err
-}
-
-func getManagerFromSession(entry ToolEntry) *MCPManager {
-	// This is a workaround: ToolEntry doesn't hold the manager, so we rely on
-	// the package-level convention that ExecuteToolCall passes mgr separately.
-	// Instead, let's restructure: callWithRetry should take mgr directly.
-	return nil
 }
 
 func extractText(result *mcpsdk.CallToolResult) string {

@@ -633,8 +633,13 @@ Watch for: ` + watchDesc
 		return
 
 	case prefixMatch(commandPrefix, "/mcp"):
+		// Allow /mcp load even when MCP is not yet configured
 		if m.McpManager == nil {
-			m.Println("MCP not configured. Create ~/.config/tmuxai/mcp.json to enable.")
+			if len(parts) >= 2 && parts[1] == "load" {
+				m.reloadMcp()
+				return
+			}
+			m.Println("MCP not configured. Create ~/.config/tmuxai/mcp.json and use /mcp load.")
 			return
 		}
 		if len(parts) == 1 || (len(parts) == 2 && parts[1] == "list") {
@@ -643,7 +648,8 @@ Watch for: ` + watchDesc
 		} else if len(parts) >= 2 && parts[1] == "tools" {
 			serverFilter := ""
 			if len(parts) >= 3 {
-				serverFilter = strings.Title(parts[2])
+				// Fix #11: Remove deprecated strings.Title; showMcpTools uses EqualFold
+			serverFilter = parts[2]
 			}
 			m.showMcpTools(serverFilter)
 			return
@@ -737,22 +743,8 @@ func (m *Manager) formatInfo() {
 		formatLine("Loaded Skills", fmt.Sprintf("%d (%d chars)", len(m.LoadedSkills), m.Skills.UsedChars))
 	}
 
-	if m.McpManager != nil {
-		servers := m.McpManager.GetServerInfo()
-		active := 0
-		totalTools := 0
-		for _, s := range servers {
-			if s.Status == mcp.StatusHealthy {
-				active++
-				totalTools += len(s.Tools)
-			}
-		}
-		if active > 0 {
-			formatLine("MCP Servers", fmt.Sprintf("%d active, %d tools", active, totalTools))
-		}
-	}
-
 	// Display MCP information
+	// Fix #5: Single MCP section (removed duplicate from Context section)
 	if m.McpManager != nil {
 		servers := m.McpManager.GetServerInfo()
 		if len(servers) > 0 {
@@ -772,8 +764,10 @@ func (m *Manager) formatInfo() {
 					disabled++
 				}
 			}
+			// Fix #9: Use actual token estimate from tool definitions, not tool count
+			mcpTokens := system.EstimateTokenCount(m.ensureMcpToolDefs())
 			fmt.Println(formatter.FormatSection("\nMCP"))
-			formatLine("Active", fmt.Sprintf("%d (total tools: %d, ~%d tokens)", active, totalTools, int(float64(totalTools)/4.2)))
+			formatLine("Active", fmt.Sprintf("%d (total tools: %d, ~%d tokens)", active, totalTools, mcpTokens))
 			if unhealthy > 0 {
 				formatLine("Unhealthy", unhealthy)
 			}
