@@ -321,6 +321,17 @@ func (m *Manager) initMCP() {
 	}
 }
 
+// Cleanup performs graceful shutdown of all managed resources.
+// It must be called when the Manager is no longer needed.
+func (m *Manager) Cleanup() {
+	if m.McpManager != nil {
+		logger.Info("Shutting down MCP servers...")
+		m.McpManager.Shutdown()
+		m.McpManager = nil
+		m.McpRegistry = nil
+	}
+}
+
 func (m *Manager) ensureMcpToolDefs() string {
 	if m.McpManager == nil {
 		return ""

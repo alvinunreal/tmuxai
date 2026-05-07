@@ -3,7 +3,6 @@ package internal
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -171,8 +170,9 @@ func (m *Manager) ProcessSubCommand(command string) {
 		return
 
 	case prefixMatch(commandPrefix, "/exit"):
-		logger.Info("Exit command received, stopping watch mode (if active) and exiting.")
-		os.Exit(0)
+		// Handled by REPL loop in chat.go for graceful shutdown.
+		// This path is kept as a fallback; Cleanup() is deferred in cli.go.
+		logger.Info("Exit command received.")
 		return
 
 	case prefixMatch(commandPrefix, "/squash"):
