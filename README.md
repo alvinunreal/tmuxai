@@ -747,19 +747,33 @@ Create `~/.config/tmuxai/mcp.json` to define your MCP servers:
     "context7": {
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp@latest"]
+    },
+    "remote-mcp": {
+      "type": "streamable-http",
+      "url": "http://localhost:3050/mcp",
+      "headers": { "X-API-Key": "${MCP_API_KEY}" }
     }
   }
 }
 ```
 
-Each server entry requires either `command` (stdio) or `url` (SSE). Optional fields:
+TmuxAI supports three transport types:
+
+| Transport | When to use | Required fields |
+|-----------|-------------|----------------|
+| **stdio** | Local MCP servers (spawned as child process) | `command` (and optionally `args`) |
+| **SSE** | Remote servers using Server-Sent Events | `url` |
+| **streamable-http** | Remote servers using MCP Streamable HTTP | `type: "streamable-http"` + `url` |
+
+For stdio and SSE servers, TmuxAI auto-detects the transport from the presence of `command` or `url` — no `type` field needed. For streamable HTTP, set `"type": "streamable-http"` explicitly.
 
 | Field | Description |
 |-------|-------------|
-| `command` / `url` | Exactly one required — stdio command or SSE endpoint |
+| `type` | Transport type: `"stdio"`, `"sse"`, or `"streamable-http"` (auto-detected if omitted) |
+| `command` / `url` | Server command (stdio) or endpoint URL (SSE / streamable-http) |
 | `args` | Command-line arguments (stdio only) |
 | `env` | Environment variables (supports `${VAR}` expansion) |
-| `headers` | HTTP headers (SSE only, supports `${VAR}` expansion) |
+| `headers` | HTTP headers (SSE and streamable-http, supports `${VAR}` expansion) |
 | `timeout_seconds` | Per-tool-call timeout (default: 30s) |
 | `disabled` | Set `true` to skip without removing the entry |
 
