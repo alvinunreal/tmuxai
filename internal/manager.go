@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alvinunreal/tmuxai/config"
+	"github.com/alvinunreal/tmuxai/internal/mcp"
 	"github.com/alvinunreal/tmuxai/logger"
 	"github.com/alvinunreal/tmuxai/system"
 	"github.com/fatih/color"
@@ -21,6 +22,7 @@ type AIResponse struct {
 	ExecPaneSeemsBusy      bool
 	WaitingForUserResponse bool
 	NoComment              bool
+	MCPToolCalls           []mcp.MCPToolCall
 }
 
 type ManagerOptions struct {
@@ -54,6 +56,11 @@ type Manager struct {
 	ForcedReadPaneIDs map[string]bool
 
 	SearchEngine *SearchEngine
+
+	McpManager       *mcp.MCPManager
+	McpRegistry      *mcp.Registry
+	McpToolDefCached string
+	mcpDirty         bool
 
 	// Functions for mocking
 	confirmedToExec   func(command string, prompt string, edit bool) (bool, string)
@@ -129,6 +136,8 @@ func NewManager(cfg *config.Config, options ManagerOptions) (*Manager, error) {
 
 	// Initialize web search engine if enabled
 	manager.initSearchEngine()
+
+	manager.initMCP()
 
 	return manager, nil
 }
@@ -212,6 +221,7 @@ func (ai *AIResponse) String() string {
 	ExecPaneSeemsBusy: %v
 	WaitingForUserResponse: %v
 	NoComment: %v
+	MCPToolCalls: %d
 `,
 		ai.Message,
 		ai.SendKeys,
@@ -221,6 +231,7 @@ func (ai *AIResponse) String() string {
 		ai.ExecPaneSeemsBusy,
 		ai.WaitingForUserResponse,
 		ai.NoComment,
+		len(ai.MCPToolCalls),
 	)
 }
 
@@ -273,5 +284,62 @@ func (m *Manager) initSearchEngine() {
 	if len(providers) > 0 {
 		m.SearchEngine = NewSearchEngine(providers, cfg.MaxResults, cfg.MaxResultChars)
 	}
+}
+
+func (m *Manager) initMCP() {
+	mcpCfg, err := mcp.LoadConfig(mcp.DefaultConfigPath())
+	if err != nil {
+		logger.Info("MCP: config load failed: %v", err)
+		return
+	}
+	if mcpCfg == nil || len(mcpCfg.MCPServers) == 0 {
+		return
+	}
+
+	mgr := mcp.NewMCPManager(mcpCfg)
+	if err := mgr.Init(); err != nil {
+		logger.Info("MCP: init had errors: %v", err)
+	}
+
+	servers := mgr.GetServerInfo()
+	activeServers := 0
+	totalTools := 0
+	for _, s := range servers {
+		if s.Status == mcp.StatusHealthy {
+			activeServers++
+			totalTools += len(s.Tools)
+		}
+	}
+
+	m.McpManager = mgr
+	m.McpRegistry = mcp.NewRegistry(mgr)
+	m.mcpDirty = true
+	if totalTools > 0 {
+		logger.Info("MCP: loaded %d servers with %d tools", activeServers, totalTools)
+	} else {
+		logger.Info("MCP: %d servers configured but 0 healthy tools", len(servers))
+	}
+}
+
+// Cleanup performs graceful shutdown of all managed resources.
+// It must be called when the Manager is no longer needed.
+func (m *Manager) Cleanup() {
+	if m.McpManager != nil {
+		logger.Info("Shutting down MCP servers...")
+		m.McpManager.Shutdown()
+		m.McpManager = nil
+		m.McpRegistry = nil
+	}
+}
+
+func (m *Manager) ensureMcpToolDefs() string {
+	if m.McpManager == nil {
+		return ""
+	}
+	if m.mcpDirty {
+		m.McpToolDefCached = m.McpManager.ToolDefinitionsBlock()
+		m.mcpDirty = false
+	}
+	return m.McpToolDefCached
 }
 

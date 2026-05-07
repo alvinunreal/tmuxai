@@ -5,7 +5,9 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/alvinunreal/tmuxai/config"
 	"github.com/alvinunreal/tmuxai/internal"
@@ -75,6 +77,17 @@ var rootCmd = &cobra.Command{
 			logger.Error("manager.NewManager failed: %v", err)
 			os.Exit(1)
 		}
+		defer mgr.Cleanup()
+
+		// Register process-level signal handler for graceful MCP shutdown
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGHUP)
+		go func() {
+			sig := <-sigChan
+			logger.Info("Received signal %v, cleaning up...", sig)
+			mgr.Cleanup()
+			os.Exit(0)
+		}()
 
 		// Load knowledge bases from CLI flag
 		if kbFlag != "" {

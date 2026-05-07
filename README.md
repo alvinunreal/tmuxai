@@ -66,6 +66,7 @@
   - [Manual Squashing](#manual-squashing)
 - [Multiline Input](#multiline-input)
 - [Web Search & Fetch](#web-search-and-fetch)
+- [MCP Server Tools](#mcp-server-tools)
 - [Core Commands](#core-commands)
 - [Command-Line Usage](#command-line-usage)
 - [Configuration](#configuration)
@@ -732,6 +733,65 @@ TmuxAI » /webfetch https://example.com/docs
 > cumulative total is not capped. With `-f 5` or higher on large pages, this can consume a
 > significant portion of the context window. Prefer `-f 1` to `-f 3` unless you need broader coverage.
 
+## MCP Server Tools
+
+TmuxAI supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), allowing you to connect external MCP servers and make their tools available to the AI alongside built-in commands. This is opt-in — if no config file exists, there is zero MCP overhead.
+
+### Configuration
+
+Create `~/.config/tmuxai/mcp.json` to define your MCP servers:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    },
+    "remote-mcp": {
+      "type": "streamable-http",
+      "url": "http://localhost:3050/mcp",
+      "headers": { "X-API-Key": "${MCP_API_KEY}" }
+    }
+  }
+}
+```
+
+TmuxAI supports three transport types:
+
+| Transport | When to use | Required fields |
+|-----------|-------------|----------------|
+| **stdio** | Local MCP servers (spawned as child process) | `command` (and optionally `args`) |
+| **SSE** | Remote servers using Server-Sent Events | `url` |
+| **streamable-http** | Remote servers using MCP Streamable HTTP | `type: "streamable-http"` + `url` |
+
+For stdio and SSE servers, TmuxAI auto-detects the transport from the presence of `command` or `url` — no `type` field needed. For streamable HTTP, set `"type": "streamable-http"` explicitly.
+
+| Field | Description |
+|-------|-------------|
+| `type` | Transport type: `"stdio"`, `"sse"`, or `"streamable-http"` (auto-detected if omitted) |
+| `command` / `url` | Server command (stdio) or endpoint URL (SSE / streamable-http) |
+| `args` | Command-line arguments (stdio only) |
+| `env` | Environment variables (supports `${VAR}` expansion) |
+| `headers` | HTTP headers (SSE and streamable-http, supports `${VAR}` expansion) |
+| `timeout_seconds` | Per-tool-call timeout (default: 30s) |
+| `disabled` | Set `true` to skip without removing the entry |
+
+On startup, TmuxAI connects to each enabled server, lists available tools, and injects their definitions into the AI's system prompt. The AI can then call MCP tools using `<MCPToolCall>` tags, with results automatically fed back for continued reasoning.
+
+### Commands
+
+```
+TmuxAI » /mcp                      # List servers with status and tool counts
+TmuxAI » /mcp tools                 # List all available MCP tools
+TmuxAI » /mcp tools context7        # List tools for a specific server
+TmuxAI » /mcp load                  # Reload config and reconnect all servers
+TmuxAI » /mcp reload                # Hot reload — only reconnects changed servers
+TmuxAI » /mcp unload                # Disconnect all MCP servers
+```
+
+Use `/info` to see active MCP servers, tool counts, and estimated token usage.
+
 ## Core Commands
 
 | Command                     | Description                                                      |
@@ -750,8 +810,19 @@ TmuxAI » /webfetch https://example.com/docs
 | `/kb load <name>`           | Load a knowledge base into conversation context                  |
 | `/kb unload <name>`         | Unload a specific knowledge base                                 |
 | `/kb unload --all`          | Unload all knowledge bases                                       |
+| `/skill`                    | List available skills with loaded status                         |
+| `/skill load <name>`        | Load a skill into conversation context                           |
+| `/skill unload <name>`      | Unload a specific skill                                          |
+| `/skill unload --all`       | Unload all skills                                                |
+| `/skill info <name>`        | View skill details without loading                               |
+| `/skill validate`           | Validate all discovered skills                                   |
 | `/websearch [-f N] <query>` | Search the web via Brave or SearXNG; use `-f N` to auto-fetch top N results |
 | `/webfetch <url>`           | Fetch readable content from a URL, with Wayback Machine fallback                |
+| `/mcp`                      | List MCP servers with status and tool counts                     |
+| `/mcp tools [server]`       | List available MCP tools, optionally filtered by server          |
+| `/mcp load`                 | Reload MCP config and reconnect all servers                      |
+| `/mcp reload`               | Hot reload — only reconnects changed servers                     |
+| `/mcp unload`               | Disconnect all MCP servers                                       |
 | `/exit`                     | Exit TmuxAI                                                      |
 
 ## Command-Line Usage

@@ -3,7 +3,6 @@ package internal
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/alvinunreal/tmuxai/config"
+	"github.com/alvinunreal/tmuxai/internal/mcp"
 	"github.com/alvinunreal/tmuxai/logger"
 	"github.com/alvinunreal/tmuxai/system"
 )
@@ -36,6 +36,11 @@ const helpMessage = `Available commands:
 - /skill validate: Re-scan and validate skills
 - /websearch [-f N] <query>: Search the web (use -f N to auto-fetch top N results)
 - /webfetch <url>: Fetch and extract content from a URL
+- /mcp: List MCP servers and status
+- /mcp tools [<server>]: List MCP tools
+- /mcp load: Full reload MCP config (shutdown all, reconnect all)
+- /mcp reload: Hot reload MCP config (incremental diff)
+- /mcp unload: Disconnect all MCP servers
 - /exit: Exit the application`
 
 var commands = []string{
@@ -53,6 +58,7 @@ var commands = []string{
 	"/skill",
 	"/websearch",
 	"/webfetch",
+	"/mcp",
 }
 
 // checks if the given content is a command
@@ -164,8 +170,9 @@ func (m *Manager) ProcessSubCommand(command string) {
 		return
 
 	case prefixMatch(commandPrefix, "/exit"):
-		logger.Info("Exit command received, stopping watch mode (if active) and exiting.")
-		os.Exit(0)
+		// Handled by REPL loop in chat.go for graceful shutdown.
+		// This path is kept as a fallback; Cleanup() is deferred in cli.go.
+		logger.Info("Exit command received.")
 		return
 
 	case prefixMatch(commandPrefix, "/squash"):
@@ -625,6 +632,38 @@ Watch for: ` + watchDesc
 		m.handleWebFetch(urlStr)
 		return
 
+	case prefixMatch(commandPrefix, "/mcp"):
+		// Allow /mcp load even when MCP is not yet configured
+		if m.McpManager == nil {
+			if len(parts) >= 2 && parts[1] == "load" {
+				m.reloadMcp()
+				return
+			}
+			m.Println("MCP not configured. Create ~/.config/tmuxai/mcp.json and use /mcp load.")
+			return
+		}
+		if len(parts) == 1 || (len(parts) == 2 && parts[1] == "list") {
+			m.showMcpServers()
+			return
+		} else if len(parts) >= 2 && parts[1] == "tools" {
+			serverFilter := ""
+			if len(parts) >= 3 {
+				serverFilter = parts[2]
+			}
+			m.showMcpTools(serverFilter)
+			return
+		} else if len(parts) >= 2 && parts[1] == "load" {
+			m.reloadMcp()
+			return
+		} else if len(parts) >= 2 && parts[1] == "reload" {
+			m.reloadMcpIncremental()
+			return
+		} else if len(parts) >= 2 && parts[1] == "unload" {
+			m.unloadMcp()
+			return
+		}
+		m.Println("Usage: /mcp [list|tools <server>|load|reload|unload]")
+
 	default:
 		m.Println(fmt.Sprintf("Unknown command: %s. Type '/help' to see available commands.", command))
 		return
@@ -701,6 +740,40 @@ func (m *Manager) formatInfo() {
 	// Display loaded skills information
 	if m.Skills != nil && len(m.LoadedSkills) > 0 {
 		formatLine("Loaded Skills", fmt.Sprintf("%d (%d chars)", len(m.LoadedSkills), m.Skills.UsedChars))
+	}
+
+	// Display MCP information
+	// MCP server status and tool count summary
+	if m.McpManager != nil {
+		servers := m.McpManager.GetServerInfo()
+		if len(servers) > 0 {
+			active := 0
+			unhealthy := 0
+			disabled := 0
+			totalTools := 0
+			for _, s := range servers {
+				switch s.Status {
+				case mcp.StatusHealthy:
+					active++
+					totalTools += len(s.Tools)
+				case mcp.StatusUnhealthy:
+					unhealthy++
+				}
+				if s.Config.Disabled {
+					disabled++
+				}
+			}
+			// Estimate tokens from the actual tool definitions text
+			mcpTokens := system.EstimateTokenCount(m.ensureMcpToolDefs())
+			fmt.Println(formatter.FormatSection("\nMCP"))
+			formatLine("Active", fmt.Sprintf("%d (total tools: %d, ~%d tokens)", active, totalTools, mcpTokens))
+			if unhealthy > 0 {
+				formatLine("Unhealthy", unhealthy)
+			}
+			if disabled > 0 {
+				formatLine("Disabled", disabled)
+			}
+		}
 	}
 
 	// Display tmux panes section
@@ -850,3 +923,179 @@ func (m *Manager) handleWebFetch(rawURL string) {
 }
 
 // --- web search command handlers below this line ---
+
+func (m *Manager) showMcpServers() {
+	servers := m.McpManager.GetServerInfo()
+	if len(servers) == 0 {
+		m.Println("No MCP servers configured.")
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString("MCP Servers:\n")
+	totalTools := 0
+	totalTokens := 0
+	for _, s := range servers {
+		var icon string
+		switch s.Status {
+		case mcp.StatusHealthy:
+			icon = "✓"
+		case mcp.StatusUnhealthy:
+			if s.Config.Disabled {
+				icon = "○"
+			} else {
+				icon = "✗"
+			}
+		default:
+			icon = "○"
+		}
+		toolCount := len(s.Tools)
+		detail := fmt.Sprintf("(%s)", s.Transport)
+		if s.Status == mcp.StatusHealthy {
+			detail += fmt.Sprintf(" %d tools", toolCount)
+			totalTools += toolCount
+			tokenEst := 0
+			for _, t := range s.Tools {
+				tokenEst += (len(t.Name) + len(t.Description)) / 4
+			}
+			if tokenEst > 0 {
+				detail += fmt.Sprintf(" (~%d tokens)", tokenEst)
+				totalTokens += tokenEst
+			}
+		} else if s.ErrMsg != "" {
+			detail += fmt.Sprintf(" error: %s", s.ErrMsg)
+		}
+		fmt.Fprintf(&b, "  %s %s %s\n", icon, s.Name, detail)
+	}
+
+	active := 0
+	for _, s := range servers {
+		if s.Status == mcp.StatusHealthy {
+			active++
+		}
+	}
+	fmt.Fprintf(&b, "\nTotal: %d/%d active, %d tools (~%d tokens)", active, len(servers), totalTools, totalTokens)
+	m.Println(b.String())
+}
+
+func (m *Manager) showMcpTools(filter string) {
+	servers := m.McpManager.GetServerInfo()
+	var b strings.Builder
+	found := false
+	for _, s := range servers {
+		if s.Status != mcp.StatusHealthy {
+			continue
+		}
+		if filter != "" && !strings.EqualFold(s.Name, filter) {
+			continue
+		}
+		if found {
+			b.WriteString("\n")
+		}
+		found = true
+		fmt.Fprintf(&b, "--- %s ---\n", s.Name)
+		for _, t := range s.Tools {
+			fqName := "mcp__" + s.Name + "__" + t.Name
+			desc := t.Description
+			if desc == "" {
+				desc = "(no description)"
+			}
+			fmt.Fprintf(&b, "  %-40s %s\n", fqName, desc)
+		}
+	}
+	if !found {
+		if filter != "" {
+			m.Println(fmt.Sprintf("No tools found for server '%s'.", filter))
+		} else {
+			m.Println("No MCP tools available.")
+		}
+		return
+	}
+	m.Println(strings.TrimRight(b.String(), "\n"))
+}
+
+func (m *Manager) reloadMcp() {
+	if m.McpManager != nil {
+		m.McpManager.Shutdown()
+	}
+
+	mcpCfg, err := mcp.LoadConfig(mcp.DefaultConfigPath())
+	if err != nil {
+		m.Println(fmt.Sprintf("Error loading MCP config: %v", err))
+		m.McpManager = nil
+		m.McpRegistry = nil
+		return
+	}
+	if mcpCfg == nil || len(mcpCfg.MCPServers) == 0 {
+		m.Println("No MCP servers configured.")
+		m.McpManager = nil
+		m.McpRegistry = nil
+		return
+	}
+
+	mgr := mcp.NewMCPManager(mcpCfg)
+	if err := mgr.Init(); err != nil {
+		logger.Info("MCP reload: init had errors: %v", err)
+	}
+
+	servers := mgr.GetServerInfo()
+	activeServers := 0
+	totalTools := 0
+	for _, s := range servers {
+		if s.Status == mcp.StatusHealthy {
+			activeServers++
+			totalTools += len(s.Tools)
+		}
+	}
+
+	m.McpManager = mgr
+	m.McpRegistry = mcp.NewRegistry(mgr)
+	m.mcpDirty = true
+
+	m.Println(fmt.Sprintf("MCP reloaded: %d servers, %d tools", activeServers, totalTools))
+	logger.Info("MCP reloaded: %d servers, %d tools", activeServers, totalTools)
+}
+
+func (m *Manager) unloadMcp() {
+	if m.McpManager != nil {
+		m.McpManager.Shutdown()
+	}
+	m.McpManager = nil
+	m.McpRegistry = nil
+	m.McpToolDefCached = ""
+	m.mcpDirty = false
+	m.Println("MCP unloaded.")
+	logger.Info("MCP unloaded")
+}
+
+// reloadMcpIncremental is an alias for reloadMcp — full reconnect is sufficient for now.
+// Incremental diffing (add/remove/change per-server) can be added later if needed.
+func (m *Manager) reloadMcpIncremental() {
+	if m.McpManager == nil {
+		m.Println("No MCP manager initialized. Use /mcp load first.")
+		return
+	}
+
+	mcpCfg, err := mcp.LoadConfig(mcp.DefaultConfigPath())
+	if err != nil {
+		m.Println(fmt.Sprintf("Error loading MCP config: %v", err))
+		return
+	}
+	if mcpCfg == nil || len(mcpCfg.MCPServers) == 0 {
+		m.Println("No MCP servers configured in config.")
+		return
+	}
+
+	added, removed, restarted, kept, firstErr := m.McpManager.Reload(mcpCfg)
+	if firstErr != nil {
+		logger.Info("MCP incremental reload had errors: %v", firstErr)
+	}
+
+	m.McpRegistry = mcp.NewRegistry(m.McpManager)
+	m.mcpDirty = true
+
+	m.Println(fmt.Sprintf("MCP hot-reloaded: added=%d removed=%d restarted=%d kept=%d",
+		added, removed, restarted, kept))
+	logger.Info("MCP hot-reloaded: added=%d removed=%d restarted=%d kept=%d",
+		added, removed, restarted, kept)
+}

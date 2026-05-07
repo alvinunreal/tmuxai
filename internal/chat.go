@@ -112,7 +112,7 @@ func (c *CLIInterface) Start(initMessage string) error {
 
 		// Check for exit/quit commands (only if it's the entire line content)
 		trimmed := strings.TrimSpace(input)
-		if trimmed == "exit" || trimmed == "quit" {
+		if trimmed == "exit" || trimmed == "quit" || strings.EqualFold(trimmed, "/exit") {
 			return nil
 		}
 		if trimmed == "" {

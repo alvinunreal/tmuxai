@@ -5,6 +5,44 @@ import (
 	"html"
 	"regexp"
 	"strings"
+
+	"github.com/alvinunreal/tmuxai/internal/mcp"
+)
+
+// Pre-compiled regex patterns for each XML tag, avoiding recompilation per response.
+type tagRegexes struct {
+	tag       *regexp.Regexp
+	codeBlock *regexp.Regexp
+	backtick  *regexp.Regexp
+	boolPat   *regexp.Regexp
+	leftover  *regexp.Regexp
+}
+
+var tagNames = []string{
+	"TmuxSendKeys", "ExecCommand", "PasteMultilineContent",
+	"RequestAccomplished", "ExecPaneSeemsBusy", "WaitingForUserResponse", "NoComment",
+}
+
+var tagPatterns = func() map[string]*tagRegexes {
+	patterns := make(map[string]*tagRegexes, len(tagNames))
+	for _, name := range tagNames {
+		patterns[name] = &tagRegexes{
+			tag:       regexp.MustCompile(fmt.Sprintf(`(?s)<%s>(.*?)</%s>`, name, name)),
+			codeBlock: regexp.MustCompile(fmt.Sprintf("(?s)```(?:xml)?\\s*<%s>.*?</%s>\\s*```", name, name)),
+			backtick:  regexp.MustCompile(fmt.Sprintf("`<%s>.*?</%s>`", name, name)),
+			boolPat:   regexp.MustCompile(fmt.Sprintf(`(?s)(<%s>\s*</%s>|<%s>\s*|`+"```<%s>```"+`|<%s/>)`, name, name, name, name, name)),
+			leftover:  regexp.MustCompile(fmt.Sprintf(`(?m)^\s*(<%s>\s*|`+"```<%s>```"+`)?\s*$`, name, name)),
+		}
+	}
+	return patterns
+}()
+
+// Pre-compiled patterns for stripping MCPToolCall tags from code blocks and backticks.
+var (
+	mcpCodeBlockRe = regexp.MustCompile(`(?s)` + "```(?:xml)?\\s*<MCPToolCall>.*?</MCPToolCall>\\s*```")
+	mcpBacktickRe  = regexp.MustCompile("`<MCPToolCall>.*?</MCPToolCall>`")
+	mcpTagRe       = regexp.MustCompile(`(?s)<MCPToolCall>.*?</MCPToolCall>`)
+	multiNewlineRe = regexp.MustCompile(`\n{2,}`)
 )
 
 func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
@@ -26,58 +64,58 @@ func (m *Manager) parseAIResponse(response string) (AIResponse, error) {
 	}
 
 	clean := response
-	tagPattern := `(?s)<%s>(.*?)</%s>`
 	r := AIResponse{}
 	cleanForMsg := clean
 	for _, t := range tags {
-		reTag := regexp.MustCompile(fmt.Sprintf(tagPattern, t.name, t.name))
-		tagMatches := reTag.FindAllStringSubmatch(clean, -1)
+		pats := tagPatterns[t.name]
+		tagMatches := pats.tag.FindAllStringSubmatch(clean, -1)
 		for _, m := range tagMatches {
-			// m[0] is the full match, m[1] is the value
 			if len(m) < 2 {
-				continue // skip invalid match
+				continue
 			}
 			val := strings.TrimSpace(m[1])
-			// Decode XML entities for non-bool tags
 			if !t.isBool {
 				val = html.UnescapeString(val)
 			}
-			if t.isArray {
-				t.setField(&r, val)
-			} else {
-				t.setField(&r, val)
-			}
+			t.setField(&r, val)
 		}
 		// For message: remove all tag blocks, including code/backtick wrappers
-		// Remove code block: ```xml\n<tag>...</tag>\n```, ```\n<tag>...</tag>\n```
-		cleanForMsg = regexp.MustCompile(fmt.Sprintf("(?s)```(?:xml)?\\s*<%s>.*?</%s>\\s*```", t.name, t.name)).ReplaceAllString(cleanForMsg, "")
-		// Remove single backtick-wrapped tags: `<Tag>...</Tag>`
-		cleanForMsg = regexp.MustCompile(fmt.Sprintf("`<%s>.*?</%s>`", t.name, t.name)).ReplaceAllString(cleanForMsg, "")
-		// Remove plain tag: <Tag>...</Tag>
-		cleanForMsg = reTag.ReplaceAllString(cleanForMsg, "")
+		cleanForMsg = pats.codeBlock.ReplaceAllString(cleanForMsg, "")
+		cleanForMsg = pats.backtick.ReplaceAllString(cleanForMsg, "")
+		cleanForMsg = pats.tag.ReplaceAllString(cleanForMsg, "")
 	}
 
 	// Special handling: tags that may appear as <TagName> or ```<TagName>``` (no value)
-	// Set bool fields to true if such tag is present, even if no value
 	for _, t := range tags {
 		if !t.isBool {
 			continue
 		}
-		// Match <TagName> or ```<TagName>```
-		pat := fmt.Sprintf("(?s)(<%s>\\s*</%s>|<%s>\\s*|```<%s>```|<%s/>)", t.name, t.name, t.name, t.name, t.name)
-		if regexp.MustCompile(pat).MatchString(clean) {
+		if tagPatterns[t.name].boolPat.MatchString(clean) {
 			t.setField(&r, "1")
 		}
 	}
+
+	// Unwrap code-fenced MCPToolCall tags so they're parseable
+	cleanForMcp := mcpCodeBlockRe.ReplaceAllStringFunc(clean, func(match string) string {
+		if inner := mcpTagRe.FindString(match); inner != "" {
+			return inner
+		}
+		return match
+	})
+	mcpCalls, _ := mcp.ParseMCPToolCalls(cleanForMcp)
+	r.MCPToolCalls = mcpCalls
+
+	// Strip MCPToolCall tags (including code-block-wrapped) from display message
+	cleanForMsg = mcpCodeBlockRe.ReplaceAllString(cleanForMsg, "")
+	cleanForMsg = mcpBacktickRe.ReplaceAllString(cleanForMsg, "")
+	_, cleanForMsg = mcp.ParseMCPToolCalls(cleanForMsg)
 
 	// Message: trim, collapse multiple newlines
 	msg := strings.TrimSpace(cleanForMsg)
 	msg = collapseBlankLines(msg)
 	// Remove any leftover tag lines (e.g. <TagName>) that may not have been removed
 	for _, t := range tags {
-		// Remove lines that are just <TagName> or ```<TagName>```
-		reLeftover := regexp.MustCompile(fmt.Sprintf("(?m)^\\s*(<%s>\\s*|```<%s>```)?\\s*$", t.name, t.name))
-		msg = reLeftover.ReplaceAllString(msg, "")
+		msg = tagPatterns[t.name].leftover.ReplaceAllString(msg, "")
 	}
 	msg = strings.TrimSpace(msg)
 	r.Message = msg
@@ -93,14 +131,5 @@ func isTrue(s string) bool {
 
 // Collapse multiple blank lines to a single newline
 func collapseBlankLines(s string) string {
-	return mustCompile(`\n{2,}`).ReplaceAllString(s, "\n")
-}
-
-// mustCompile is a helper for regexp.MustCompile
-func mustCompile(expr string) *regexp.Regexp {
-	re, err := regexp.Compile(expr)
-	if err != nil {
-		panic(err)
-	}
-	return re
+	return multiNewlineRe.ReplaceAllString(s, "\n")
 }

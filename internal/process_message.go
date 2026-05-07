@@ -4,16 +4,38 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/alvinunreal/tmuxai/internal/mcp"
 	"github.com/alvinunreal/tmuxai/logger"
 	"github.com/alvinunreal/tmuxai/system"
 	"github.com/briandowns/spinner"
 )
 
+type mcpDepthKey struct{}
+
+const mcpMaxDepth = 3
+
+func mcpDepthFromCtx(ctx context.Context) int {
+	if v, ok := ctx.Value(mcpDepthKey{}).(int); ok {
+		return v
+	}
+	return 0
+}
+
+func ctxWithMcpDepth(ctx context.Context, depth int) context.Context {
+	return context.WithValue(ctx, mcpDepthKey{}, depth)
+}
+
 // Main function to process regular user messages
 // Returns true if the request was accomplished and no further processing should happen
 func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
+	if mcpDepthFromCtx(ctx) >= mcpMaxDepth {
+		logger.Info("MCP: max re-prompt depth (%d) reached, stopping MCP execution", mcpMaxDepth)
+		return false
+	}
+
 	// Check if context management is needed before sending
 	if m.needSquash() {
 		m.Println("Exceeded context size, squashing history...")
@@ -192,7 +214,8 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 	}
 
 	// Don't append to history if AI is waiting for the pane or is watch mode no comment
-	if r.ExecPaneSeemsBusy || r.NoComment {
+	// Also defer appending when MCP tool calls are present — the MCP block handles it
+	if r.ExecPaneSeemsBusy || r.NoComment || (len(r.MCPToolCalls) > 0 && m.McpManager != nil) {
 	} else {
 		m.Messages = append(m.Messages, currentMessage, responseMsg)
 	}
@@ -298,6 +321,41 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		}
 	}
 
+	// Process MCP tool calls (sequential execution)
+	// Store each tool result as a separate ChatMessage for proper conversation flow
+	if len(r.MCPToolCalls) > 0 && m.McpManager != nil {
+		s.Restart()
+
+		// Append user message and AI response first
+		m.Messages = append(m.Messages, currentMessage, responseMsg)
+
+		for _, call := range r.MCPToolCalls {
+			displayName := strings.TrimPrefix(call.Name, "mcp__")
+			displayName = strings.ReplaceAll(displayName, "__", ".")
+			m.Println("MCP tool call: " + displayName)
+
+			result, isErr := mcp.ExecuteToolCall(ctx, m.McpManager, m.McpRegistry, call.Name, call.Arguments)
+			if isErr {
+				logger.Info("MCP tool %s returned error result", call.Name)
+			}
+			safeResult := sanitizeXML(result)
+
+			// Each tool result as separate message
+			m.Messages = append(m.Messages, ChatMessage{
+				Content:   fmt.Sprintf("<ToolResult name=\"%s\">%s</ToolResult>", call.Name, safeResult),
+				FromUser:  false,
+				Timestamp: time.Now(),
+			})
+			logger.Debug("MCP result for %s: %s", call.Name, safeResult)
+		}
+
+		s.Stop()
+
+		depth := mcpDepthFromCtx(ctx) + 1
+		mcpCtx := ctxWithMcpDepth(ctx, depth)
+		return m.ProcessUserMessage(mcpCtx, "MCP tool results are above. Continue.")
+	}
+
 	if r.RequestAccomplished {
 		m.Status = ""
 		return true
@@ -348,7 +406,6 @@ func (m *Manager) startWatchMode(desc string) {
 }
 
 func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
-	// Check if only one boolean is true in AI response
 	boolCount := 0
 	if r.RequestAccomplished {
 		boolCount++
@@ -367,28 +424,34 @@ func (m *Manager) aiFollowedGuidelines(r AIResponse) (string, bool) {
 		return "You didn't follow the guidelines. Only one boolean flag should be set to true in your response. Pay attention!", false
 	}
 
-	// Check if only one tag is used
-	tags := []int{len(r.ExecCommand), len(r.SendKeys)}
-	if r.PasteMultilineContent != "" {
-		tags = append(tags, 1)
-	} else {
-		tags = append(tags, 0)
+	nonMcpTags := 0
+	if len(r.ExecCommand) > 0 {
+		nonMcpTags++
 	}
-	count := 0
-	for _, len := range tags {
-		if len > 0 {
-			count++
-		}
+	if len(r.SendKeys) > 0 {
+		nonMcpTags++
+	}
+	if r.PasteMultilineContent != "" {
+		nonMcpTags++
 	}
 
-	if count > 1 {
+	if nonMcpTags > 1 {
 		return "You didn't follow the guidelines. You can only use one type of XML tag in your response. Pay attention!", false
 	}
 
-	// watch mode has no xml tags, otherwise should be at least 1 xml tag in response
-	if !m.WatchMode && count+boolCount == 0 {
+	if !m.WatchMode && nonMcpTags+boolCount == 0 && len(r.MCPToolCalls) == 0 {
 		return "You didn't follow the guidelines. You must use at least one XML tag in your response. Pay attention!", false
 	}
 
 	return "", true
+}
+
+// sanitizeXML escapes XML-significant characters in tool result text.
+// Do NOT use html.EscapeString — it also escapes " and ' which corrupts
+// tool output containing quotes (the LLM sees &#34; instead of ").
+func sanitizeXML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
 }
