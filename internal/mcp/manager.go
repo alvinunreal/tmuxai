@@ -45,7 +45,10 @@ func NewMCPManager(cfg *MCPConfig) *MCPManager {
 }
 
 func (m *MCPManager) Init() error {
+	var wg sync.WaitGroup
+	var errMu sync.Mutex
 	var firstErr error
+
 	for name, sc := range m.config.MCPServers {
 		if sc.Disabled {
 			m.mu.Lock()
@@ -59,13 +62,20 @@ func (m *MCPManager) Init() error {
 			m.mu.Unlock()
 			continue
 		}
-		if err := m.initServer(name, sc); err != nil {
-			logger.Info("MCP server %q init failed: %v", name, err)
-			if firstErr == nil {
-				firstErr = fmt.Errorf("server %q: %w", name, err)
+		wg.Add(1)
+		go func(name string, sc ServerConfig) {
+			defer wg.Done()
+			if err := m.initServer(name, sc); err != nil {
+				logger.Info("MCP server %q init failed: %v", name, err)
+				errMu.Lock()
+				if firstErr == nil {
+					firstErr = fmt.Errorf("server %q: %w", name, err)
+				}
+				errMu.Unlock()
 			}
-		}
+		}(name, sc)
 	}
+	wg.Wait()
 	m.cacheDirty = true
 	return firstErr
 }
