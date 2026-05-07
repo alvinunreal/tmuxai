@@ -391,15 +391,6 @@ func (t *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	return t.base.RoundTrip(req)
 }
 
-// shutdownServer drains in-flight calls then tears down the server.
-// Caller must NOT hold m.mu — this method acquires it internally.
-func (m *MCPManager) shutdownServer(name string) {
-	m.waitForDrain(name, 5*time.Second)
-	m.mu.Lock()
-	m.shutdownServerLocked(name)
-	m.mu.Unlock()
-}
-
 // shutdownServerLocked tears down a server without draining.
 // Caller MUST hold m.mu. Use when drain was done separately.
 func (m *MCPManager) shutdownServerLocked(name string) {
