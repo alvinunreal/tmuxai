@@ -1,6 +1,7 @@
 package mcp
 
 type ServerConfig struct {
+	Type           string            `json:"type,omitempty"` // "" | "stdio" | "sse" | "streamable-http"
 	Command        string            `json:"command,omitempty"`
 	Args           []string          `json:"args,omitempty"`
 	URL            string            `json:"url,omitempty"`

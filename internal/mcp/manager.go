@@ -109,27 +109,27 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 
 	var transport mcpsdk.Transport
 	var cmd *exec.Cmd
-	if sc.Command != "" {
+	resolvedType := resolveTransportType(&sc)
+	switch resolvedType {
+	case "stdio":
 		cmd = exec.Command(sc.Command, sc.Args...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if len(sc.Env) > 0 {
 			cmd.Env = append(cmd.Environ(), envSlice(sc.Env)...)
 		}
 		transport = &mcpsdk.CommandTransport{Command: cmd}
-	} else {
-		httpClient := http.DefaultClient
-		if len(sc.Headers) > 0 {
-			httpClient = &http.Client{
-				Transport: &headerRoundTripper{
-					base:    http.DefaultTransport,
-					headers: sc.Headers,
-				},
-			}
+	case "streamable-http":
+		transport = &mcpsdk.StreamableClientTransport{
+			Endpoint:   sc.URL,
+			HTTPClient: buildHTTPClient(sc.Headers),
 		}
+	case "sse":
 		transport = &mcpsdk.SSEClientTransport{
 			Endpoint:   sc.URL,
-			HTTPClient: httpClient,
+			HTTPClient: buildHTTPClient(sc.Headers),
 		}
+	default:
+		return fmt.Errorf("unsupported transport type %q", resolvedType)
 	}
 
 	session, err := client.Connect(ctx, transport, nil)
@@ -294,11 +294,42 @@ func (m *MCPManager) InvalidateCache() {
 	m.mu.Unlock()
 }
 
-func transportType(sc *ServerConfig) string {
-	if sc.Command != "" {
+// resolveTransportType determines the actual transport from config.
+// Priority: explicit Type field > heuristic (command→stdio, url→sse).
+// Empty Type with a URL defaults to "sse" for backward compatibility.
+func resolveTransportType(sc *ServerConfig) string {
+	switch sc.Type {
+	case "streamable-http":
+		return "streamable-http"
+	case "sse":
+		return "sse"
+	case "stdio":
 		return "stdio"
+	case "": // backward-compat heuristic
+		if sc.Command != "" {
+			return "stdio"
+		}
+		return "sse"
+	default:
+		return sc.Type // propagate unknown for error messages
 	}
-	return "sse"
+}
+
+func transportType(sc *ServerConfig) string {
+	return resolveTransportType(sc)
+}
+
+// buildHTTPClient constructs an HTTP client with optional custom headers.
+func buildHTTPClient(headers map[string]string) *http.Client {
+	if len(headers) == 0 {
+		return http.DefaultClient
+	}
+	return &http.Client{
+		Transport: &headerRoundTripper{
+			base:    http.DefaultTransport,
+			headers: headers,
+		},
+	}
 }
 
 func formatToolParams(schema []byte) string {
@@ -506,7 +537,7 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 }
 
 func configEqual(a, b ServerConfig) bool {
-	if a.Command != b.Command || a.URL != b.URL || a.Disabled != b.Disabled || a.TimeoutSeconds != b.TimeoutSeconds {
+	if a.Type != b.Type || a.Command != b.Command || a.URL != b.URL || a.Disabled != b.Disabled || a.TimeoutSeconds != b.TimeoutSeconds {
 		return false
 	}
 	if len(a.Args) != len(b.Args) {

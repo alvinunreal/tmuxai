@@ -931,7 +931,8 @@ func (m *Manager) showMcpServers() {
 		return
 	}
 
-	m.Println("MCP Servers:")
+	var b strings.Builder
+	b.WriteString("MCP Servers:\n")
 	totalTools := 0
 	totalTokens := 0
 	for _, s := range servers {
@@ -964,21 +965,22 @@ func (m *Manager) showMcpServers() {
 		} else if s.ErrMsg != "" {
 			detail += fmt.Sprintf(" error: %s", s.ErrMsg)
 		}
-		m.Println(fmt.Sprintf("  %s %s %s", icon, s.Name, detail))
+		fmt.Fprintf(&b, "  %s %s %s\n", icon, s.Name, detail)
 	}
 
-	m.Println("")
 	active := 0
 	for _, s := range servers {
 		if s.Status == mcp.StatusHealthy {
 			active++
 		}
 	}
-	m.Println(fmt.Sprintf("Total: %d/%d active, %d tools (~%d tokens)", active, len(servers), totalTools, totalTokens))
+	fmt.Fprintf(&b, "\nTotal: %d/%d active, %d tools (~%d tokens)", active, len(servers), totalTools, totalTokens)
+	m.Println(b.String())
 }
 
 func (m *Manager) showMcpTools(filter string) {
 	servers := m.McpManager.GetServerInfo()
+	var b strings.Builder
 	found := false
 	for _, s := range servers {
 		if s.Status != mcp.StatusHealthy {
@@ -987,15 +989,18 @@ func (m *Manager) showMcpTools(filter string) {
 		if filter != "" && !strings.EqualFold(s.Name, filter) {
 			continue
 		}
+		if found {
+			b.WriteString("\n")
+		}
 		found = true
-		m.Println(fmt.Sprintf("--- %s ---", s.Name))
+		fmt.Fprintf(&b, "--- %s ---\n", s.Name)
 		for _, t := range s.Tools {
 			fqName := "mcp__" + s.Name + "__" + t.Name
 			desc := t.Description
 			if desc == "" {
 				desc = "(no description)"
 			}
-			m.Println(fmt.Sprintf("  %-40s %s", fqName, desc))
+			fmt.Fprintf(&b, "  %-40s %s\n", fqName, desc)
 		}
 	}
 	if !found {
@@ -1004,7 +1009,9 @@ func (m *Manager) showMcpTools(filter string) {
 		} else {
 			m.Println("No MCP tools available.")
 		}
+		return
 	}
+	m.Println(strings.TrimRight(b.String(), "\n"))
 }
 
 func (m *Manager) reloadMcp() {

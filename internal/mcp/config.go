@@ -76,18 +76,45 @@ func ExpandEnv(env map[string]string) map[string]string {
 	return expanded
 }
 
+// validTransportTypes is the set of recognized transport type values.
+var validTransportTypes = map[string]bool{
+	"":                true,
+	"stdio":            true,
+	"sse":              true,
+	"streamable-http":  true,
+}
+
 func Validate(cfg *MCPConfig) error {
 	for name, sc := range cfg.MCPServers {
 		if sc.Disabled {
 			continue
 		}
+
+		// Reject unknown transport types early
+		if !validTransportTypes[sc.Type] {
+			return fmt.Errorf("MCP server %q: unsupported transport type %q", name, sc.Type)
+		}
+
 		hasCommand := sc.Command != ""
 		hasURL := sc.URL != ""
 		if hasCommand && hasURL {
 			return fmt.Errorf("MCP server %q: cannot specify both command and url", name)
 		}
-		if !hasCommand && !hasURL {
-			return fmt.Errorf("MCP server %q: must specify either command or url", name)
+
+		// Type-specific field requirements
+		switch sc.Type {
+		case "stdio":
+			if !hasCommand {
+				return fmt.Errorf("MCP server %q: missing command for stdio transport", name)
+			}
+		case "sse", "streamable-http":
+			if !hasURL {
+				return fmt.Errorf("MCP server %q: missing url for %s transport", name, sc.Type)
+			}
+		default: // Type == "" — backward-compat heuristic
+			if !hasCommand && !hasURL {
+				return fmt.Errorf("MCP server %q: must specify either command or url", name)
+			}
 		}
 	}
 	return nil

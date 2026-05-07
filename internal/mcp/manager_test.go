@@ -7,22 +7,33 @@ import (
 	"time"
 )
 
-func TestTransportType(t *testing.T) {
+func TestResolveTransportType(t *testing.T) {
 	tests := []struct {
 		name string
 		sc   ServerConfig
 		want string
 	}{
-		{"command", ServerConfig{Command: "/bin/foo"}, "stdio"},
-		{"url", ServerConfig{URL: "http://localhost"}, "sse"},
-		{"empty", ServerConfig{}, "sse"},
+		{"command_only", ServerConfig{Command: "/bin/foo"}, "stdio"},
+		{"command_explicit_stdio", ServerConfig{Command: "/bin/foo", Type: "stdio"}, "stdio"},
+		{"url_default_sse", ServerConfig{URL: "http://localhost"}, "sse"},
+		{"url_explicit_sse", ServerConfig{URL: "http://localhost", Type: "sse"}, "sse"},
+		{"url_streamable_http", ServerConfig{URL: "http://localhost", Type: "streamable-http"}, "streamable-http"},
+		{"empty_defaults_sse", ServerConfig{}, "sse"},
+		{"unknown_type_propagates", ServerConfig{Type: "weird"}, "weird"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := transportType(&tt.sc); got != tt.want {
-				t.Errorf("transportType() = %q, want %q", got, tt.want)
+			if got := resolveTransportType(&tt.sc); got != tt.want {
+				t.Errorf("resolveTransportType() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTransportTypeDelegates(t *testing.T) {
+	sc := ServerConfig{URL: "http://localhost", Type: "streamable-http"}
+	if got := transportType(&sc); got != "streamable-http" {
+		t.Errorf("transportType() should delegate to resolveTransportType, got %q", got)
 	}
 }
 
@@ -97,6 +108,12 @@ func TestConfigEqual(t *testing.T) {
 			ServerConfig{Command: "cmd", Args: []string{"a"}, TimeoutSeconds: 5, Disabled: false, Env: map[string]string{"K": "v"}, Headers: map[string]string{"H": "v"}},
 			ServerConfig{Command: "cmd", Args: []string{"a"}, TimeoutSeconds: 5, Disabled: false, Env: map[string]string{"K": "v"}, Headers: map[string]string{"H": "v"}},
 			true,
+		},
+		{
+			"different type",
+			ServerConfig{URL: "http://localhost", Type: "sse"},
+			ServerConfig{URL: "http://localhost", Type: "streamable-http"},
+			false,
 		},
 		{
 			"different command",

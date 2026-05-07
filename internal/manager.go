@@ -311,14 +311,14 @@ func (m *Manager) initMCP() {
 		}
 	}
 
-	if totalTools == 0 {
-		return
-	}
-
 	m.McpManager = mgr
 	m.McpRegistry = mcp.NewRegistry(mgr)
 	m.mcpDirty = true
-	logger.Info("MCP: loaded %d servers with %d tools", activeServers, totalTools)
+	if totalTools > 0 {
+		logger.Info("MCP: loaded %d servers with %d tools", activeServers, totalTools)
+	} else {
+		logger.Info("MCP: %d servers configured but 0 healthy tools", len(servers))
+	}
 }
 
 func (m *Manager) ensureMcpToolDefs() string {

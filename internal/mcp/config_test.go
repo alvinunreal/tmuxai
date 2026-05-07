@@ -244,6 +244,107 @@ func TestLoadConfigValidatesOnLoad(t *testing.T) {
 	}
 }
 
+func TestValidateStreamableHTTPWithURL(t *testing.T) {
+	cfg := &MCPConfig{
+		MCPServers: map[string]ServerConfig{
+			"good": {Type: "streamable-http", URL: "http://localhost:3050/mcp"},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Errorf("Expected no error for streamable-http with url, got: %v", err)
+	}
+}
+
+func TestValidateStreamableHTTPWithoutURL(t *testing.T) {
+	cfg := &MCPConfig{
+		MCPServers: map[string]ServerConfig{
+			"bad": {Type: "streamable-http"},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Error("Expected error for streamable-http without url")
+	}
+}
+
+func TestValidateUnsupportedType(t *testing.T) {
+	cfg := &MCPConfig{
+		MCPServers: map[string]ServerConfig{
+			"bad": {Type: "grpc", Command: "thing"},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Error("Expected error for unsupported type grpc")
+	}
+}
+
+func TestValidateExplicitStdioWithoutCommand(t *testing.T) {
+	cfg := &MCPConfig{
+		MCPServers: map[string]ServerConfig{
+			"bad": {Type: "stdio"},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Error("Expected error for stdio without command")
+	}
+}
+
+func TestValidateExplicitSSEWithoutURL(t *testing.T) {
+	cfg := &MCPConfig{
+		MCPServers: map[string]ServerConfig{
+			"bad": {Type: "sse"},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Error("Expected error for sse without url")
+	}
+}
+
+func TestValidateBackwardCompatNoTypeField(t *testing.T) {
+	cfg := &MCPConfig{
+		MCPServers: map[string]ServerConfig{
+			"stdio_srv": {Command: "npx"},
+			"sse_srv":   {URL: "http://localhost:3000"},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Errorf("Existing configs should validate without type field: %v", err)
+	}
+}
+
+func TestLoadConfigStreamableHTTP(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "mcp.json")
+	input := `{
+		"mcpServers": {
+			"1mcp": {
+				"type": "streamable-http",
+				"url": "http://192.168.3.100:3050/mcp",
+				"headers": {"X-API-Key": "1mcp"}
+			}
+		}
+	}`
+	if err := os.WriteFile(p, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(p)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("Expected non-nil config")
+	}
+	srv := cfg.MCPServers["1mcp"]
+	if srv.Type != "streamable-http" {
+		t.Errorf("Expected type streamable-http, got %q", srv.Type)
+	}
+	if srv.URL != "http://192.168.3.100:3050/mcp" {
+		t.Errorf("Expected url, got %q", srv.URL)
+	}
+	if srv.Headers["X-API-Key"] != "1mcp" {
+		t.Errorf("Expected header, got %v", srv.Headers)
+	}
+}
+
 func TestMCPConfigJSONRoundTrip(t *testing.T) {
 	original := MCPConfig{
 		MCPServers: map[string]ServerConfig{
