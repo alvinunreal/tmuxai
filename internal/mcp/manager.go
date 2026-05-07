@@ -391,14 +391,22 @@ func (t *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	return t.base.RoundTrip(req)
 }
 
+// shutdownServer drains in-flight calls then tears down the server.
+// Caller must NOT hold m.mu — this method acquires it internally.
 func (m *MCPManager) shutdownServer(name string) {
-	// Wait for in-flight calls to drain before closing
 	m.waitForDrain(name, 5*time.Second)
+	m.mu.Lock()
+	m.shutdownServerLocked(name)
+	m.mu.Unlock()
+}
+
+// shutdownServerLocked tears down a server without draining.
+// Caller MUST hold m.mu. Use when drain was done separately.
+func (m *MCPManager) shutdownServerLocked(name string) {
 	if session, ok := m.sessions[name]; ok {
 		_ = session.Close()
 		delete(m.sessions, name)
 	}
-	// Kill process group for stdio servers
 	m.killProcessGroup(name)
 	delete(m.servers, name)
 }
@@ -457,13 +465,22 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 
 	// Handle nil/empty config: shutdown everything
 	if newCfg == nil || len(newCfg.MCPServers) == 0 {
-		count := len(m.servers)
+		names := make([]string, 0, len(m.servers))
 		for name := range m.servers {
-			m.shutdownServer(name)
+			names = append(names, name)
+		}
+		m.mu.Unlock()
+		// Drain without holding lock
+		for _, name := range names {
+			m.waitForDrain(name, 5*time.Second)
+		}
+		m.mu.Lock()
+		for _, name := range names {
+			m.shutdownServerLocked(name)
 		}
 		m.config = newCfg
 		m.mu.Unlock()
-		removed = count
+		removed = len(names)
 		return
 	}
 
@@ -493,13 +510,26 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 		}
 	}
 
-	// Phase 2: Shutdown removals and restarts under lock
+	m.mu.Unlock()
+
+	// Phase 2: Drain in-flight calls WITHOUT holding the lock.
+	// waitForDrain uses sync.Map (lockless), so holding m.mu here would
+	// block all concurrent GetSession/ToolDefinitionsBlock for up to 5s per server.
 	for _, name := range toRemove {
-		m.shutdownServer(name)
+		m.waitForDrain(name, 5*time.Second)
+	}
+	for _, item := range toRestart {
+		m.waitForDrain(item.name, 5*time.Second)
+	}
+
+	// Re-acquire lock for the actual shutdown mutations
+	m.mu.Lock()
+	for _, name := range toRemove {
+		m.shutdownServerLocked(name)
 		removed++
 	}
 	for _, item := range toRestart {
-		m.shutdownServer(item.name)
+		m.shutdownServerLocked(item.name)
 	}
 	m.mu.Unlock()
 

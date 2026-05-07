@@ -648,7 +648,7 @@ Watch for: ` + watchDesc
 		} else if len(parts) >= 2 && parts[1] == "tools" {
 			serverFilter := ""
 			if len(parts) >= 3 {
-			serverFilter = parts[2]
+				serverFilter = parts[2]
 			}
 			m.showMcpTools(serverFilter)
 			return

@@ -43,6 +43,9 @@ func ExecuteToolCall(ctx context.Context, mgr *MCPManager, reg *Registry, fqName
 			return fmt.Sprintf("(server %q unavailable)", entry.ServerName), true
 		}
 		session = mgr.GetSession(entry.ServerName)
+		if session == nil {
+			return fmt.Sprintf("(server %q unavailable after reconnect)", entry.ServerName), true
+		}
 	}
 
 	var arguments map[string]any
