@@ -8,3 +8,8 @@ CODEREF.md
 Makefile
 repomix-output.xml
 dist
+
+# BEGIN oh-my-opencode-slim clonedeps
+.slim/clonedeps.json
+.slim/clonedeps/repos/
+# END oh-my-opencode-slim clonedeps
