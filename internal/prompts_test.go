@@ -176,6 +176,17 @@ func TestPromptEmptyStateHasNoAnsiCodes(t *testing.T) {
 	assert.False(t, regexp.MustCompile(`\x1b\[[0-9;]*m`).MatchString(prompt))
 }
 
+func TestPromptEmptyModelHasNoAnsiCodes(t *testing.T) {
+	cfg := &config.Config{
+		StatusLine:     "{model}",
+		MaxContextSize: 100000,
+	}
+	m := &Manager{Config: cfg, SessionOverrides: map[string]interface{}{}, LoadedKBs: map[string]string{}}
+	prompt := m.GetPrompt()
+	assert.Empty(t, prompt)
+	assert.False(t, regexp.MustCompile(`\x1b\[[0-9;]*m`).MatchString(prompt))
+}
+
 func TestPromptWithLargeContext(t *testing.T) {
 	largeContent := strings.Repeat("Hello world this is a test message with many tokens. ", 500)
 	cfg := &config.Config{

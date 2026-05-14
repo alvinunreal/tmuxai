@@ -235,7 +235,12 @@ func (m *Manager) renderPromptTemplate(template string) string {
 	}
 
 	if promptTemplateHasAny(template, "{model}") {
-		replacements["{model}"] = modelColor.Sprint(m.getPromptModelName())
+		modelName := m.getPromptModelName()
+		if modelName != "" {
+			replacements["{model}"] = modelColor.Sprint(modelName)
+		} else {
+			replacements["{model}"] = ""
+		}
 	}
 
 	if promptTemplateHasAny(template, "{state}", "{state_badge}") {
