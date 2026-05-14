@@ -240,10 +240,12 @@ func (m *Manager) renderPromptTemplate(template string) string {
 
 	if promptTemplateHasAny(template, "{state}", "{state_badge}") {
 		stateSymbol := m.getPromptStateSymbol()
-		replacements["{state}"] = stateColor.Sprint(stateSymbol)
-		replacements["{state_badge}"] = ""
 		if stateSymbol != "" {
+			replacements["{state}"] = stateColor.Sprint(stateSymbol)
 			replacements["{state_badge}"] = stateColor.Sprint("[" + stateSymbol + "]")
+		} else {
+			replacements["{state}"] = ""
+			replacements["{state_badge}"] = ""
 		}
 	}
 

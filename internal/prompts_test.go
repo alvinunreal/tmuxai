@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -159,6 +160,20 @@ func TestPromptUnknownPlaceholdersPreserved(t *testing.T) {
 	prompt := m.GetPrompt()
 	assert.Contains(t, prompt, "TmuxAI")
 	assert.Contains(t, prompt, "{unknown}")
+}
+
+func TestPromptEmptyStateHasNoAnsiCodes(t *testing.T) {
+	cfg := &config.Config{
+		StatusLine:     "{state}{state_badge}",
+		DefaultModel:   "gpt4",
+		Models:         map[string]config.ModelConfig{"gpt4": {Provider: "openai", Model: "gpt-4", APIKey: "sk"}},
+		MaxContextSize: 100000,
+	}
+	m := &Manager{Config: cfg, SessionOverrides: map[string]interface{}{}, LoadedKBs: map[string]string{}}
+	m.SetModelsDefault("gpt4")
+	prompt := m.GetPrompt()
+	assert.Empty(t, prompt)
+	assert.False(t, regexp.MustCompile(`\x1b\[[0-9;]*m`).MatchString(prompt))
 }
 
 func TestPromptWithLargeContext(t *testing.T) {
