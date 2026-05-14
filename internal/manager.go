@@ -221,8 +221,10 @@ func (m *Manager) renderPromptTemplate(template string) string {
 	stateColor := color.New(color.FgMagenta, color.Bold)
 	modelColor := color.New(color.FgCyan, color.Bold)
 
-	replacements := map[string]string{
-		"{app}": tmuxaiColor.Sprint("TmuxAI"),
+	replacements := map[string]string{}
+
+	if strings.Contains(template, "{app}") {
+		replacements["{app}"] = tmuxaiColor.Sprint("TmuxAI")
 	}
 
 	if promptTemplateHasAny(template, "{context}", "{context_used}", "{context_max}") {
@@ -295,11 +297,7 @@ func (m *Manager) getPromptContextTokens() (int, int) {
 func (m *Manager) getPromptModelName() string {
 	availableModels := m.GetAvailableModels()
 	if len(availableModels) > 0 {
-		modelName := m.GetModelsDefault()
-		if modelName == "" {
-			modelName = availableModels[0]
-		}
-		return modelName
+		return m.GetModelsDefault()
 	}
 
 	currentModelConfig, _ := m.GetCurrentModelConfig()
