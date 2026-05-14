@@ -166,6 +166,13 @@ func (m *Manager) GetConfig() *config.Config {
 
 // getPrompt returns the prompt string with color
 func (m *Manager) GetPrompt() string {
+	// Check if custom prompt template is configured
+	customPrompt := m.getCustomPromptTemplate()
+	if customPrompt != "" {
+		return m.renderPromptTemplate(customPrompt)
+	}
+
+	// Default prompt behavior (backward compatible)
 	tmuxaiColor := color.New(color.FgGreen, color.Bold)
 	arrowColor := color.New(color.FgYellow, color.Bold)
 	stateColor := color.New(color.FgMagenta, color.Bold)
@@ -209,6 +216,113 @@ func (m *Manager) GetPrompt() string {
 	}
 	prompt += arrowColor.Sprint(" » ")
 	return prompt
+}
+
+// getCustomPromptTemplate returns the custom prompt template if configured
+func (m *Manager) getCustomPromptTemplate() string {
+	// Check session override first
+	if override, exists := m.SessionOverrides["prompts.prompt"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.Prompts.Prompt
+}
+
+// getCurrentContextSize calculates the total token count of all messages
+func (m *Manager) getCurrentContextSize() int {
+	var totalTokens int
+	for _, msg := range m.Messages {
+		totalTokens += system.EstimateTokenCount(msg.Content)
+	}
+	return totalTokens
+}
+
+// formatCompactNumber formats a number in compact form (e.g., 37000 -> 37k)
+func formatCompactNumber(n int) string {
+	if n >= 1000000 {
+		return fmt.Sprintf("%.1fm", float64(n)/1000000)
+	}
+	if n >= 1000 {
+		return fmt.Sprintf("%dk", n/1000)
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+// getModelLabel returns the current model label for display
+func (m *Manager) getModelLabel() string {
+	currentModel := m.GetModelsDefault()
+	if currentModel != "" {
+		return currentModel
+	}
+
+	// Fallback to legacy model name
+	if modelConfig, exists := m.GetCurrentModelConfig(); exists {
+		return modelConfig.Model
+	}
+	return "unknown"
+}
+
+// renderPromptTemplate renders a prompt template with placeholders
+func (m *Manager) renderPromptTemplate(template string) string {
+	// Define colors
+	tmuxaiColor := color.New(color.FgGreen, color.Bold)
+	modelColor := color.New(color.FgCyan, color.Bold)
+	stateColor := color.New(color.FgMagenta, color.Bold)
+	contextColor := color.New(color.FgWhite)
+	maxContextColor := color.New(color.FgWhite)
+	percentColor := color.New(color.FgWhite)
+
+	// Get state symbol
+	var stateSymbol string
+	switch m.Status {
+	case "running":
+		stateSymbol = "▶"
+	case "waiting":
+		stateSymbol = "?"
+	case "done":
+		stateSymbol = "✓"
+	default:
+		stateSymbol = ""
+	}
+	if m.WatchMode {
+		stateSymbol = "∞"
+	}
+
+	// Calculate context info only when the template needs it. Prompt rendering can
+	// happen frequently, and scanning all messages is unnecessary for compact
+	// prompts such as "✨ ".
+	contextSize := 0
+	maxContext := 0
+	contextPercent := 0.0
+	needsContext := strings.Contains(template, "{context}") ||
+		strings.Contains(template, "{max_context}") ||
+		strings.Contains(template, "{context_percent}")
+	if needsContext {
+		contextSize = m.getCurrentContextSize()
+		maxContext = m.GetMaxContextSize()
+		if maxContext > 0 {
+			contextPercent = float64(contextSize) / float64(maxContext) * 100
+		}
+	}
+
+	// Build placeholder map
+	placeholders := map[string]string{
+		"{app}":             tmuxaiColor.Sprint("TmuxAI"),
+		"{model}":           modelColor.Sprint(m.getModelLabel()),
+		"{state}":           stateColor.Sprint(stateSymbol),
+		"{context}":         contextColor.Sprint(formatCompactNumber(contextSize)),
+		"{max_context}":     maxContextColor.Sprint(formatCompactNumber(maxContext)),
+		"{context_percent}": percentColor.Sprint(fmt.Sprintf("%.0f%%", contextPercent)),
+	}
+
+	// Replace placeholders
+	result := template
+	for placeholder, value := range placeholders {
+		result = strings.ReplaceAll(result, placeholder, value)
+	}
+
+	return result
 }
 
 func (ai *AIResponse) String() string {
@@ -342,4 +456,3 @@ func (m *Manager) ensureMcpToolDefs() string {
 	}
 	return m.McpToolDefCached
 }
-

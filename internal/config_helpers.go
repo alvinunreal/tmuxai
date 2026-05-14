@@ -26,6 +26,7 @@ var AllowedConfigKeys = []string{
 	"azure_openai.api_base",
 	"azure_openai.api_version",
 	"default_model",
+	"prompts.prompt",
 }
 
 // GetMaxCaptureLines returns the max capture lines value with session override if present

@@ -129,6 +129,14 @@ knowledge_base:
 
 # Prompts customization, see prompts.go for more details
 prompts:
+  # Interactive prompt template. Empty preserves the default prompt.
+  # Supported placeholders: {app}, {model}, {state}, {context}, {max_context}, {context_percent}
+  # Context values use the same approximate message-token count shown by /info.
+  # Examples:
+  #   prompt: "✨ "
+  #   prompt: "{app} ({context}/{max_context}) - {model} » "
+  prompt: ""
+
   base_system: |
     xxx
 

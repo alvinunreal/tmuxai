@@ -90,6 +90,7 @@ type PromptsConfig struct {
 	ChatAssistant         string `mapstructure:"chat_assistant"`
 	ChatAssistantPrepared string `mapstructure:"chat_assistant_prepared"`
 	Watch                 string `mapstructure:"watch"`
+	Prompt                string `mapstructure:"prompt"`
 }
 
 // SkillsConfig holds skill system configuration
