@@ -26,6 +26,7 @@ var AllowedConfigKeys = []string{
 	"azure_openai.api_base",
 	"azure_openai.api_version",
 	"default_model",
+	"status_line",
 }
 
 // GetMaxCaptureLines returns the max capture lines value with session override if present
@@ -101,6 +102,15 @@ func (m *Manager) GetYolo() bool {
 		}
 	}
 	return m.Config.Yolo
+}
+
+func (m *Manager) GetPromptTemplate() string {
+	if override, exists := m.SessionOverrides["status_line"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.StatusLine
 }
 
 func (m *Manager) GetOpenRouterModel() string {

@@ -166,6 +166,11 @@ func (m *Manager) GetConfig() *config.Config {
 
 // getPrompt returns the prompt string with color
 func (m *Manager) GetPrompt() string {
+	template := m.GetPromptTemplate()
+	if template != "" {
+		return m.renderPromptTemplate(template)
+	}
+
 	tmuxaiColor := color.New(color.FgGreen, color.Bold)
 	arrowColor := color.New(color.FgYellow, color.Bold)
 	stateColor := color.New(color.FgMagenta, color.Bold)
@@ -209,6 +214,120 @@ func (m *Manager) GetPrompt() string {
 	}
 	prompt += arrowColor.Sprint(" » ")
 	return prompt
+}
+
+func (m *Manager) renderPromptTemplate(template string) string {
+	tmuxaiColor := color.New(color.FgGreen, color.Bold)
+	stateColor := color.New(color.FgMagenta, color.Bold)
+	modelColor := color.New(color.FgCyan, color.Bold)
+
+	replacements := map[string]string{
+		"{app}": tmuxaiColor.Sprint("TmuxAI"),
+	}
+
+	if promptTemplateHasAny(template, "{context}", "{context_used}", "{context_max}") {
+		contextUsed, contextMax := m.getPromptContextTokens()
+		replacements["{context}"] = fmt.Sprintf("%s/%s", formatPromptTokenCount(contextUsed), formatPromptTokenCount(contextMax))
+		replacements["{context_used}"] = formatPromptTokenCount(contextUsed)
+		replacements["{context_max}"] = formatPromptTokenCount(contextMax)
+	}
+
+	if promptTemplateHasAny(template, "{model}") {
+		replacements["{model}"] = modelColor.Sprint(m.getPromptModelName())
+	}
+
+	if promptTemplateHasAny(template, "{state}", "{state_badge}") {
+		stateSymbol := m.getPromptStateSymbol()
+		replacements["{state}"] = stateColor.Sprint(stateSymbol)
+		replacements["{state_badge}"] = ""
+		if stateSymbol != "" {
+			replacements["{state_badge}"] = stateColor.Sprint("[" + stateSymbol + "]")
+		}
+	}
+
+	if strings.Contains(template, "{model_changed}") {
+		replacements["{model_changed}"] = ""
+		if changedModel := m.getPromptChangedModelName(); changedModel != "" {
+			replacements["{model_changed}"] = modelColor.Sprint("[" + changedModel + "]")
+		}
+	}
+
+	prompt := template
+	for placeholder, value := range replacements {
+		prompt = strings.ReplaceAll(prompt, placeholder, value)
+	}
+	return prompt
+}
+
+func promptTemplateHasAny(template string, placeholders ...string) bool {
+	for _, placeholder := range placeholders {
+		if strings.Contains(template, placeholder) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) getPromptStateSymbol() string {
+	stateSymbol := ""
+	switch m.Status {
+	case "running":
+		stateSymbol = "▶"
+	case "waiting":
+		stateSymbol = "?"
+	case "done":
+		stateSymbol = "✓"
+	}
+	if m.WatchMode {
+		stateSymbol = "∞"
+	}
+	return stateSymbol
+}
+
+func (m *Manager) getPromptContextTokens() (int, int) {
+	totalTokens := 0
+	for _, msg := range m.Messages {
+		totalTokens += system.EstimateTokenCount(msg.Content)
+	}
+	return totalTokens, m.GetMaxContextSize()
+}
+
+func (m *Manager) getPromptModelName() string {
+	availableModels := m.GetAvailableModels()
+	if len(availableModels) > 0 {
+		modelName := m.GetModelsDefault()
+		if modelName == "" {
+			modelName = availableModels[0]
+		}
+		return modelName
+	}
+
+	currentModelConfig, _ := m.GetCurrentModelConfig()
+	return currentModelConfig.Model
+}
+
+func (m *Manager) getPromptChangedModelName() string {
+	currentModel := m.GetModelsDefault()
+	availableModels := m.GetAvailableModels()
+	if len(availableModels) == 0 {
+		return ""
+	}
+
+	expectedModel := m.Config.DefaultModel
+	if expectedModel == "" {
+		expectedModel = availableModels[0]
+	}
+	if currentModel != "" && currentModel != expectedModel {
+		return currentModel
+	}
+	return ""
+}
+
+func formatPromptTokenCount(tokens int) string {
+	if tokens >= 1000 {
+		return fmt.Sprintf("%dk", (tokens+500)/1000)
+	}
+	return fmt.Sprintf("%d", tokens)
 }
 
 func (ai *AIResponse) String() string {
@@ -342,4 +461,3 @@ func (m *Manager) ensureMcpToolDefs() string {
 	}
 	return m.McpToolDefCached
 }
-
