@@ -70,6 +70,7 @@
 - [Core Commands](#core-commands)
 - [Command-Line Usage](#command-line-usage)
 - [Configuration](#configuration)
+  - [Prompt Customization](#prompt-customization)
   - [Environment Variables](#environment-variables)
   - [Session-Specific Configuration](#session-specific-configuration)
 - [Contributing](#contributing)
@@ -912,6 +913,41 @@ tmux split-window <exec_split_args...> -t <target> -P -F "#{pane_id}"
 Reserved flags `-t`, `-P`, and `-F` are managed internally and must not be included in `exec_split_args`.
 
 If omitted, TmuxAI uses the legacy default: `-d -h`.
+
+### Prompt Customization
+
+By default, the chat prompt stays compact and shows status only when needed, such as the active non-default model or watch/running state. You can fully customize it with `prompts.prompt`:
+
+```yaml
+prompts:
+  # Empty preserves the default prompt.
+  prompt: "{app} ({context}/{max_context}) - {model} » "
+```
+
+Supported placeholders:
+
+| Placeholder | Description |
+|-------------|-------------|
+| `{app}` | TmuxAI app label |
+| `{model}` | Current selected model configuration name, or legacy model name |
+| `{state}` | Current state symbol, such as running, waiting, done, or watch mode |
+| `{context}` | Approximate current message context size, compact formatted |
+| `{max_context}` | Configured maximum context size, compact formatted |
+| `{context_percent}` | Approximate message context usage percentage |
+
+Examples:
+
+```yaml
+prompts:
+  prompt: "✨ "
+```
+
+```yaml
+prompts:
+  prompt: "{app} ({context}/{max_context}) - {model} » "
+```
+
+Context values use the same approximate message-token counting logic shown by `/info` and are formatted for prompt width, for example `37k/256k`.
 
 ### Web Search & Fetch Configuration
 
