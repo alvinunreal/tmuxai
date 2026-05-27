@@ -13,7 +13,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/github/copilot-sdk/go v0.2.1
 	github.com/mackee/go-readability v0.3.1
-	github.com/modelcontextprotocol/go-sdk v1.6.0
+	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/nyaosorg/go-readline-ny v1.15.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
