@@ -7,6 +7,15 @@ yolo: false
 # Maximum context size in tokens, reaching 80% triggers squashing
 max_context_size: 100000
 
+# Interactive prompt/status line shown before input and status messages.
+# Empty uses the built-in prompt. Available placeholders:
+# {app}, {context}, {context_used}, {context_max}, {model}, {state}, {state_badge}, {model_changed}
+# Note: {model_changed} only produces output when using the models: config section.
+# Examples:
+#   "{app} ({context}) - {model} >> "
+#   "✨ ({context}) >> "
+status_line: ""
+
 # Maximum number of lines to capture during each message
 max_capture_lines: 200
 

@@ -16,6 +16,7 @@ type Config struct {
 	Yolo                  bool                   `mapstructure:"yolo"`
 	MaxCaptureLines       int                    `mapstructure:"max_capture_lines"`
 	MaxContextSize        int                    `mapstructure:"max_context_size"`
+	StatusLine            string                 `mapstructure:"status_line"`
 	WaitInterval          int                    `mapstructure:"wait_interval"`
 	SendKeysConfirm       bool                   `mapstructure:"send_keys_confirm"`
 	PasteMultilineConfirm bool                   `mapstructure:"paste_multiline_confirm"`
@@ -149,6 +150,7 @@ func DefaultConfig() *Config {
 		Yolo:                  false,
 		MaxCaptureLines:       200,
 		MaxContextSize:        100000,
+		StatusLine:            ``,
 		WaitInterval:          5,
 		SendKeysConfirm:       true,
 		PasteMultilineConfirm: true,

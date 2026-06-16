@@ -70,6 +70,7 @@
 - [Core Commands](#core-commands)
 - [Command-Line Usage](#command-line-usage)
 - [Configuration](#configuration)
+  - [Status Line Customization](#status-line-customization)
   - [Environment Variables](#environment-variables)
   - [Session-Specific Configuration](#session-specific-configuration)
 - [Contributing](#contributing)
@@ -893,6 +894,49 @@ The configuration can be managed through a YAML file, environment variables, or 
 
 TmuxAI looks for its configuration file at `~/.config/tmuxai/config.yaml`.
 For a sample configuration file, see [config.example.yaml](https://github.com/alvinunreal/tmuxai/blob/main/config.example.yaml).
+
+### Status Line Customization
+
+By default, TmuxAI uses its built-in interactive prompt:
+
+```text
+TmuxAI »
+```
+
+You can customize that prompt/status prefix with `status_line`:
+
+```yaml
+status_line: "{app} ({context}) - {model} >> "
+```
+
+Available placeholders:
+
+| Placeholder | Description |
+|-------------|-------------|
+| `{app}` | `TmuxAI` |
+| `{context}` | Approximate used/max context tokens, e.g. `37k/256k` |
+| `{context_used}` | Approximate used context tokens |
+| `{context_max}` | Configured max context tokens |
+| `{model}` | Current model configuration name |
+| `{state}` | Current state symbol, if active |
+| `{state_badge}` | Current state symbol in brackets, if active |
+| `{model_changed}` | Current model badge when it differs from the configured default; requires the `models:` config section |
+
+Examples:
+
+```yaml
+# Compact prompt with context usage
+status_line: "✨ ({context}) >> "
+
+# Include model information
+status_line: "{app} ({context}) - {model} >> "
+```
+
+You can also try a status line for the current session only:
+
+```bash
+TmuxAI » /config set status_line ✨ ({context}) >>
+```
 
 ### tmux pane split configuration
 
