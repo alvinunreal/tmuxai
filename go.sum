@@ -131,8 +131,8 @@ github.com/mattn/go-runewidth v0.0.23 h1:7ykA0T0jkPpzSvMS5i9uoNn2Xy3R383f9HDx3Ry
 github.com/mattn/go-runewidth v0.0.23/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
 github.com/mattn/go-tty v0.0.7 h1:KJ486B6qI8+wBO7kQxYgmmEFDaFEE96JMBQ7h400N8Q=
 github.com/mattn/go-tty v0.0.7/go.mod h1:f2i5ZOvXBU/tCABmLmOfzLz9azMo5wdAaElRNnJKr+k=
-github.com/modelcontextprotocol/go-sdk v1.6.0 h1:PPLS3kn7WtOEnR+Af4X5H96SG0qSab8R/ZQT/HkhPkY=
-github.com/modelcontextprotocol/go-sdk v1.6.0/go.mod h1:kzm3kzFL1/+AziGOE0nUs3gvPoNxMCvkxokMkuFapXQ=
+github.com/modelcontextprotocol/go-sdk v1.6.1 h1:0zOSupjKUxPKSocPT1Wtago+mUHU2/uZ4xSOY0FGReU=
+github.com/modelcontextprotocol/go-sdk v1.6.1/go.mod h1:kzm3kzFL1/+AziGOE0nUs3gvPoNxMCvkxokMkuFapXQ=
 github.com/nyaosorg/go-box/v3 v3.1.1 h1:iTWE0MOTlD52yEySfhdN6nonX7Uagkn985xQZM6sCyI=
 github.com/nyaosorg/go-box/v3 v3.1.1/go.mod h1:kuRLL+x9n7kqIAiSZRXgNxP+HJVelsCKplo2TQSnWIo=
 github.com/nyaosorg/go-readline-ny v1.15.1 h1:12TFVSqjkhkzJ1z3CSpLjC/+bFPKChnNo9vvwTu6Zvk=
