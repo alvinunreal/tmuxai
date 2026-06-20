@@ -297,6 +297,15 @@ func (m *Manager) getLegacyModelConfig() config.ModelConfig {
 		}
 	}
 
+	if m.Config.Requesty.APIKey != "" && m.Config.OpenRouter.APIKey == "" {
+		return config.ModelConfig{
+			Provider: "requesty",
+			Model:    m.GetRequestyModel(),
+			APIKey:   m.Config.Requesty.APIKey,
+			BaseURL:  m.Config.Requesty.BaseURL,
+		}
+	}
+
 	return config.ModelConfig{
 		Provider: "openrouter",
 		Model:    m.GetOpenRouterModel(),
@@ -330,6 +339,11 @@ func (m *Manager) GetModel() string {
 			}
 			// Default deployment for Azure if not specified
 			return "gpt-4o"
+		}
+
+		// If only Requesty is configured, use the Requesty model
+		if m.Config.Requesty.APIKey != "" && m.Config.OpenRouter.APIKey == "" {
+			return m.GetRequestyModel()
 		}
 
 		// Default to OpenRouter
