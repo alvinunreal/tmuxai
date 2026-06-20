@@ -18,6 +18,7 @@ var AllowedConfigKeys = []string{
 	"exec_confirm",
 	"yolo",
 	"openrouter.model",
+	"requesty.model",
 	"openai.api_key",
 	"openai.model",
 	"openai.base_url",
@@ -120,6 +121,16 @@ func (m *Manager) GetOpenRouterModel() string {
 		}
 	}
 	return m.Config.OpenRouter.Model
+}
+
+// GetRequestyModel returns the Requesty model value with session override if present
+func (m *Manager) GetRequestyModel() string {
+	if override, exists := m.SessionOverrides["requesty.model"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.Requesty.Model
 }
 
 // GetOpenAIModel returns the OpenAI model value with session override if present
@@ -260,7 +271,7 @@ func (m *Manager) hasValidAIConfiguration() bool {
 	}
 
 	// Fall back to legacy configuration
-	return m.Config.OpenRouter.APIKey != "" || m.Config.OpenAI.APIKey != "" || m.Config.AzureOpenAI.APIKey != ""
+	return m.Config.OpenRouter.APIKey != "" || m.Config.Requesty.APIKey != "" || m.Config.OpenAI.APIKey != "" || m.Config.AzureOpenAI.APIKey != ""
 }
 
 // getLegacyModelConfig converts the legacy provider configuration to a ModelConfig

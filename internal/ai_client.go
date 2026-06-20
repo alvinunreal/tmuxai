@@ -264,6 +264,8 @@ func (c *AiClient) determineAPIType(model string) string {
 				return "azure"
 			case "openrouter":
 				return "openrouter"
+			case "requesty":
+				return "requesty"
 			case "gemini":
 				return "gemini"
 			case "github-copilot":
@@ -330,6 +332,8 @@ func (c *AiClient) GetResponseFromChatMessages(ctx context.Context, chatMessages
 		response, err = c.ChatCompletion(ctx, aiMessages, model)
 	case "openrouter":
 		response, err = c.ChatCompletion(ctx, aiMessages, model)
+	case "requesty":
+		response, err = c.ChatCompletion(ctx, aiMessages, model)
 	case "github-copilot":
 		response, err = c.CopilotGenerateContent(ctx, aiMessages, model)
 	case "gemini":
@@ -392,6 +396,10 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 			provider = "openrouter"
 			apiKey = c.config.OpenRouter.APIKey
 			baseURL = c.config.OpenRouter.BaseURL
+		} else if c.config.Requesty.APIKey != "" {
+			provider = "requesty"
+			apiKey = c.config.Requesty.APIKey
+			baseURL = c.config.Requesty.BaseURL
 		}
 	}
 
@@ -413,7 +421,11 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 	} else {
 		// default OpenRouter/OpenAI compatible endpoint
 		if baseURL == "" {
-			baseURL = c.config.OpenRouter.BaseURL
+			if provider == "requesty" {
+				baseURL = c.config.Requesty.BaseURL
+			} else {
+				baseURL = c.config.OpenRouter.BaseURL
+			}
 		}
 		base := strings.TrimSuffix(baseURL, "/")
 		url = base + "/chat/completions"
