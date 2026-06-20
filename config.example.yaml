@@ -46,7 +46,14 @@ models:
   smart:
     provider: "openrouter"
     model: "google/gemini-2.5-prod"
-    api_key: "sk-or-your-openrouter-key"
+    api_key: "sk-or-...-key"
+
+  # Requesty (OpenAI-compatible router, defaults to https://router.requesty.ai/v1)
+  # Get a key at https://app.requesty.ai/api-keys ; browse models at https://app.requesty.ai/router/list
+  requesty:
+    provider: "requesty"
+    model: "openai/gpt-4o-mini"
+    api_key: "${REQUESTY_API_KEY}"
 
   # You can use any chat completion compatible endpoint as base_url
   anthropic:

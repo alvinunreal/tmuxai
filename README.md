@@ -146,7 +146,7 @@ TmuxAI reads its configuration from `~/.config/tmuxai/config.yaml`. To get runni
    ```yaml
    models:
      primary:
-       provider: openrouter  # openrouter, openai or azure
+       provider: openrouter  # openrouter, requesty, openai or azure
        model: anthropic/claude-haiku-4.5
        api_key: sk-your-api-key
    ```
@@ -595,7 +595,14 @@ models:
   smart:
     provider: "openrouter"
     model: "google/gemini-2.5-prod"
-    api_key: "sk-or-your-openrouter-key"
+    api_key: "sk-or-...-key"
+
+  # Requesty (OpenAI-compatible router, defaults to https://router.requesty.ai/v1)
+  # Get a key at https://app.requesty.ai/api-keys ; browse models at https://app.requesty.ai/router/list
+  requesty:
+    provider: "requesty"
+    model: "openai/gpt-4o-mini"
+    api_key: "${REQUESTY_API_KEY}"
 
   # You can use any chat completion compatible endpoint as base_url
   anthropic:
@@ -640,6 +647,7 @@ models:
 **Supported Providers:**
 - `openai` - OpenAI Responses API (GPT-4, GPT-5, etc.)
 - `openrouter` - Universal Chat Completion API, defaults to openrouter base url
+- `requesty` - [Requesty](https://requesty.ai) router (OpenAI-compatible Chat Completion API), defaults to `https://router.requesty.ai/v1`. Browse models at [app.requesty.ai/router/list](https://app.requesty.ai/router/list)
 - `azure` - Azure Chat Completions API
 - `gemini` - Google Gemini API (direct access via go-genai SDK)
 - `github-copilot` - GitHub Copilot (via official copilot-sdk/go — see setup below)
@@ -995,6 +1003,7 @@ export TMUXAI_MAX_CONTEXT_SIZE=150000
 export TMUXAI_OPENAI_API_KEY="your-openai-api-key-here"
 export TMUXAI_OPENAI_MODEL="gpt-4"
 export TMUXAI_OPENROUTER_API_KEY="your-openrouter-api-key-here"
+export TMUXAI_REQUESTY_API_KEY="your-requesty-api-key-here"
 ```
 
 You can also use environment variables directly within your configuration file values. The application will automatically expand these variables when loading the configuration:
@@ -1008,6 +1017,10 @@ openai:
 openrouter:
   api_key: "${OPENROUTER_API_KEY}"
   base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
+
+requesty:
+  api_key: "${REQUESTY_API_KEY}"
+  base_url: "${REQUESTY_BASE_URL:-https://router.requesty.ai/v1}"
 ```
 
 ### Session-Specific Configuration

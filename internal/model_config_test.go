@@ -234,11 +234,23 @@ func TestGetModel(t *testing.T) {
 				DefaultModel: "",
 				Models:       map[string]config.ModelConfig{},
 				OpenRouter: config.OpenRouterConfig{
-					APIKey: "sk-or-test-key",
+					APIKey: "***",
 					Model:  "gemini-flash",
 				},
 			},
 			expectedModel: "gemini-flash",
+		},
+		{
+			name: "fallback to legacy requesty when only requesty configured",
+			config: &config.Config{
+				DefaultModel: "",
+				Models:       map[string]config.ModelConfig{},
+				Requesty: config.RequestyConfig{
+					APIKey: "***",
+					Model:  "openai/gpt-4o-mini",
+				},
+			},
+			expectedModel: "openai/gpt-4o-mini",
 		},
 	}
 

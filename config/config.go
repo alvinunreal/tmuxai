@@ -25,6 +25,7 @@ type Config struct {
 	BlacklistPatterns     []string               `mapstructure:"blacklist_patterns"`
 	Tmux                  TmuxConfig             `mapstructure:"tmux"`
 	OpenRouter            OpenRouterConfig       `mapstructure:"openrouter"`
+	Requesty              RequestyConfig         `mapstructure:"requesty"`
 	OpenAI                OpenAIConfig           `mapstructure:"openai"`
 	AzureOpenAI           AzureOpenAIConfig      `mapstructure:"azure_openai"`
 	DefaultModel          string                 `mapstructure:"default_model"`
@@ -37,6 +38,13 @@ type Config struct {
 
 // OpenRouterConfig holds OpenRouter API configuration
 type OpenRouterConfig struct {
+	APIKey  string `mapstructure:"api_key"`
+	Model   string `mapstructure:"model"`
+	BaseURL string `mapstructure:"base_url"`
+}
+
+// RequestyConfig holds Requesty API configuration
+type RequestyConfig struct {
 	APIKey  string `mapstructure:"api_key"`
 	Model   string `mapstructure:"model"`
 	BaseURL string `mapstructure:"base_url"`
@@ -163,6 +171,10 @@ func DefaultConfig() *Config {
 		OpenRouter: OpenRouterConfig{
 			BaseURL: "https://openrouter.ai/api/v1",
 			Model:   "google/gemini-2.5-flash-preview",
+		},
+		Requesty: RequestyConfig{
+			BaseURL: "https://router.requesty.ai/v1",
+			Model:   "openai/gpt-4o-mini",
 		},
 		OpenAI: OpenAIConfig{
 			BaseURL: "https://api.openai.com/v1",
