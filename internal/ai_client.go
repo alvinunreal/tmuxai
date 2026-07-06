@@ -243,11 +243,16 @@ func (c *AiClient) CopilotGenerateContent(ctx context.Context, messages []Messag
 		return "", fmt.Errorf("copilot request failed: %w", err)
 	}
 
-	if event == nil || event.Data.Content == nil {
+	if event == nil {
 		return "", fmt.Errorf("no response content returned from Copilot (model: %s)", model)
 	}
 
-	responseText := *event.Data.Content
+	msgData, ok := event.Data.(*copilot.AssistantMessageData)
+	if !ok {
+		return "", fmt.Errorf("unexpected event data type from Copilot (model: %s): %T", model, event.Data)
+	}
+
+	responseText := msgData.Content
 	logger.Debug("Received Copilot response (%d characters)", len(responseText))
 	return responseText, nil
 }
