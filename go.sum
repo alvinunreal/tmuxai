@@ -68,8 +68,8 @@ github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHk
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/fsnotify/fsnotify v1.10.1 h1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx59Ho=
 github.com/fsnotify/fsnotify v1.10.1/go.mod h1:TLheqan6HD6GBK6PrDWyDPBaEV8LspOxvPSjC+bVfgo=
-github.com/github/copilot-sdk/go v1.0.5 h1:NeIMkcWZ/YzDETCx26i9HIG8r1j0fYjYxU+pUJXaaQ8=
-github.com/github/copilot-sdk/go v1.0.5/go.mod h1:+Qo8WkaIJEb1aqRwzrO49Z9nHWfQcF39iro4fH+qNYQ=
+github.com/github/copilot-sdk/go v1.0.6 h1:EQyFMxYmvw+SFopjPcJtTtADq5wiXvgt90bpIikWm7U=
+github.com/github/copilot-sdk/go v1.0.6/go.mod h1:+Qo8WkaIJEb1aqRwzrO49Z9nHWfQcF39iro4fH+qNYQ=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
