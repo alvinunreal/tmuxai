@@ -13,7 +13,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/github/copilot-sdk/go v1.0.5
 	github.com/mackee/go-readability v0.3.1
-	github.com/modelcontextprotocol/go-sdk v1.6.1
+	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/nyaosorg/go-readline-ny v1.15.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -86,7 +86,9 @@ require (
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/api v0.287.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706195059-b6c8e8128b22 // indirect
 	google.golang.org/grpc v1.82.0 // indirect
