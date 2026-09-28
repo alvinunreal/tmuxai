@@ -20,6 +20,8 @@ import (
 
 type MCPManager struct {
 	mu            sync.RWMutex
+	reloadMu      sync.Mutex // serialize config reloads
+	serverOps     sync.Map   // serverName -> *sync.Mutex for connection lifecycle
 	processLife   context.Context
 	cancelLife    context.CancelFunc
 	servers       map[string]*ServerInfo
@@ -52,18 +54,6 @@ func (m *MCPManager) Init() error {
 	var firstErr error
 
 	for name, sc := range m.config.MCPServers {
-		if sc.Disabled {
-			m.mu.Lock()
-			m.servers[name] = &ServerInfo{
-				Name:      name,
-				Config:    sc,
-				Status:    StatusUnhealthy,
-				ErrMsg:    "disabled",
-				Transport: transportType(&sc),
-			}
-			m.mu.Unlock()
-			continue
-		}
 		wg.Add(1)
 		go func(name string, sc ServerConfig) {
 			defer wg.Done()
@@ -83,6 +73,21 @@ func (m *MCPManager) Init() error {
 }
 
 func (m *MCPManager) initServer(name string, sc ServerConfig) error {
+	unlock := m.lockServerOperations([]string{name})
+	defer unlock()
+	return m.initServerLocked(name, sc)
+}
+
+// initServerLocked requires the operation lock for name. Network I/O must not
+// hold m.mu, but two initializations of the same server cannot overlap.
+func (m *MCPManager) initServerLocked(name string, sc ServerConfig) error {
+	if err := m.processLife.Err(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.shutdownServerLocked(name)
+	m.mu.Unlock()
+
 	// Handle disabled servers: register as unhealthy and return early
 	if sc.Disabled {
 		m.mu.Lock()
@@ -201,6 +206,32 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 	return nil
 }
 
+func (m *MCPManager) serverOperation(name string) *sync.Mutex {
+	value, _ := m.serverOps.LoadOrStore(name, &sync.Mutex{})
+	return value.(*sync.Mutex)
+}
+
+// lockServerOperations acquires per-server lifecycle locks in a stable order.
+// It covers teardown and initialization as one operation, preventing an older
+// connection from overwriting a newer session or OAuth callback listener.
+func (m *MCPManager) lockServerOperations(names []string) func() {
+	sort.Strings(names)
+	locked := make([]*sync.Mutex, 0, len(names))
+	for i, name := range names {
+		if i > 0 && name == names[i-1] {
+			continue
+		}
+		operation := m.serverOperation(name)
+		operation.Lock()
+		locked = append(locked, operation)
+	}
+	return func() {
+		for i := len(locked) - 1; i >= 0; i-- {
+			locked[i].Unlock()
+		}
+	}
+}
+
 func (m *MCPManager) listSessionTools(ctx context.Context, session *mcpsdk.ClientSession) ([]ToolDef, error) {
 	var tools []ToolDef
 	for tool, err := range session.Tools(ctx, nil) {
@@ -222,6 +253,22 @@ func (m *MCPManager) listSessionTools(ctx context.Context, session *mcpsdk.Clien
 
 func (m *MCPManager) Shutdown() {
 	m.cancelLife()
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
+
+	m.mu.RLock()
+	names := make([]string, 0, len(m.servers))
+	for name := range m.servers {
+		names = append(names, name)
+	}
+	if m.config != nil {
+		for name := range m.config.MCPServers {
+			names = append(names, name)
+		}
+	}
+	m.mu.RUnlock()
+	unlock := m.lockServerOperations(names)
+	defer unlock()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -493,6 +540,8 @@ func (m *MCPManager) waitForDrain(serverName string, timeout time.Duration) {
 // restarting changed ones, and initializing new ones. Work is collected under lock,
 // then server init runs without holding the lock to avoid blocking other operations.
 func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept int, firstErr error) {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
 	m.mu.Lock()
 	m.cacheDirty = true
 
@@ -503,6 +552,8 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 			names = append(names, name)
 		}
 		m.mu.Unlock()
+		unlock := m.lockServerOperations(names)
+		defer unlock()
 		// Drain without holding lock
 		for _, name := range names {
 			m.waitForDrain(name, 5*time.Second)
@@ -544,6 +595,16 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 	}
 
 	m.mu.Unlock()
+	operationNames := make([]string, 0, len(toRemove)+len(toAdd)+len(toRestart))
+	operationNames = append(operationNames, toRemove...)
+	for _, item := range toAdd {
+		operationNames = append(operationNames, item.name)
+	}
+	for _, item := range toRestart {
+		operationNames = append(operationNames, item.name)
+	}
+	unlock := m.lockServerOperations(operationNames)
+	defer unlock()
 
 	// Phase 2: Drain in-flight calls WITHOUT holding the lock.
 	// waitForDrain uses sync.Map (lockless), so holding m.mu here would
@@ -566,10 +627,10 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 	}
 	m.mu.Unlock()
 
-	// Phase 3: Init new/restarted servers WITHOUT holding the lock
-	// (initServer acquires its own lock internally to register results)
+	// Phase 3: Init new/restarted servers without holding m.mu. The per-server
+	// operation locks remain held across teardown and initialization.
 	for _, item := range toAdd {
-		err := m.initServer(item.name, item.sc)
+		err := m.initServerLocked(item.name, item.sc)
 		if err != nil {
 			logger.Info("MCP reload: failed to init %q: %v", item.name, err)
 			if firstErr == nil {
@@ -580,7 +641,7 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 		}
 	}
 	for _, item := range toRestart {
-		err := m.initServer(item.name, item.sc)
+		err := m.initServerLocked(item.name, item.sc)
 		if err != nil {
 			logger.Info("MCP reload: failed to restart %q: %v", item.name, err)
 			if firstErr == nil {
@@ -632,7 +693,15 @@ func configEqual(a, b ServerConfig) bool {
 
 // ReconnectServer tears down and reinitializes a server's session.
 func (m *MCPManager) ReconnectServer(serverName string) error {
+	unlock := m.lockServerOperations([]string{serverName})
+	defer unlock()
+	m.mu.RLock()
+	if m.config == nil {
+		m.mu.RUnlock()
+		return fmt.Errorf("unknown server: %s", serverName)
+	}
 	sc, ok := m.config.MCPServers[serverName]
+	m.mu.RUnlock()
 	if !ok {
 		return fmt.Errorf("unknown server: %s", serverName)
 	}
@@ -653,6 +722,18 @@ func (m *MCPManager) ReconnectServer(serverName string) error {
 	}
 	m.mu.Unlock()
 
-	// Re-init (acquires its own lock to register)
-	return m.initServer(serverName, sc)
+	// Re-init under the same per-server operation lock.
+	return m.initServerLocked(serverName, sc)
+}
+
+func (m *MCPManager) RequiresOAuth(serverName string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if info, ok := m.servers[serverName]; ok && info.Config.OAuth {
+		return true
+	}
+	if m.config == nil {
+		return false
+	}
+	return m.config.MCPServers[serverName].OAuth
 }

@@ -794,6 +794,8 @@ port. Credentials stay in memory, so restarting TmuxAI or reconnecting the serve
 may require signing in again. The default connection timeout is five minutes for
 OAuth servers; `timeout_seconds` can override it. Do not put an API key or
 `Authorization` header in an OAuth server entry.
+If an OAuth session expires or disconnects during a tool call, run `/mcp load`
+to reconnect and sign in explicitly; tool calls do not open a browser login.
 
 #### Memcode: explicit project memory
 

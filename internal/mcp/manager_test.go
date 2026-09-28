@@ -351,6 +351,48 @@ func TestMCPManagerReconnectServerUnknown(t *testing.T) {
 	}
 }
 
+func TestServerOperationLockSerializesSameServer(t *testing.T) {
+	mgr := NewMCPManager(&MCPConfig{})
+	first := mgr.serverOperation("memcode")
+	second := mgr.serverOperation("memcode")
+	if first != second {
+		t.Fatal("same server must share one lifecycle lock")
+	}
+	first.Lock()
+	if second.TryLock() {
+		second.Unlock()
+		t.Fatal("overlapping connection operation acquired the same server lock")
+	}
+	first.Unlock()
+	if !second.TryLock() {
+		t.Fatal("server lock did not become available after release")
+	}
+	second.Unlock()
+}
+
+func TestOAuthCallbackClosedOnShutdown(t *testing.T) {
+	cfg := &MCPConfig{MCPServers: map[string]ServerConfig{"memcode": {OAuth: true}}}
+	mgr := NewMCPManager(cfg)
+	closed := 0
+	mgr.servers["memcode"] = &ServerInfo{Name: "memcode"}
+	mgr.oauthClose["memcode"] = func() { closed++ }
+	mgr.Shutdown()
+	if closed != 1 {
+		t.Fatalf("OAuth callback close count = %d, want 1", closed)
+	}
+	if len(mgr.oauthClose) != 0 {
+		t.Fatal("OAuth callback remained registered after shutdown")
+	}
+}
+
+func TestLazyReconnectOAuthRequiresExplicitLoad(t *testing.T) {
+	cfg := &MCPConfig{MCPServers: map[string]ServerConfig{"memcode": {OAuth: true}}}
+	mgr := NewMCPManager(cfg)
+	if LazyReconnect(mgr, "memcode") {
+		t.Fatal("tool-triggered reconnect must not start interactive OAuth")
+	}
+}
+
 func TestHeaderRoundTripper(t *testing.T) {
 	var capturedHeaders http.Header
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

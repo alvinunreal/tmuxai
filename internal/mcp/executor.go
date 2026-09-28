@@ -39,6 +39,9 @@ func ExecuteToolCall(ctx context.Context, mgr *MCPManager, reg *Registry, fqName
 
 	session := mgr.GetSession(entry.ServerName)
 	if session == nil {
+		if mgr.RequiresOAuth(entry.ServerName) {
+			return fmt.Sprintf("(server %q requires OAuth sign-in; run /mcp load to reconnect)", entry.ServerName), true
+		}
 		if !LazyReconnect(mgr, entry.ServerName) {
 			return fmt.Sprintf("(server %q unavailable)", entry.ServerName), true
 		}
@@ -74,6 +77,12 @@ func callWithRetry(ctx context.Context, mgr *MCPManager, session *mcpsdk.ClientS
 		Arguments: arguments,
 	})
 	if err != nil {
+		if mgr.RequiresOAuth(entry.ServerName) {
+			return result, fmt.Errorf("OAuth session unavailable; run /mcp load to sign in again: %w", err)
+		}
+		if ctx.Err() != nil {
+			return result, err
+		}
 		logger.Info("MCP CallTool failed for %s.%s: %v, attempting reconnect", entry.ServerName, entry.ToolName, err)
 		if LazyReconnect(mgr, entry.ServerName) {
 			session = mgr.GetSession(entry.ServerName)
@@ -132,6 +141,11 @@ func SanitizeResult(raw string) string {
 }
 
 func LazyReconnect(mgr *MCPManager, serverName string) bool {
+	// Browser consent can take minutes. Never start it from a tool call whose
+	// deadline is normally 30 seconds; the user can use /mcp load explicitly.
+	if mgr.RequiresOAuth(serverName) {
+		return false
+	}
 	err := mgr.ReconnectServer(serverName)
 	if err != nil {
 		logger.Info("MCP lazy reconnect failed for %q: %v", serverName, err)
