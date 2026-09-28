@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -79,15 +80,28 @@ func ExpandEnv(env map[string]string) map[string]string {
 // validTransportTypes is the set of recognized transport type values.
 var validTransportTypes = map[string]bool{
 	"":                true,
-	"stdio":            true,
-	"sse":              true,
-	"streamable-http":  true,
+	"stdio":           true,
+	"sse":             true,
+	"streamable-http": true,
 }
 
 func Validate(cfg *MCPConfig) error {
 	for name, sc := range cfg.MCPServers {
 		if sc.Disabled {
 			continue
+		}
+
+		if sc.OAuth {
+			if sc.Type != "streamable-http" {
+				return fmt.Errorf("MCP server %q: oauth requires streamable-http", name)
+			}
+			if len(sc.Headers) != 0 {
+				return fmt.Errorf("MCP server %q: oauth cannot be combined with custom headers", name)
+			}
+			u, err := url.Parse(sc.URL)
+			if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" {
+				return fmt.Errorf("MCP server %q: oauth requires an HTTPS URL without credentials or fragment", name)
+			}
 		}
 
 		// Reject unknown transport types early

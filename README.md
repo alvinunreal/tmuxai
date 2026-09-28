@@ -783,8 +783,44 @@ For stdio and SSE servers, TmuxAI auto-detects the transport from the presence o
 | `args` | Command-line arguments (stdio only) |
 | `env` | Environment variables (supports `${VAR}` expansion) |
 | `headers` | HTTP headers (SSE and streamable-http, supports `${VAR}` expansion) |
+| `oauth` | Opt in to OAuth/DCR/PKCE for an HTTPS streamable-http server; cannot be combined with custom headers |
 | `timeout_seconds` | Per-tool-call timeout (default: 30s) |
 | `disabled` | Set `true` to skip without removing the entry |
+
+For OAuth-enabled servers, TmuxAI discovers the authorization server, dynamically registers
+a public client, and uses PKCE. It opens the consent page in your browser (and prints
+the URL for headless terminals). The callback listens only on a random loopback
+port. Credentials stay in memory, so restarting TmuxAI or reconnecting the server
+may require signing in again. The default connection timeout is five minutes for
+OAuth servers; `timeout_seconds` can override it. Do not put an API key or
+`Authorization` header in an OAuth server entry.
+If an OAuth session expires or disconnects during a tool call, run `/mcp load`
+to reconnect and sign in explicitly; tool calls do not open a browser login.
+
+#### Memcode: explicit project memory
+
+To connect [Memcode](https://memcode.in/docs) as an optional MCP server:
+
+```json
+{
+  "mcpServers": {
+    "memcode": {
+      "type": "streamable-http",
+      "url": "https://mcp.memcode.in/mcp",
+      "oauth": true
+    }
+  }
+}
+```
+
+Sign in with your own Memcode account when prompted. You can then explicitly
+ask TmuxAI to save an approved project decision through `save_memory` or to
+recall relevant notes with `search_memories`. Check the retrieved result
+before acting on it. TmuxAI does not automatically upload terminal output,
+command history, full conversations, secrets, or files to Memcode. Memory
+calls are still available to the model as MCP tools, so only enable this server
+when you want the assistant to use them. This complements session context
+rather than replacing TmuxAI's native state.
 
 On startup, TmuxAI connects to each enabled server, lists available tools, and injects their definitions into the AI's system prompt. The AI can then call MCP tools using `<MCPToolCall>` tags, with results automatically fed back for continued reasoning.
 

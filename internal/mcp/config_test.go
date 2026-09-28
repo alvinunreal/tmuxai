@@ -363,3 +363,25 @@ func TestMCPConfigJSONRoundTrip(t *testing.T) {
 		t.Error("Round-trip failed")
 	}
 }
+
+func TestValidateOAuth(t *testing.T) {
+	cases := []struct {
+		name   string
+		server ServerConfig
+		valid  bool
+	}{
+		{"https streamable", ServerConfig{Type: "streamable-http", URL: "https://mcp.memcode.in/mcp", OAuth: true}, true},
+		{"sse", ServerConfig{Type: "sse", URL: "https://example.com/sse", OAuth: true}, false},
+		{"stdio", ServerConfig{Type: "stdio", Command: "server", OAuth: true}, false},
+		{"insecure", ServerConfig{Type: "streamable-http", URL: "http://example.com/mcp", OAuth: true}, false},
+		{"headers", ServerConfig{Type: "streamable-http", URL: "https://example.com/mcp", Headers: map[string]string{"Authorization": "Bearer token"}, OAuth: true}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := Validate(&MCPConfig{MCPServers: map[string]ServerConfig{"test": tc.server}})
+			if (err == nil) != tc.valid {
+				t.Fatalf("Validate() error = %v, want valid = %v", err, tc.valid)
+			}
+		})
+	}
+}
