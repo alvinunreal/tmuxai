@@ -7,6 +7,7 @@ type ServerConfig struct {
 	URL            string            `json:"url,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	Headers        map[string]string `json:"headers,omitempty"`
+	OAuth          bool              `json:"oauth,omitempty"`
 	TimeoutSeconds int               `json:"timeout_seconds,omitempty"`
 	Disabled       bool              `json:"disabled,omitempty"`
 }
