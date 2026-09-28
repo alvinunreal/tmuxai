@@ -3,10 +3,10 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
-	"net/url"
 
 	"github.com/alvinunreal/tmuxai/logger"
 )
@@ -80,9 +80,9 @@ func ExpandEnv(env map[string]string) map[string]string {
 // validTransportTypes is the set of recognized transport type values.
 var validTransportTypes = map[string]bool{
 	"":                true,
-	"stdio":            true,
-	"sse":              true,
-	"streamable-http":  true,
+	"stdio":           true,
+	"sse":             true,
+	"streamable-http": true,
 }
 
 func Validate(cfg *MCPConfig) error {
