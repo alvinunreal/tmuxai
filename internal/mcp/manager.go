@@ -25,6 +25,7 @@ type MCPManager struct {
 	servers       map[string]*ServerInfo
 	sessions      map[string]*mcpsdk.ClientSession
 	cmds          map[string]*exec.Cmd // stdio server commands for process group cleanup
+	oauthClose    map[string]func()    // loopback OAuth callback listeners
 	inFlight      sync.Map             // serverName → *atomic.Int32 (in-flight call count)
 	config        *MCPConfig
 	toolDefsCache string
@@ -39,6 +40,7 @@ func NewMCPManager(cfg *MCPConfig) *MCPManager {
 		servers:     make(map[string]*ServerInfo),
 		sessions:    make(map[string]*mcpsdk.ClientSession),
 		cmds:        make(map[string]*exec.Cmd),
+		oauthClose:  make(map[string]func()),
 		config:      cfg,
 		cacheDirty:  true,
 	}
@@ -96,6 +98,9 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 	}
 
 	timeout := 15 * time.Second
+	if sc.OAuth {
+		timeout = 5 * time.Minute // allow interactive browser consent
+	}
 	if sc.TimeoutSeconds > 0 {
 		timeout = time.Duration(sc.TimeoutSeconds) * time.Second
 	}
@@ -119,6 +124,12 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 
 	var transport mcpsdk.Transport
 	var cmd *exec.Cmd
+	var closeOAuth func()
+	defer func() {
+		if closeOAuth != nil {
+			closeOAuth() // close on failed initialization
+		}
+	}()
 	resolvedType := resolveTransportType(&sc)
 	switch resolvedType {
 	case "stdio":
@@ -129,10 +140,19 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 		}
 		transport = &mcpsdk.CommandTransport{Command: cmd}
 	case "streamable-http":
-		transport = &mcpsdk.StreamableClientTransport{
+		streamable := &mcpsdk.StreamableClientTransport{
 			Endpoint:   sc.URL,
 			HTTPClient: buildHTTPClient(sc.Headers),
 		}
+		if sc.OAuth {
+			handler, closeCallback, err := newOAuthHandler()
+			if err != nil {
+				return err
+			}
+			streamable.OAuthHandler = handler
+			closeOAuth = closeCallback
+		}
+		transport = streamable
 	case "sse":
 		transport = &mcpsdk.SSEClientTransport{
 			Endpoint:   sc.URL,
@@ -166,6 +186,10 @@ func (m *MCPManager) initServer(name string, sc ServerConfig) error {
 	si.Status = StatusHealthy
 	si.Tools = tools
 	m.sessions[name] = session
+	if closeOAuth != nil {
+		m.oauthClose[name] = closeOAuth
+		closeOAuth = nil
+	}
 	// Store cmd for process group cleanup on shutdown
 	if cmd != nil {
 		m.cmds[name] = cmd
@@ -207,6 +231,10 @@ func (m *MCPManager) Shutdown() {
 			logger.Info("MCP: error closing session %q: %v", name, err)
 		}
 		delete(m.sessions, name)
+	}
+	for name, closeCallback := range m.oauthClose {
+		closeCallback()
+		delete(m.oauthClose, name)
 	}
 	// Kill process groups for all stdio servers
 	for name := range m.cmds {
@@ -409,6 +437,10 @@ func (m *MCPManager) shutdownServerLocked(name string) {
 		delete(m.sessions, name)
 	}
 	m.killProcessGroup(name)
+	if closeCallback, ok := m.oauthClose[name]; ok {
+		closeCallback()
+		delete(m.oauthClose, name)
+	}
 	delete(m.servers, name)
 }
 
@@ -568,7 +600,7 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 }
 
 func configEqual(a, b ServerConfig) bool {
-	if a.Type != b.Type || a.Command != b.Command || a.URL != b.URL || a.Disabled != b.Disabled || a.TimeoutSeconds != b.TimeoutSeconds {
+	if a.Type != b.Type || a.Command != b.Command || a.URL != b.URL || a.Disabled != b.Disabled || a.TimeoutSeconds != b.TimeoutSeconds || a.OAuth != b.OAuth {
 		return false
 	}
 	if len(a.Args) != len(b.Args) {
@@ -615,6 +647,10 @@ func (m *MCPManager) ReconnectServer(serverName string) error {
 		delete(m.sessions, serverName)
 	}
 	m.killProcessGroup(serverName)
+	if closeCallback, ok := m.oauthClose[serverName]; ok {
+		closeCallback()
+		delete(m.oauthClose, serverName)
+	}
 	m.mu.Unlock()
 
 	// Re-init (acquires its own lock to register)
