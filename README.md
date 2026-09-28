@@ -797,31 +797,6 @@ OAuth servers; `timeout_seconds` can override it. Do not put an API key or
 If an OAuth session expires or disconnects during a tool call, run `/mcp load`
 to reconnect and sign in explicitly; tool calls do not open a browser login.
 
-#### Memcode: explicit project memory
-
-To connect [Memcode](https://memcode.in/docs) as an optional MCP server:
-
-```json
-{
-  "mcpServers": {
-    "memcode": {
-      "type": "streamable-http",
-      "url": "https://mcp.memcode.in/mcp",
-      "oauth": true
-    }
-  }
-}
-```
-
-Sign in with your own Memcode account when prompted. You can then explicitly
-ask TmuxAI to save an approved project decision through `save_memory` or to
-recall relevant notes with `search_memories`. Check the retrieved result
-before acting on it. TmuxAI does not automatically upload terminal output,
-command history, full conversations, secrets, or files to Memcode. Memory
-calls are still available to the model as MCP tools, so only enable this server
-when you want the assistant to use them. This complements session context
-rather than replacing TmuxAI's native state.
-
 On startup, TmuxAI connects to each enabled server, lists available tools, and injects their definitions into the AI's system prompt. The AI can then call MCP tools using `<MCPToolCall>` tags, with results automatically fed back for continued reasoning.
 
 ### Commands
