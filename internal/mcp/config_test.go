@@ -366,9 +366,9 @@ func TestMCPConfigJSONRoundTrip(t *testing.T) {
 
 func TestValidateOAuth(t *testing.T) {
 	cases := []struct {
-		name string
+		name   string
 		server ServerConfig
-		valid bool
+		valid  bool
 	}{
 		{"https streamable", ServerConfig{Type: "streamable-http", URL: "https://mcp.memcode.in/mcp", OAuth: true}, true},
 		{"sse", ServerConfig{Type: "sse", URL: "https://example.com/sse", OAuth: true}, false},
