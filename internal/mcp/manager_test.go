@@ -116,6 +116,12 @@ func TestConfigEqual(t *testing.T) {
 			false,
 		},
 		{
+			"different oauth",
+			ServerConfig{Type: "streamable-http", URL: "https://example.com/mcp"},
+			ServerConfig{Type: "streamable-http", URL: "https://example.com/mcp", OAuth: true},
+			false,
+		},
+		{
 			"different command",
 			ServerConfig{Command: "a"},
 			ServerConfig{Command: "b"},
