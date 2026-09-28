@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"net/url"
 
 	"github.com/alvinunreal/tmuxai/logger"
 )
@@ -88,6 +89,19 @@ func Validate(cfg *MCPConfig) error {
 	for name, sc := range cfg.MCPServers {
 		if sc.Disabled {
 			continue
+		}
+
+		if sc.OAuth {
+			if sc.Type != "streamable-http" {
+				return fmt.Errorf("MCP server %q: oauth requires streamable-http", name)
+			}
+			if len(sc.Headers) != 0 {
+				return fmt.Errorf("MCP server %q: oauth cannot be combined with custom headers", name)
+			}
+			u, err := url.Parse(sc.URL)
+			if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" {
+				return fmt.Errorf("MCP server %q: oauth requires an HTTPS URL without credentials or fragment", name)
+			}
 		}
 
 		// Reject unknown transport types early
