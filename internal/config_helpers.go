@@ -19,6 +19,7 @@ var AllowedConfigKeys = []string{
 	"yolo",
 	"openrouter.model",
 	"requesty.model",
+	"cheaperinference.model",
 	"openai.api_key",
 	"openai.model",
 	"openai.base_url",
@@ -131,6 +132,16 @@ func (m *Manager) GetRequestyModel() string {
 		}
 	}
 	return m.Config.Requesty.Model
+}
+
+// GetCheaperInferenceModel returns the Cheaper Inference model value with session override if present
+func (m *Manager) GetCheaperInferenceModel() string {
+	if override, exists := m.SessionOverrides["cheaperinference.model"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.CheaperInference.Model
 }
 
 // GetOpenAIModel returns the OpenAI model value with session override if present
@@ -271,7 +282,7 @@ func (m *Manager) hasValidAIConfiguration() bool {
 	}
 
 	// Fall back to legacy configuration
-	return m.Config.OpenRouter.APIKey != "" || m.Config.Requesty.APIKey != "" || m.Config.OpenAI.APIKey != "" || m.Config.AzureOpenAI.APIKey != ""
+	return m.Config.OpenRouter.APIKey != "" || m.Config.Requesty.APIKey != "" || m.Config.CheaperInference.APIKey != "" || m.Config.OpenAI.APIKey != "" || m.Config.AzureOpenAI.APIKey != ""
 }
 
 // getLegacyModelConfig converts the legacy provider configuration to a ModelConfig
@@ -303,6 +314,15 @@ func (m *Manager) getLegacyModelConfig() config.ModelConfig {
 			Model:    m.GetRequestyModel(),
 			APIKey:   m.Config.Requesty.APIKey,
 			BaseURL:  m.Config.Requesty.BaseURL,
+		}
+	}
+
+	if m.Config.CheaperInference.APIKey != "" && m.Config.OpenRouter.APIKey == "" && m.Config.Requesty.APIKey == "" {
+		return config.ModelConfig{
+			Provider: "cheaperinference",
+			Model:    m.GetCheaperInferenceModel(),
+			APIKey:   m.Config.CheaperInference.APIKey,
+			BaseURL:  m.Config.CheaperInference.BaseURL,
 		}
 	}
 
@@ -344,6 +364,11 @@ func (m *Manager) GetModel() string {
 		// If only Requesty is configured, use the Requesty model
 		if m.Config.Requesty.APIKey != "" && m.Config.OpenRouter.APIKey == "" {
 			return m.GetRequestyModel()
+		}
+
+		// If only Cheaper Inference is configured, use the Cheaper Inference model
+		if m.Config.CheaperInference.APIKey != "" && m.Config.OpenRouter.APIKey == "" && m.Config.Requesty.APIKey == "" {
+			return m.GetCheaperInferenceModel()
 		}
 
 		// Default to OpenRouter

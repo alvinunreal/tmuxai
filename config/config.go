@@ -26,6 +26,7 @@ type Config struct {
 	Tmux                  TmuxConfig             `mapstructure:"tmux"`
 	OpenRouter            OpenRouterConfig       `mapstructure:"openrouter"`
 	Requesty              RequestyConfig         `mapstructure:"requesty"`
+	CheaperInference      CheaperInferenceConfig `mapstructure:"cheaperinference"`
 	OpenAI                OpenAIConfig           `mapstructure:"openai"`
 	AzureOpenAI           AzureOpenAIConfig      `mapstructure:"azure_openai"`
 	DefaultModel          string                 `mapstructure:"default_model"`
@@ -45,6 +46,13 @@ type OpenRouterConfig struct {
 
 // RequestyConfig holds Requesty API configuration
 type RequestyConfig struct {
+	APIKey  string `mapstructure:"api_key"`
+	Model   string `mapstructure:"model"`
+	BaseURL string `mapstructure:"base_url"`
+}
+
+// CheaperInferenceConfig holds Cheaper Inference API configuration
+type CheaperInferenceConfig struct {
 	APIKey  string `mapstructure:"api_key"`
 	Model   string `mapstructure:"model"`
 	BaseURL string `mapstructure:"base_url"`
@@ -175,6 +183,10 @@ func DefaultConfig() *Config {
 		Requesty: RequestyConfig{
 			BaseURL: "https://router.requesty.ai/v1",
 			Model:   "openai/gpt-4o-mini",
+		},
+		CheaperInference: CheaperInferenceConfig{
+			BaseURL: "https://api.cheaperinference.com/v1",
+			Model:   "gpt-5.4-mini",
 		},
 		OpenAI: OpenAIConfig{
 			BaseURL: "https://api.openai.com/v1",

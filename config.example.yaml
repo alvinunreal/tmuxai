@@ -55,6 +55,13 @@ models:
     model: "openai/gpt-4o-mini"
     api_key: "${REQUESTY_API_KEY}"
 
+  # Cheaper Inference (OpenAI-compatible gateway, defaults to https://api.cheaperinference.com/v1)
+  # Get a key at https://cheaperinference.com/signup ; browse models at https://cheaperinference.com/markets
+  cheaperinference:
+    provider: "cheaperinference"
+    model: "gpt-5.4-mini"
+    api_key: "${CHEAPER_INFERENCE_API_KEY}"
+
   # You can use any chat completion compatible endpoint as base_url
   anthropic:
     provider: "openrouter"

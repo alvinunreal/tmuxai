@@ -271,6 +271,8 @@ func (c *AiClient) determineAPIType(model string) string {
 				return "openrouter"
 			case "requesty":
 				return "requesty"
+			case "cheaperinference":
+				return "cheaperinference"
 			case "gemini":
 				return "gemini"
 			case "github-copilot":
@@ -339,6 +341,8 @@ func (c *AiClient) GetResponseFromChatMessages(ctx context.Context, chatMessages
 		response, err = c.ChatCompletion(ctx, aiMessages, model)
 	case "requesty":
 		response, err = c.ChatCompletion(ctx, aiMessages, model)
+	case "cheaperinference":
+		response, err = c.ChatCompletion(ctx, aiMessages, model)
 	case "github-copilot":
 		response, err = c.CopilotGenerateContent(ctx, aiMessages, model)
 	case "gemini":
@@ -405,6 +409,10 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 			provider = "requesty"
 			apiKey = c.config.Requesty.APIKey
 			baseURL = c.config.Requesty.BaseURL
+		} else if c.config.CheaperInference.APIKey != "" {
+			provider = "cheaperinference"
+			apiKey = c.config.CheaperInference.APIKey
+			baseURL = c.config.CheaperInference.BaseURL
 		}
 	}
 
@@ -428,6 +436,8 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 		if baseURL == "" {
 			if provider == "requesty" {
 				baseURL = c.config.Requesty.BaseURL
+			} else if provider == "cheaperinference" {
+				baseURL = c.config.CheaperInference.BaseURL
 			} else {
 				baseURL = c.config.OpenRouter.BaseURL
 			}

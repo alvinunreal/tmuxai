@@ -146,7 +146,7 @@ TmuxAI reads its configuration from `~/.config/tmuxai/config.yaml`. To get runni
    ```yaml
    models:
      primary:
-       provider: openrouter  # openrouter, requesty, openai or azure
+       provider: openrouter  # openrouter, requesty, cheaperinference, openai or azure
        model: anthropic/claude-haiku-4.5
        api_key: sk-your-api-key
    ```
@@ -604,6 +604,13 @@ models:
     model: "openai/gpt-4o-mini"
     api_key: "${REQUESTY_API_KEY}"
 
+  # Cheaper Inference (OpenAI-compatible gateway, defaults to https://api.cheaperinference.com/v1)
+  # Get a key at https://cheaperinference.com/signup ; browse models at https://cheaperinference.com/markets
+  cheaperinference:
+    provider: "cheaperinference"
+    model: "gpt-5.4-mini"
+    api_key: "${CHEAPER_INFERENCE_API_KEY}"
+
   # You can use any chat completion compatible endpoint as base_url
   anthropic:
     provider: "openrouter"
@@ -648,6 +655,7 @@ models:
 - `openai` - OpenAI Responses API (GPT-4, GPT-5, etc.)
 - `openrouter` - Universal Chat Completion API, defaults to openrouter base url
 - `requesty` - [Requesty](https://requesty.ai) router (OpenAI-compatible Chat Completion API), defaults to `https://router.requesty.ai/v1`. Browse models at [app.requesty.ai/router/list](https://app.requesty.ai/router/list)
+- `cheaperinference` - [Cheaper Inference](https://cheaperinference.com) gateway (OpenAI-compatible Chat Completion API), defaults to `https://api.cheaperinference.com/v1`. Browse models at [cheaperinference.com/markets](https://cheaperinference.com/markets)
 - `azure` - Azure Chat Completions API
 - `gemini` - Google Gemini API (direct access via go-genai SDK)
 - `github-copilot` - GitHub Copilot (via official copilot-sdk/go — see setup below)
@@ -1015,6 +1023,7 @@ export TMUXAI_OPENAI_API_KEY="your-openai-api-key-here"
 export TMUXAI_OPENAI_MODEL="gpt-4"
 export TMUXAI_OPENROUTER_API_KEY="your-openrouter-api-key-here"
 export TMUXAI_REQUESTY_API_KEY="your-requesty-api-key-here"
+export TMUXAI_CHEAPERINFERENCE_API_KEY="your-cheaper-inference-api-key-here"
 ```
 
 You can also use environment variables directly within your configuration file values. The application will automatically expand these variables when loading the configuration:
@@ -1032,6 +1041,10 @@ openrouter:
 requesty:
   api_key: "${REQUESTY_API_KEY}"
   base_url: "${REQUESTY_BASE_URL:-https://router.requesty.ai/v1}"
+
+cheaperinference:
+  api_key: "${CHEAPER_INFERENCE_API_KEY}"
+  base_url: "${CHEAPER_INFERENCE_BASE_URL:-https://api.cheaperinference.com/v1}"
 ```
 
 ### Session-Specific Configuration

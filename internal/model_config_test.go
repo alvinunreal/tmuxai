@@ -252,6 +252,18 @@ func TestGetModel(t *testing.T) {
 			},
 			expectedModel: "openai/gpt-4o-mini",
 		},
+		{
+			name: "fallback to legacy cheaperinference when only cheaperinference configured",
+			config: &config.Config{
+				DefaultModel: "",
+				Models:       map[string]config.ModelConfig{},
+				CheaperInference: config.CheaperInferenceConfig{
+					APIKey: "***",
+					Model:  "gpt-5.4-mini",
+				},
+			},
+			expectedModel: "gpt-5.4-mini",
+		},
 	}
 
 	for _, tt := range tests {
