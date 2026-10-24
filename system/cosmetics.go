@@ -50,12 +50,15 @@ func Cosmetics(message string) string {
 }
 
 // processInlineCode finds inline code (single backticks) and applies ANSI formatting.
+// The palette is chosen to match the terminal background: a dark-blue background
+// with cyan text on a dark terminal, a light-gray background with dark text on a
+// light terminal.
 func processInlineCode(text string, inlineCodeRe *regexp.Regexp) string {
-	const (
-		bgDarkBlue = "\033[48;5;235m"
-		fgCyan     = "\033[38;5;51m"
-		reset      = "\033[0m"
-	)
+	const reset = "\033[0m"
+	bg, fg := "\033[48;5;235m", "\033[38;5;51m" // dark terminal: dark-blue bg, cyan fg
+	if IsLightTheme() {
+		bg, fg = "\033[48;5;254m", "\033[38;5;238m" // light terminal: light-gray bg, dark fg
+	}
 	result := ""
 	lastIndex := 0
 	matches := inlineCodeRe.FindAllStringSubmatchIndex(text, -1)
@@ -66,7 +69,7 @@ func processInlineCode(text string, inlineCodeRe *regexp.Regexp) string {
 		result += text[lastIndex:start]
 		// Add formatted inline code
 		code := text[codeStart:codeEnd]
-		result += bgDarkBlue + fgCyan + code + reset
+		result += bg + fg + code + reset
 		lastIndex = end
 	}
 	// Add any remaining text

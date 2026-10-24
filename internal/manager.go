@@ -90,6 +90,10 @@ func NewManager(cfg *config.Config, options ManagerOptions) (*Manager, error) {
 		os.Exit(0)
 	}
 
+	// Select the color palette before any output is rendered so the
+	// highlighter, inline code, and reasoning all match the terminal background.
+	system.SetTheme(cfg.Theme)
+
 	aiClient := NewAiClient(cfg)
 	os := system.GetOSDetails()
 

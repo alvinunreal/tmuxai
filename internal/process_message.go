@@ -54,13 +54,19 @@ func startElapsedSuffix(s *spinner.Spinner) func() {
 	}
 }
 
-// dimmedReasoning renders the model's reasoning text in a dimmed, muted style
-// so it is clearly secondary to the final answer.
+// dimmedReasoning renders the model's reasoning text in a muted style so it is
+// clearly secondary to the final answer. The palette is chosen for the terminal
+// background: a light-gray dimmed text on a dark terminal, a readable medium
+// slate on a light terminal (where the dimmed light-gray would be invisible).
 func dimmedReasoning(reasoning string) string {
+	const reset = "\033[0m"
+	if system.IsLightTheme() {
+		const slate = "\033[38;5;24m"
+		return slate + "💭 " + reasoning + reset
+	}
 	const (
-		dim   = "\033[2m"
-		gray  = "\033[38;5;245m"
-		reset = "\033[0m"
+		dim  = "\033[2m"
+		gray = "\033[38;5;245m"
 	)
 	return dim + gray + "💭 " + reasoning + reset
 }
