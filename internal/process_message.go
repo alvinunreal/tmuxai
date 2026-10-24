@@ -28,6 +28,43 @@ func ctxWithMcpDepth(ctx context.Context, depth int) context.Context {
 	return context.WithValue(ctx, mcpDepthKey{}, depth)
 }
 
+// startElapsedSuffix appends a live elapsed-time suffix (e.g. " (12s)") to the
+// spinner so the user sees how long the model has been working. It returns a
+// cleanup func that stops the updater; call it via defer so it runs on every
+// return path, before or after the spinner itself stops.
+func startElapsedSuffix(s *spinner.Spinner) func() {
+	start := time.Now()
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				secs := int(time.Since(start).Seconds())
+				s.Suffix = fmt.Sprintf(" (%ds)", secs)
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		s.Suffix = ""
+	}
+}
+
+// dimmedReasoning renders the model's reasoning text in a dimmed, muted style
+// so it is clearly secondary to the final answer.
+func dimmedReasoning(reasoning string) string {
+	const (
+		dim   = "\033[2m"
+		gray  = "\033[38;5;245m"
+		reset = "\033[0m"
+	)
+	return dim + gray + "💭 " + reasoning + reset
+}
+
 // Main function to process regular user messages
 // Returns true if the request was accomplished and no further processing should happen
 func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
@@ -44,6 +81,7 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 
 	s := spinner.New(spinner.CharSets[26], 100*time.Millisecond)
 	s.Start()
+	defer startElapsedSuffix(s)()
 
 	// check for status change before processing
 	if m.Status == "" {
@@ -141,7 +179,7 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		return false
 	}
 
-	response, err := m.AiClient.GetResponseFromChatMessages(ctx, sending, m.GetModel())
+	result, err := m.AiClient.GetResponseFromChatMessages(ctx, sending, m.GetModel())
 	if err != nil {
 		s.Stop()
 		m.Status = ""
@@ -167,6 +205,8 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		s.Stop()
 		return false
 	}
+
+	response := result.Content
 
 	r, err := m.parseAIResponse(response)
 	if err != nil {
@@ -206,6 +246,12 @@ func (m *Manager) ProcessUserMessage(ctx context.Context, message string) bool {
 		m.Messages = append(m.Messages, currentMessage, responseMsg)
 		return m.ProcessUserMessage(ctx, guidelineError)
 
+	}
+
+	// Show the model's reasoning (thinking) before the answer, dimmed,
+	// so the user can see what the model was working through.
+	if reasoning := result.Reasoning; reasoning != "" {
+		fmt.Println(dimmedReasoning(reasoning))
 	}
 
 	// colorize code blocks in the response
