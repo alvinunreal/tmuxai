@@ -34,6 +34,9 @@ type Config struct {
 	KnowledgeBase         KnowledgeBaseConfig    `mapstructure:"knowledge_base"`
 	WebSearch             WebSearchConfig        `mapstructure:"web_search"`
 	WebFetch              WebFetchConfig         `mapstructure:"web_fetch"`
+	// Theme selects the color palette for terminal output: "light" for a light
+	// terminal background, "dark" (default) for a dark one.
+	Theme string `mapstructure:"theme"`
 }
 
 // OpenRouterConfig holds OpenRouter API configuration
@@ -215,6 +218,7 @@ func DefaultConfig() *Config {
 			TimeoutSeconds:   8,
 			AllowedRedirects: true,
 		},
+		Theme: "dark",
 	}
 }
 

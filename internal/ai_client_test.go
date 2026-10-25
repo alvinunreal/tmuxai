@@ -43,8 +43,8 @@ func TestAzureOpenAIEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChatCompletion error: %v", err)
 	}
-	if resp != "ok" {
-		t.Errorf("unexpected response: %s", resp)
+	if resp.Content != "ok" {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
 
@@ -77,8 +77,8 @@ func TestOpenAIResponsesEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Response error: %v", err)
 	}
-	if resp != "ok from responses api" {
-		t.Errorf("unexpected response: %s", resp)
+	if resp.Content != "ok from responses api" {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
 
@@ -114,8 +114,67 @@ func TestOpenAIResponsesEndpointWithSystemMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Response error: %v", err)
 	}
-	if resp != "ok with system instruction" {
-		t.Errorf("unexpected response: %s", resp)
+	if resp.Content != "ok with system instruction" {
+		t.Errorf("unexpected response: %s", resp.Content)
+	}
+}
+
+func TestChatCompletionReasoningField(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"the answer","reasoning":"thinking step by step"}}]}`))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		OpenRouter: config.OpenRouterConfig{
+			APIKey:  "test-key",
+			BaseURL: server.URL,
+		},
+	}
+
+	client := NewAiClient(cfg)
+	msg := []Message{{Role: "user", Content: "hi"}}
+	resp, err := client.ChatCompletion(context.Background(), msg, "model")
+	if err != nil {
+		t.Fatalf("ChatCompletion error: %v", err)
+	}
+	if resp.Content != "the answer" {
+		t.Errorf("unexpected content: %s", resp.Content)
+	}
+	if resp.Reasoning != "thinking step by step" {
+		t.Errorf("expected reasoning to be populated, got %q", resp.Reasoning)
+	}
+}
+
+func TestChatCompletionNoReasoningField(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"plain answer"}}]}`))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		OpenRouter: config.OpenRouterConfig{
+			APIKey:  "test-key",
+			BaseURL: server.URL,
+		},
+	}
+
+	client := NewAiClient(cfg)
+	msg := []Message{{Role: "user", Content: "hi"}}
+	resp, err := client.ChatCompletion(context.Background(), msg, "model")
+	if err != nil {
+		t.Fatalf("ChatCompletion error: %v", err)
+	}
+	if resp.Content != "plain answer" {
+		t.Errorf("unexpected content: %s", resp.Content)
+	}
+	if resp.Reasoning != "" {
+		t.Errorf("expected empty reasoning, got %q", resp.Reasoning)
 	}
 }
 

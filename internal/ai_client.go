@@ -44,6 +44,27 @@ type AiClient struct {
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Reasoning carries the model's chain-of-thought when the provider returns
+	// it (vLLM/OpenRouter use "reasoning", some providers use "reasoning_content").
+	Reasoning string `json:"reasoning,omitempty"`
+	// ReasoningContent is the alternate field name used by some providers.
+	ReasoningContent string `json:"reasoning_content,omitempty"`
+}
+
+// ReasoningText returns the model's chain-of-thought, whichever field the
+// provider populated.
+func (m Message) ReasoningText() string {
+	if m.Reasoning != "" {
+		return m.Reasoning
+	}
+	return m.ReasoningContent
+}
+
+// AIResult holds a model reply and its chain-of-thought (when the provider
+// returns one).
+type AIResult struct {
+	Content   string
+	Reasoning string
 }
 
 // ChatCompletionRequest represents a request to the chat completion API
@@ -188,7 +209,7 @@ func buildCopilotPrompt(messages []Message) (prompt string, systemInstruction st
 }
 
 // CopilotGenerateContent sends via the copilot-sdk/go, converts the conversation history into a single-turn prompt
-func (c *AiClient) CopilotGenerateContent(ctx context.Context, messages []Message, model string) (string, error) {
+func (c *AiClient) CopilotGenerateContent(ctx context.Context, messages []Message, model string) (AIResult, error) {
 	// Resolve auth token and model from config
 	var githubToken string
 	if c.configMgr != nil {
@@ -199,12 +220,12 @@ func (c *AiClient) CopilotGenerateContent(ctx context.Context, messages []Messag
 
 	cl, err := c.getOrCreateCopilotClient(githubToken)
 	if err != nil {
-		return "", fmt.Errorf("failed to create Copilot client: %w", err)
+		return AIResult{}, fmt.Errorf("failed to create Copilot client: %w", err)
 	}
 
 	prompt, systemInstruction, err := buildCopilotPrompt(messages)
 	if err != nil {
-		return "", err
+		return AIResult{}, err
 	}
 
 	// Build session config
@@ -228,7 +249,7 @@ func (c *AiClient) CopilotGenerateContent(ctx context.Context, messages []Messag
 
 	session, err := cl.CreateSession(ctx, sessionCfg)
 	if err != nil {
-		return "", fmt.Errorf("failed to create Copilot session: %w", err)
+		return AIResult{}, fmt.Errorf("failed to create Copilot session: %w", err)
 	}
 	defer func() {
 		if dErr := session.Disconnect(); dErr != nil {
@@ -240,21 +261,21 @@ func (c *AiClient) CopilotGenerateContent(ctx context.Context, messages []Messag
 
 	event, err := session.SendAndWait(ctx, copilot.MessageOptions{Prompt: prompt})
 	if err != nil {
-		return "", fmt.Errorf("copilot request failed: %w", err)
+		return AIResult{}, fmt.Errorf("copilot request failed: %w", err)
 	}
 
 	if event == nil {
-		return "", fmt.Errorf("no response content returned from Copilot (model: %s)", model)
+		return AIResult{}, fmt.Errorf("no response content returned from Copilot (model: %s)", model)
 	}
 
 	msgData, ok := event.Data.(*copilot.AssistantMessageData)
 	if !ok {
-		return "", fmt.Errorf("unexpected event data type from Copilot (model: %s): %T", model, event.Data)
+		return AIResult{}, fmt.Errorf("unexpected event data type from Copilot (model: %s): %T", model, event.Data)
 	}
 
 	responseText := msgData.Content
 	logger.Debug("Received Copilot response (%d characters)", len(responseText))
-	return responseText, nil
+	return AIResult{Content: responseText}, nil
 }
 
 // determineAPIType determines which API to use based on the model and configuration
@@ -299,7 +320,7 @@ func (c *AiClient) determineAPIType(model string) string {
 }
 
 // GetResponseFromChatMessages gets a response from the AI based on chat messages
-func (c *AiClient) GetResponseFromChatMessages(ctx context.Context, chatMessages []ChatMessage, model string) (string, error) {
+func (c *AiClient) GetResponseFromChatMessages(ctx context.Context, chatMessages []ChatMessage, model string) (AIResult, error) {
 	// Convert chat messages to AI client format
 	aiMessages := []Message{}
 
@@ -327,22 +348,22 @@ func (c *AiClient) GetResponseFromChatMessages(ctx context.Context, chatMessages
 	logger.Debug("Using API type: %s for model: %s", apiType, model)
 
 	// Route to appropriate API
-	var response string
+	var result AIResult
 	var err error
 
 	switch apiType {
 	case "responses":
-		response, err = c.Response(ctx, aiMessages, model)
+		result, err = c.Response(ctx, aiMessages, model)
 	case "azure":
-		response, err = c.ChatCompletion(ctx, aiMessages, model)
+		result, err = c.ChatCompletion(ctx, aiMessages, model)
 	case "openrouter":
-		response, err = c.ChatCompletion(ctx, aiMessages, model)
+		result, err = c.ChatCompletion(ctx, aiMessages, model)
 	case "requesty":
-		response, err = c.ChatCompletion(ctx, aiMessages, model)
+		result, err = c.ChatCompletion(ctx, aiMessages, model)
 	case "github-copilot":
-		response, err = c.CopilotGenerateContent(ctx, aiMessages, model)
+		result, err = c.CopilotGenerateContent(ctx, aiMessages, model)
 	case "gemini":
-		response, err = c.GeminiGenerateContent(ctx, aiMessages, model)
+		result, err = c.GeminiGenerateContent(ctx, aiMessages, model)
 	case "bedrock":
 		var bedrockCfg config.ModelConfig
 		if c.configMgr != nil {
@@ -350,20 +371,20 @@ func (c *AiClient) GetResponseFromChatMessages(ctx context.Context, chatMessages
 				bedrockCfg = mc
 			}
 		}
-		response, err = c.BedrockConverse(ctx, aiMessages, model, bedrockCfg)
+		result, err = c.BedrockConverse(ctx, aiMessages, model, bedrockCfg)
 	default:
-		return "", fmt.Errorf("unknown API type: %s", apiType)
+		return AIResult{}, fmt.Errorf("unknown API type: %s", apiType)
 	}
 
 	if err != nil {
-		return "", err
+		return AIResult{}, err
 	}
 
-	return response, nil
+	return result, nil
 }
 
 // ChatCompletion sends a chat completion request to the OpenRouter API
-func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model string) (string, error) {
+func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model string) (AIResult, error) {
 	reqBody := ChatCompletionRequest{
 		Model:    model,
 		Messages: messages,
@@ -441,13 +462,13 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 	reqJSON, err := json.Marshal(reqBody)
 	if err != nil {
 		logger.Error("Failed to marshal request: %v", err)
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return AIResult{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqJSON))
 	if err != nil {
 		logger.Error("Failed to create request: %v", err)
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return AIResult{}, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Set headers
@@ -464,10 +485,10 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 	resp, err := c.client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.Canceled {
-			return "", fmt.Errorf("request canceled: %w", ctx.Err())
+			return AIResult{}, fmt.Errorf("request canceled: %w", ctx.Err())
 		}
 		logger.Error("Failed to send request: %v", err)
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return AIResult{}, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -475,7 +496,7 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Error("Failed to read response: %v", err)
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return AIResult{}, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// Log the raw response for debugging
@@ -484,36 +505,39 @@ func (c *AiClient) ChatCompletion(ctx context.Context, messages []Message, model
 	// Check for errors
 	if resp.StatusCode != http.StatusOK {
 		logger.Error("API returned error: %s", body)
-		return "", fmt.Errorf("API returned error: %s", body)
+		return AIResult{}, fmt.Errorf("API returned error: %s", body)
 	}
 
 	// Parse the response
 	var completionResp ChatCompletionResponse
 	if err := json.Unmarshal(body, &completionResp); err != nil {
 		logger.Error("Failed to unmarshal response: %v, body: %s", err, body)
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		return AIResult{}, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	// Return the response content
 	if len(completionResp.Choices) > 0 {
-		responseContent := completionResp.Choices[0].Message.Content
-		logger.Debug("Received AI response (%d characters): %s", len(responseContent), responseContent)
-		return responseContent, nil
+		msg := completionResp.Choices[0].Message
+		logger.Debug("Received AI response (%d characters): %s", len(msg.Content), msg.Content)
+		if reasoning := msg.ReasoningText(); reasoning != "" {
+			logger.Debug("Received AI reasoning (%d characters): %s", len(reasoning), reasoning)
+		}
+		return AIResult{Content: msg.Content, Reasoning: msg.ReasoningText()}, nil
 	}
 
 	// Enhanced error for no completion choices
 	logger.Error("No completion choices returned. Raw response: %s", string(body))
-	return "", fmt.Errorf("no completion choices returned (model: %s, status: %d)", model, resp.StatusCode)
+	return AIResult{}, fmt.Errorf("no completion choices returned (model: %s, status: %d)", model, resp.StatusCode)
 }
 
 // Response sends a request to the OpenAI Responses API
-func (c *AiClient) Response(ctx context.Context, messages []Message, model string) (string, error) {
+func (c *AiClient) Response(ctx context.Context, messages []Message, model string) (AIResult, error) {
 	// Convert messages to Responses API format
 	var input ResponseInput
 	var instructions string
 
 	if len(messages) == 0 {
-		return "", fmt.Errorf("no messages provided")
+		return AIResult{}, fmt.Errorf("no messages provided")
 	}
 
 	// Check if first message is a system message
@@ -523,7 +547,7 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 			input = messages[1:]
 		} else {
 			// Only system message provided, no user input
-			return "", fmt.Errorf("only system message provided, no user message to process")
+			return AIResult{}, fmt.Errorf("only system message provided, no user message to process")
 		}
 	} else {
 		input = messages
@@ -566,13 +590,13 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 	reqJSON, err := json.Marshal(reqBody)
 	if err != nil {
 		logger.Error("Failed to marshal Responses API request: %v", err)
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return AIResult{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqJSON))
 	if err != nil {
 		logger.Error("Failed to create Responses API request: %v", err)
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return AIResult{}, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Set headers
@@ -589,10 +613,10 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 	resp, err := c.client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.Canceled {
-			return "", fmt.Errorf("request canceled: %w", ctx.Err())
+			return AIResult{}, fmt.Errorf("request canceled: %w", ctx.Err())
 		}
 		logger.Error("Failed to send Responses API request: %v", err)
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return AIResult{}, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -600,7 +624,7 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Error("Failed to read Responses API response: %v", err)
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return AIResult{}, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// Log the raw response for debugging
@@ -609,26 +633,38 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 	// Check for errors
 	if resp.StatusCode != http.StatusOK {
 		logger.Error("Responses API returned error: %s", body)
-		return "", fmt.Errorf("API returned error: %s", body)
+		return AIResult{}, fmt.Errorf("API returned error: %s", body)
 	}
 
 	// Parse the response
 	var response Response
 	if err := json.Unmarshal(body, &response); err != nil {
 		logger.Error("Failed to unmarshal Responses API response: %v, body: %s", err, body)
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		return AIResult{}, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	// Check for API errors in response body
 	if response.Error != nil {
 		logger.Error("Responses API returned error: %s", response.Error.Message)
-		return "", fmt.Errorf("API error: %s", response.Error.Message)
+		return AIResult{}, fmt.Errorf("API error: %s", response.Error.Message)
+	}
+
+	// Collect reasoning from "reasoning" output items (chain-of-thought)
+	var reasoning string
+	for _, item := range response.Output {
+		if item.Type == "reasoning" {
+			for _, content := range item.Content {
+				if content.Text != "" {
+					reasoning += content.Text
+				}
+			}
+		}
 	}
 
 	// Return the response content
 	if response.OutputText != "" {
 		logger.Debug("Received Responses API response (%d characters): %s", len(response.OutputText), response.OutputText)
-		return response.OutputText, nil
+		return AIResult{Content: response.OutputText, Reasoning: reasoning}, nil
 	}
 
 	// If no output_text, extract from message items
@@ -637,7 +673,7 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 			for _, content := range item.Content {
 				if (content.Type == "output_text" || content.Type == "text") && content.Text != "" {
 					logger.Debug("Received Responses API response from output items (%d characters): %s", len(content.Text), content.Text)
-					return content.Text, nil
+					return AIResult{Content: content.Text, Reasoning: reasoning}, nil
 				}
 			}
 		}
@@ -645,7 +681,7 @@ func (c *AiClient) Response(ctx context.Context, messages []Message, model strin
 
 	// Enhanced error for no response content
 	logger.Error("No response content returned. Raw response: %s", string(body))
-	return "", fmt.Errorf("no response content returned (model: %s, status: %d)", model, resp.StatusCode)
+	return AIResult{}, fmt.Errorf("no response content returned (model: %s, status: %d)", model, resp.StatusCode)
 }
 
 // getOrCreateGeminiClient creates or returns the cached Gemini client
@@ -670,9 +706,9 @@ func (c *AiClient) getOrCreateGeminiClient(ctx context.Context, apiKey string) (
 }
 
 // GeminiGenerateContent sends a request to the Gemini API using the go-genai SDK
-func (c *AiClient) GeminiGenerateContent(ctx context.Context, messages []Message, model string) (string, error) {
+func (c *AiClient) GeminiGenerateContent(ctx context.Context, messages []Message, model string) (AIResult, error) {
 	if len(messages) == 0 {
-		return "", fmt.Errorf("no messages provided")
+		return AIResult{}, fmt.Errorf("no messages provided")
 	}
 
 	// Get API key from model configuration
@@ -684,13 +720,13 @@ func (c *AiClient) GeminiGenerateContent(ctx context.Context, messages []Message
 	}
 
 	if apiKey == "" {
-		return "", fmt.Errorf("gemini API key not configured")
+		return AIResult{}, fmt.Errorf("gemini API key not configured")
 	}
 
 	// Get or create Gemini client
 	client, err := c.getOrCreateGeminiClient(ctx, apiKey)
 	if err != nil {
-		return "", err
+		return AIResult{}, err
 	}
 
 	// Convert messages to Gemini format
@@ -719,7 +755,7 @@ func (c *AiClient) GeminiGenerateContent(ctx context.Context, messages []Message
 	}
 
 	if len(contents) == 0 {
-		return "", fmt.Errorf("no user/assistant messages to send")
+		return AIResult{}, fmt.Errorf("no user/assistant messages to send")
 	}
 
 	// Build generation config
@@ -734,10 +770,10 @@ func (c *AiClient) GeminiGenerateContent(ctx context.Context, messages []Message
 	result, err := client.Models.GenerateContent(ctx, model, contents, config)
 	if err != nil {
 		if ctx.Err() == context.Canceled {
-			return "", fmt.Errorf("request canceled: %w", ctx.Err())
+			return AIResult{}, fmt.Errorf("request canceled: %w", ctx.Err())
 		}
 		logger.Error("Failed to generate content with Gemini: %v", err)
-		return "", fmt.Errorf("gemini API error: %w", err)
+		return AIResult{}, fmt.Errorf("gemini API error: %w", err)
 	}
 
 	// Extract text from response
@@ -756,11 +792,11 @@ func (c *AiClient) GeminiGenerateContent(ctx context.Context, messages []Message
 
 	if responseText == "" {
 		logger.Error("No response text returned from Gemini")
-		return "", fmt.Errorf("no response content returned from Gemini (model: %s)", model)
+		return AIResult{}, fmt.Errorf("no response content returned from Gemini (model: %s)", model)
 	}
 
 	logger.Debug("Received Gemini response (%d characters)", len(responseText))
-	return responseText, nil
+	return AIResult{Content: responseText}, nil
 }
 
 func debugChatMessages(chatMessages []ChatMessage, response string) {

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/alecthomas/chroma"
 	"github.com/alecthomas/chroma/formatters"
 	"github.com/alecthomas/chroma/lexers"
 	"github.com/alecthomas/chroma/styles"
@@ -66,6 +67,26 @@ func GetProcessArgs(pid int) string {
 	return cmdOutput
 }
 
+// theme selects the color palette: "light" for a light terminal background,
+// "dark" (default) for a dark one. Set once at startup via SetTheme, before
+// any output is rendered.
+var theme = "dark"
+
+// SetTheme selects the palette ("light" or "dark"). Any other value falls
+// back to "dark".
+func SetTheme(t string) {
+	if strings.EqualFold(strings.TrimSpace(t), "light") {
+		theme = "light"
+		return
+	}
+	theme = "dark"
+}
+
+// IsLightTheme reports whether the light-background palette is active.
+func IsLightTheme() bool {
+	return theme == "light"
+}
+
 var HighlightCode = func(language string, code string) (string, error) {
 	// Get the lexer for the specified language
 	lexer := lexers.Get(language)
@@ -76,8 +97,15 @@ var HighlightCode = func(language string, code string) (string, error) {
 		}
 	}
 
-	// Choose a style (theme) - using monokai for good terminal visibility
-	style := styles.Get("monokai")
+	// Choose a style matching the terminal background. monokai is a dark
+	// theme (near-white default text) that is invisible on a light terminal,
+	// so use monokailight when the light palette is active.
+	var style *chroma.Style
+	if IsLightTheme() {
+		style = styles.Get("monokailight")
+	} else {
+		style = styles.Get("monokai")
+	}
 	if style == nil {
 		style = styles.Fallback
 	}
@@ -117,6 +145,15 @@ func IsSubShell(command string) bool {
 		"ssh", "docker", "podman",
 	}
 	return slices.Contains(subShellCommands, command)
+}
+
+// IsShell reports whether command (a pane's pane_current_command basename) is a
+// known interactive shell that tmuxai can safely type commands into.
+func IsShell(command string) bool {
+	shells := []string{
+		"bash", "zsh", "fish", "sh", "dash", "ksh",
+	}
+	return slices.Contains(shells, command)
 }
 
 func GetOSDetails() string {

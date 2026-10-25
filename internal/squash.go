@@ -88,10 +88,11 @@ func (m *Manager) summarizeChatHistory(messages []ChatMessage) (string, error) {
 	// Create a context for the summarization request (no timeout to support local LLMs with large contexts)
 	ctx := context.Background()
 
-	summary, err := m.AiClient.GetResponseFromChatMessages(ctx, summarizationMessage, m.GetModel())
+	result, err := m.AiClient.GetResponseFromChatMessages(ctx, summarizationMessage, m.GetModel())
 	if err != nil {
 		return "", err
 	}
+	summary := result.Content
 
 	if m.Config.Debug {
 		debugChatMessages(summarizationMessage, summary)

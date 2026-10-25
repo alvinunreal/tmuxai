@@ -78,14 +78,14 @@ func (c *AiClient) getOrCreateBedrockClient(ctx context.Context, region, profile
 // modelCfg carries the current model's settings (region, profile, inference
 // parameters). It is optional — a zero value falls back to default AWS
 // credential resolution and a conservative default max_tokens.
-func (c *AiClient) BedrockConverse(ctx context.Context, messages []Message, modelID string, modelCfg config.ModelConfig) (string, error) {
+func (c *AiClient) BedrockConverse(ctx context.Context, messages []Message, modelID string, modelCfg config.ModelConfig) (AIResult, error) {
 	if len(messages) == 0 {
-		return "", fmt.Errorf("no messages provided")
+		return AIResult{}, fmt.Errorf("no messages provided")
 	}
 
 	client, err := c.getOrCreateBedrockClient(ctx, modelCfg.Region, modelCfg.AWSProfile)
 	if err != nil {
-		return "", err
+		return AIResult{}, err
 	}
 
 	// Split out system messages; Bedrock Converse accepts them separately.
@@ -115,13 +115,13 @@ func (c *AiClient) BedrockConverse(ctx context.Context, messages []Message, mode
 	}
 
 	if len(convMessages) == 0 {
-		return "", fmt.Errorf("no user/assistant messages to send")
+		return AIResult{}, fmt.Errorf("no user/assistant messages to send")
 	}
 
 	// Bedrock requires a non-empty modelID. Reject early with a clear error
 	// rather than letting the SDK produce a less obvious one.
 	if strings.TrimSpace(modelID) == "" {
-		return "", fmt.Errorf("bedrock model ID is empty — set `model` in the config (e.g. anthropic.claude-3-5-sonnet-20241022-v2:0)")
+		return AIResult{}, fmt.Errorf("bedrock model ID is empty — set `model` in the config (e.g. anthropic.claude-3-5-sonnet-20241022-v2:0)")
 	}
 
 	inference := buildBedrockInferenceConfig(modelCfg)
@@ -136,15 +136,15 @@ func (c *AiClient) BedrockConverse(ctx context.Context, messages []Message, mode
 	})
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("request canceled or timed out: %w", ctx.Err())
+			return AIResult{}, fmt.Errorf("request canceled or timed out: %w", ctx.Err())
 		}
 		logger.Error("Bedrock Converse failed: %v", err)
-		return "", fmt.Errorf("bedrock API error: %w", err)
+		return AIResult{}, fmt.Errorf("bedrock API error: %w", err)
 	}
 
 	msgOut, ok := out.Output.(*brtypes.ConverseOutputMemberMessage)
 	if !ok || msgOut == nil {
-		return "", fmt.Errorf("bedrock returned unexpected output type (model: %s)", modelID)
+		return AIResult{}, fmt.Errorf("bedrock returned unexpected output type (model: %s)", modelID)
 	}
 
 	var sb strings.Builder
@@ -156,9 +156,9 @@ func (c *AiClient) BedrockConverse(ctx context.Context, messages []Message, mode
 
 	response := sb.String()
 	if response == "" {
-		return "", fmt.Errorf("bedrock returned empty response (model: %s)", modelID)
+		return AIResult{}, fmt.Errorf("bedrock returned empty response (model: %s)", modelID)
 	}
 
 	logger.Debug("Received Bedrock response (%d characters)", len(response))
-	return response, nil
+	return AIResult{Content: response}, nil
 }

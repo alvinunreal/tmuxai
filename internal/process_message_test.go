@@ -12,8 +12,8 @@ import (
 
 // AiClientInterface defines the interface for AI clients to make testing easier
 type AiClientInterface interface {
-	GetResponseFromChatMessages(ctx context.Context, messages []ChatMessage, model string) (string, error)
-	ChatCompletion(ctx context.Context, messages []Message, model string) (string, error)
+	GetResponseFromChatMessages(ctx context.Context, messages []ChatMessage, model string) (AIResult, error)
+	ChatCompletion(ctx context.Context, messages []Message, model string) (AIResult, error)
 }
 
 // MockAiClient is a mock implementation of AiClientInterface for testing
@@ -21,14 +21,14 @@ type MockAiClient struct {
 	mock.Mock
 }
 
-func (m *MockAiClient) GetResponseFromChatMessages(ctx context.Context, messages []ChatMessage, model string) (string, error) {
+func (m *MockAiClient) GetResponseFromChatMessages(ctx context.Context, messages []ChatMessage, model string) (AIResult, error) {
 	args := m.Called(ctx, messages, model)
-	return args.String(0), args.Error(1)
+	return args.Get(0).(AIResult), args.Error(1)
 }
 
-func (m *MockAiClient) ChatCompletion(ctx context.Context, messages []Message, model string) (string, error) {
+func (m *MockAiClient) ChatCompletion(ctx context.Context, messages []Message, model string) (AIResult, error) {
 	args := m.Called(ctx, messages, model)
-	return args.String(0), args.Error(1)
+	return args.Get(0).(AIResult), args.Error(1)
 }
 
 // Test: Pressing ctrl+c should cancel message processing
