@@ -147,6 +147,15 @@ func IsSubShell(command string) bool {
 	return slices.Contains(subShellCommands, command)
 }
 
+// IsShell reports whether command (a pane's pane_current_command basename) is a
+// known interactive shell that tmuxai can safely type commands into.
+func IsShell(command string) bool {
+	shells := []string{
+		"bash", "zsh", "fish", "sh", "dash", "ksh",
+	}
+	return slices.Contains(shells, command)
+}
+
 func GetOSDetails() string {
 	if runtime.GOOS == "linux" {
 		// Try reading /etc/os-release

@@ -425,6 +425,121 @@ func TestGetTmuxPanesInXML_ForcedReadPanes(t *testing.T) {
 	assert.NotContains(t, xml, " - Id: %1")
 }
 
+// TestGetAvailablePane_PrefersShellPane reproduces the bug where the first
+// non-tmuxai pane was used as the exec pane even when it ran an interactive
+// program (e.g. copilot) instead of a shell, causing commands to be typed
+// into the wrong program. A shell pane must be preferred over it.
+func TestGetAvailablePane_PrefersShellPane(t *testing.T) {
+	manager := &Manager{
+		PaneId:            "%143",
+		ExecPane:          &system.TmuxPaneDetails{},
+		OS:                "linux",
+		ForcedReadPaneIDs: map[string]bool{},
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalCurrentPaneID := system.TmuxCurrentPaneId
+	originalPanesDetails := system.TmuxPanesDetails
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxCurrentPaneId = originalCurrentPaneID
+		system.TmuxPanesDetails = originalPanesDetails
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) {
+		return "@1:1", nil
+	}
+	system.TmuxCurrentPaneId = func() (string, error) {
+		return "%143", nil
+	}
+	// Pane order mirrors the incident: copilot first, then bash panes, then tmuxai.
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{
+			{Id: "%141", CurrentCommand: "copilot"},
+			{Id: "%142", CurrentCommand: "bash"},
+			{Id: "%164", CurrentCommand: "bash"},
+			{Id: "%143", CurrentCommand: "tmuxai"},
+		}, nil
+	}
+
+	pane := manager.GetAvailablePane()
+	assert.Equal(t, "%142", pane.Id, "Should pick the first shell pane, not the copilot pane")
+	assert.Equal(t, "bash", pane.CurrentCommand)
+}
+
+// TestGetAvailablePane_FallsBackWhenNoShellPane ensures that when no pane runs
+// a known shell, the first non-tmuxai pane is still returned (old behavior).
+func TestGetAvailablePane_FallsBackWhenNoShellPane(t *testing.T) {
+	manager := &Manager{
+		PaneId:            "%1",
+		ExecPane:          &system.TmuxPaneDetails{},
+		OS:                "linux",
+		ForcedReadPaneIDs: map[string]bool{},
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalCurrentPaneID := system.TmuxCurrentPaneId
+	originalPanesDetails := system.TmuxPanesDetails
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxCurrentPaneId = originalCurrentPaneID
+		system.TmuxPanesDetails = originalPanesDetails
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) {
+		return "@1:1", nil
+	}
+	system.TmuxCurrentPaneId = func() (string, error) {
+		return "%3", nil
+	}
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{
+			{Id: "%1", CurrentCommand: "copilot"},
+			{Id: "%2", CurrentCommand: "vim"},
+			{Id: "%3", CurrentCommand: "tmuxai"},
+		}, nil
+	}
+
+	pane := manager.GetAvailablePane()
+	assert.Equal(t, "%1", pane.Id, "Should fall back to the first non-tmuxai pane when no shell exists")
+}
+
+// TestGetAvailablePane_NoAvailablePane returns an empty pane when every pane is
+// either the tmuxai pane or a forced-read pane.
+func TestGetAvailablePane_NoAvailablePane(t *testing.T) {
+	manager := &Manager{
+		PaneId:            "%1",
+		ExecPane:          &system.TmuxPaneDetails{},
+		OS:                "linux",
+		ForcedReadPaneIDs: map[string]bool{"%2": true},
+	}
+
+	originalWindowTarget := system.TmuxCurrentWindowTarget
+	originalCurrentPaneID := system.TmuxCurrentPaneId
+	originalPanesDetails := system.TmuxPanesDetails
+	defer func() {
+		system.TmuxCurrentWindowTarget = originalWindowTarget
+		system.TmuxCurrentPaneId = originalCurrentPaneID
+		system.TmuxPanesDetails = originalPanesDetails
+	}()
+
+	system.TmuxCurrentWindowTarget = func() (string, error) {
+		return "@1:1", nil
+	}
+	system.TmuxCurrentPaneId = func() (string, error) {
+		return "%1", nil
+	}
+	system.TmuxPanesDetails = func(target string) ([]system.TmuxPaneDetails, error) {
+		return []system.TmuxPaneDetails{
+			{Id: "%1", CurrentCommand: "tmuxai"},
+			{Id: "%2", CurrentCommand: "bash"},
+		}, nil
+	}
+
+	pane := manager.GetAvailablePane()
+	assert.Equal(t, "", pane.Id, "Should return an empty pane when none are available")
+}
+
 func TestGetAvailablePane_SkipsForcedReadPanes(t *testing.T) {
 	manager := &Manager{
 		PaneId:            "%1",

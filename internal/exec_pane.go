@@ -12,17 +12,31 @@ import (
 	"github.com/alvinunreal/tmuxai/system"
 )
 
-// GetAvailablePane finds an available pane or creates a new one if none are available
+// GetAvailablePane finds an available pane or creates a new one if none are available.
+// It prefers a pane running a known shell, so commands are not typed into an
+// interactive program (e.g. copilot, vim) that happens to be the first pane.
+// Falls back to the first non-tmuxai pane when no shell pane exists.
 func (m *Manager) GetAvailablePane() system.TmuxPaneDetails {
 	panes, _ := m.GetTmuxPanes()
+	var fallback system.TmuxPaneDetails
+	haveFallback := false
 	for _, pane := range panes {
-		if !pane.IsTmuxAiPane && !m.ForcedReadPaneIDs[pane.Id] {
-			logger.Info("Found available pane: %s", pane.Id)
+		if pane.IsTmuxAiPane || m.ForcedReadPaneIDs[pane.Id] {
+			continue
+		}
+		if system.IsShell(pane.CurrentCommand) {
+			logger.Info("Found available shell pane: %s", pane.Id)
 			return pane
 		}
+		if !haveFallback {
+			fallback = pane
+			haveFallback = true
+		}
 	}
-
-	return system.TmuxPaneDetails{}
+	if haveFallback {
+		logger.Info("Found available pane (no shell pane): %s", fallback.Id)
+	}
+	return fallback
 }
 
 func (m *Manager) resolvePaneSelection() ([]system.TmuxPaneDetails, error) {
