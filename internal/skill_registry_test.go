@@ -972,6 +972,124 @@ func TestInitSkillsHonorsAutoScanFalse(t *testing.T) {
 	}
 }
 
+// =====================================================================
+// TestInitSkillsFollowsSymlinkedDirectories
+// =====================================================================
+
+func TestInitSkillsFollowsSymlinkedDirectories(t *testing.T) {
+	baseTemp := t.TempDir()
+
+	// Source of truth lives OUTSIDE the skills directory.
+	externalDir := filepath.Join(baseTemp, "external-skills", "shared-skill")
+	if err := os.MkdirAll(externalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	skillContent := "---\nname: shared-skill\ndescription: Shared across agents via symlink\n---\nShared body.\n"
+	if err := os.WriteFile(filepath.Join(externalDir, "SKILL.md"), []byte(skillContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(externalDir, "helper.sh"), []byte("#!/bin/sh\necho hi\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	configDir := filepath.Join(baseTemp, ".config", "tmuxai")
+	skillsDir := filepath.Join(configDir, "skills")
+	if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Valid directory symlink.
+	if err := os.Symlink(externalDir, filepath.Join(skillsDir, "shared-skill")); err != nil {
+		t.Skipf("symlinks not supported on this platform: %v", err)
+	}
+
+	// Broken symlink: must be skipped silently (no warning).
+	if err := os.Symlink(filepath.Join(baseTemp, "does-not-exist"), filepath.Join(skillsDir, "broken-skill")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Symlink to a regular file: must be skipped silently.
+	regularFile := filepath.Join(baseTemp, "not-a-dir")
+	if err := os.WriteFile(regularFile, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(regularFile, filepath.Join(skillsDir, "file-skill")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Link name does not match frontmatter name: skipped WITH warning.
+	if err := os.Symlink(externalDir, filepath.Join(skillsDir, "renamed-skill")); err != nil {
+		t.Fatal(err)
+	}
+
+	origHome := os.Getenv("HOME")
+	if err := os.Setenv("HOME", baseTemp); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Setenv("HOME", origHome); err != nil {
+			t.Errorf("restore HOME: %v", err)
+		}
+	})
+
+	sc := &config.SkillsConfig{
+		AutoScan:           true,
+		MaxL1Chars:         8000,
+		MaxLoadedChars:     32000,
+		MaxSkillChars:      20000,
+		TruncateDescAt:     200,
+		AutoMatchThreshold: 0.1,
+	}
+
+	reg, err := InitSkills(sc)
+	if err != nil {
+		t.Fatalf("InitSkills returned error: %v", err)
+	}
+
+	// The valid symlink is discovered.
+	s, ok := reg.Skills["shared-skill"]
+	if !ok {
+		t.Fatalf("expected skill %q to be discovered via symlink, got: %v",
+			"shared-skill", skillNames(reg))
+	}
+
+	// DirPath is resolved to the real directory so WalkDir (BuildManifest)
+	// traverses it. Resolve the expectation too: on macOS t.TempDir()
+	// itself contains symlinked components (/var -> /private/var).
+	wantDir, err := filepath.EvalSymlinks(externalDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.DirPath != wantDir {
+		t.Errorf("DirPath = %q, want resolved %q", s.DirPath, wantDir)
+	}
+
+	// Negative cases are not discovered.
+	for _, notWant := range []string{"broken-skill", "file-skill", "renamed-skill"} {
+		if _, ok := reg.Skills[notWant]; ok {
+			t.Errorf("expected skill %q NOT to be discovered, but it was", notWant)
+		}
+	}
+
+	// Only the name mismatch produces a discovery warning.
+	if len(reg.DiscoveryWarnings) != 1 || !strings.HasPrefix(reg.DiscoveryWarnings[0], "renamed-skill:") {
+		t.Errorf("DiscoveryWarnings = %v, want a single warning for renamed-skill", reg.DiscoveryWarnings)
+	}
+
+	// Manifest lists helper files through the symlinked root.
+	if manifest := s.BuildManifest(); !strings.Contains(manifest, "helper.sh") {
+		t.Errorf("manifest should list helper.sh through symlink, got: %q", manifest)
+	}
+
+	// Load works end-to-end via the symlink.
+	if err := reg.Load("shared-skill"); err != nil {
+		t.Fatalf("Load via symlink: %v", err)
+	}
+	if !strings.Contains(reg.Skills["shared-skill"].Body, "Shared body.") {
+		t.Errorf("loaded body missing expected content: %q", reg.Skills["shared-skill"].Body)
+	}
+}
+
 // skillNames returns sorted skill names from a registry.
 func skillNames(r *SkillRegistry) []string {
 	names := make([]string, 0, len(r.Skills))
