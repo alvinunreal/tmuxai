@@ -180,11 +180,18 @@ func InitSkills(sc *config.SkillsConfig) (*SkillRegistry, error) {
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		dirPath := filepath.Join(skillsDir, entry.Name())
+
+		info, err := os.Stat(dirPath)
+		if err != nil || !info.IsDir() {
 			continue
 		}
 
-		dirPath := filepath.Join(skillsDir, entry.Name())
+		dirPath, err = filepath.EvalSymlinks(dirPath)
+		if err != nil {
+			continue
+		}
+
 		skillFile := findSkillMd(dirPath)
 		if skillFile == "" {
 			reg.addDiscoveryWarning(entry.Name(), "missing SKILL.md")
