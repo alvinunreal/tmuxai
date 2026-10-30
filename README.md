@@ -731,7 +731,7 @@ TmuxAI » /websearch -f 3 latest tmux best practices
 TmuxAI » /webfetch https://example.com/docs
 ```
 
-- **Providers:** Brave Search API (primary) or self-hosted SearXNG
+- **Providers:** Brave Search API (primary), [Firecrawl](https://firecrawl.dev) search API, or self-hosted SearXNG. Set `default_provider` to pick the one queried first; the other configured providers are tried if it fails.
 - **Fallback chain:** direct fetch → Wayback Machine → Google Cache
 - **Safety:** Fetched content is sanitized and injected as assistant context, not user input
 - Configure providers and limits under `web_search` and `web_fetch` in `config.yaml` (see [Configuration](#configuration))
@@ -836,7 +836,7 @@ Use `/info` to see active MCP servers, tool counts, and estimated token usage.
 | `/skill unload --all`       | Unload all skills                                                |
 | `/skill info <name>`        | View skill details without loading                               |
 | `/skill validate`           | Validate all discovered skills                                   |
-| `/websearch [-f N] <query>` | Search the web via Brave or SearXNG; use `-f N` to auto-fetch top N results |
+| `/websearch [-f N] <query>` | Search the web via Brave, Firecrawl or SearXNG; use `-f N` to auto-fetch top N results |
 | `/webfetch <url>`           | Fetch readable content from a URL, with Wayback Machine fallback                |
 | `/mcp`                      | List MCP servers with status and tool counts                     |
 | `/mcp tools [server]`       | List available MCP tools, optionally filtered by server          |
@@ -978,7 +978,7 @@ If omitted, TmuxAI uses the legacy default: `-d -h`.
 
 ### Web Search & Fetch Configuration
 
-Enable web search (via Brave or SearXNG) and web fetching (with Wayback/Google Cache fallback):
+Enable web search (via Brave, Firecrawl or SearXNG) and web fetching (with Wayback/Google Cache fallback):
 
 ```yaml
 web_search:
@@ -990,6 +990,8 @@ web_search:
   providers:
     brave:
       api_key: "YOUR_BRAVE_API_KEY"
+    firecrawl:
+      api_key: "YOUR_FIRECRAWL_API_KEY"
     searxng:
       base_url: "http://127.0.0.1:8888"
 

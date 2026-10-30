@@ -389,6 +389,8 @@ func (m *Manager) initSearchEngine() {
 			} else {
 				logger.Debug("Failed to init SearXNG provider: %v", err)
 			}
+		case "firecrawl":
+			providers = append(providers, NewFirecrawlProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
 		}
 	}
 
@@ -406,6 +408,8 @@ func (m *Manager) initSearchEngine() {
 			} else {
 				logger.Debug("Failed to init SearXNG provider: %v", err)
 			}
+		case "firecrawl":
+			providers = append(providers, NewFirecrawlProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
 		}
 	}
 
