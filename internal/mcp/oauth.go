@@ -51,7 +51,7 @@ func (c *oauthCallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		select {
 		case c.resultCh <- &auth.AuthorizationResult{Code: code, State: c.expectedState, Iss: r.URL.Query().Get("iss")}:
 			c.complete = true
-			fmt.Fprint(w, "TmuxAI authorization complete. You can close this tab.")
+			_, _ = fmt.Fprint(w, "TmuxAI authorization complete. You can close this tab.")
 		default:
 			http.Error(w, "authorization already received", http.StatusConflict)
 		}
@@ -61,7 +61,7 @@ func (c *oauthCallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		select {
 		case c.errorCh <- errors.New("authorization was denied by the server"):
 			c.complete = true
-			fmt.Fprint(w, "TmuxAI authorization was not completed.")
+			_, _ = fmt.Fprint(w, "TmuxAI authorization was not completed.")
 		default:
 			http.Error(w, "authorization already received", http.StatusConflict)
 		}
@@ -90,7 +90,7 @@ func (c *oauthCallback) fetch(ctx context.Context, args *auth.AuthorizationArgs,
 	default:
 	}
 	select {
-	case <-c.errorCh:
+	case <-c.errorCh: //nolint:errcheck // Discard a stale error from a previous authorization attempt.
 	default:
 	}
 	c.expectedState = state
