@@ -157,7 +157,7 @@ prompts:
   watch: |
      xxx
 
-# Web search: search the web via Brave Search API or self-hosted SearXNG
+# Web search: search the web via Brave Search API, Firecrawl, or self-hosted SearXNG
 # Use /websearch <query> or /websearch -f N <query> to auto-fetch top N results
 web_search:
   enabled: false
@@ -169,6 +169,9 @@ web_search:
   providers:
     brave:
       api_key: "${BRAVE_API_KEY}"
+    firecrawl:
+      api_key: "${FIRECRAWL_API_KEY}"
+      # base_url: "http://localhost:3002"   # optional, for a self-hosted Firecrawl
     searxng:
       base_url: "http://127.0.0.1:8888"
 

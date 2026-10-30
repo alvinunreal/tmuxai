@@ -58,3 +58,21 @@ func TestResolveEnvKeyInConfig_UndefinedEnvVar(t *testing.T) {
 		t.Errorf("expected empty string for undefined env var, got %q", cfg.Models["mymodel"].APIKey)
 	}
 }
+
+func TestResolveEnvKeyInConfig_WebSearchProviders(t *testing.T) {
+	t.Setenv("TEST_FIRECRAWL_API_KEY", "fc-key-789")
+
+	cfg := DefaultConfig()
+	cfg.WebSearch.Providers = map[string]WebSearchProviderCfg{
+		"firecrawl": {APIKey: "${TEST_FIRECRAWL_API_KEY}"},
+	}
+
+	ResolveEnvKeyInConfig(cfg)
+
+	if got := cfg.WebSearch.Providers["firecrawl"].APIKey; got != "fc-key-789" {
+		t.Errorf("expected firecrawl APIKey 'fc-key-789', got %q", got)
+	}
+	if cfg.WebSearch.DefaultProvider != "brave" {
+		t.Errorf("expected default provider to stay 'brave', got %q", cfg.WebSearch.DefaultProvider)
+	}
+}
