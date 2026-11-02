@@ -61,16 +61,21 @@ func TestResolveEnvKeyInConfig_UndefinedEnvVar(t *testing.T) {
 
 func TestResolveEnvKeyInConfig_WebSearchProviders(t *testing.T) {
 	t.Setenv("TEST_FIRECRAWL_API_KEY", "fc-key-789")
+	t.Setenv("TEST_OUTCRAWL_API_KEY", "oc-key-456")
 
 	cfg := DefaultConfig()
 	cfg.WebSearch.Providers = map[string]WebSearchProviderCfg{
 		"firecrawl": {APIKey: "${TEST_FIRECRAWL_API_KEY}"},
+		"outcrawl":  {APIKey: "${TEST_OUTCRAWL_API_KEY}"},
 	}
 
 	ResolveEnvKeyInConfig(cfg)
 
 	if got := cfg.WebSearch.Providers["firecrawl"].APIKey; got != "fc-key-789" {
 		t.Errorf("expected firecrawl APIKey 'fc-key-789', got %q", got)
+	}
+	if got := cfg.WebSearch.Providers["outcrawl"].APIKey; got != "oc-key-456" {
+		t.Errorf("expected outcrawl APIKey 'oc-key-456', got %q", got)
 	}
 	if cfg.WebSearch.DefaultProvider != "brave" {
 		t.Errorf("expected default provider to stay 'brave', got %q", cfg.WebSearch.DefaultProvider)
