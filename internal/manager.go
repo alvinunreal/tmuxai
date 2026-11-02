@@ -391,6 +391,8 @@ func (m *Manager) initSearchEngine() {
 			}
 		case "firecrawl":
 			providers = append(providers, NewFirecrawlProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
+		case "outcrawl":
+			providers = append(providers, NewOutcrawlProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
 		}
 	}
 
@@ -410,6 +412,8 @@ func (m *Manager) initSearchEngine() {
 			}
 		case "firecrawl":
 			providers = append(providers, NewFirecrawlProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
+		case "outcrawl":
+			providers = append(providers, NewOutcrawlProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
 		}
 	}
 
