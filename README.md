@@ -754,6 +754,7 @@ Create `~/.config/tmuxai/mcp.json` to define your MCP servers:
 {
   "mcpServers": {
     "context7": {
+      "description": "Library documentation and code examples. Use for questions about library APIs.",
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp@latest"]
     },
@@ -778,6 +779,7 @@ For stdio and SSE servers, TmuxAI auto-detects the transport from the presence o
 
 | Field | Description |
 |-------|-------------|
+| `description` | Optional server-level guidance for the AI: purpose, scope, and when to use this server |
 | `type` | Transport type: `"stdio"`, `"sse"`, or `"streamable-http"` (auto-detected if omitted) |
 | `command` / `url` | Server command (stdio) or endpoint URL (SSE / streamable-http) |
 | `args` | Command-line arguments (stdio only) |
@@ -798,6 +800,15 @@ If an OAuth session expires or disconnects during a tool call, run `/mcp load`
 to reconnect and sign in explicitly; tool calls do not open a browser login.
 
 On startup, TmuxAI connects to each enabled server, lists available tools, and injects their definitions into the AI's system prompt. The AI can then call MCP tools using `<MCPToolCall>` tags, with results automatically fed back for continued reasoning.
+
+The optional `description` is included once above the server’s tools in the system prompt,
+complementing the individual tool descriptions. Keep it concise: describe the environment,
+intended use, and any relevant exclusions. It is guidance for the AI, not an access-control
+mechanism; enforce restrictions with server permissions. Descriptions for disabled or
+unavailable servers, or servers with no tools, are not included in the prompt.
+
+After editing a description, use `/mcp reload` to update the prompt without reconnecting
+that server. Changes to connection settings still trigger a reconnect.
 
 ### Commands
 

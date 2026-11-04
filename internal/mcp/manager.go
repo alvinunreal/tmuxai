@@ -324,29 +324,23 @@ func (m *MCPManager) ListTools() []ToolDef {
 }
 
 func (m *MCPManager) ToolDefinitionsBlock() string {
-	m.mu.RLock()
+	// Keep formatting and cache publication atomic with metadata updates during reload.
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if !m.cacheDirty {
-		cache := m.toolDefsCache
-		m.mu.RUnlock()
-		return cache
+		return m.toolDefsCache
 	}
-	m.mu.RUnlock()
 
 	var b strings.Builder
-	m.mu.RLock()
-	names := sortedServerNames(m.servers)
-	serversCopy := make(map[string]*ServerInfo, len(m.servers))
-	for k, v := range m.servers {
-		serversCopy[k] = v
-	}
-	m.mu.RUnlock()
-
-	for _, name := range names {
-		info := serversCopy[name]
+	for _, name := range sortedServerNames(m.servers) {
+		info := m.servers[name]
 		if info.Status != StatusHealthy || len(info.Tools) == 0 {
 			continue
 		}
 		fmt.Fprintf(&b, "--- MCP: %s ---\n", name)
+		if desc := strings.TrimSpace(info.Config.Description); desc != "" {
+			fmt.Fprintf(&b, "Description: %s\n", desc)
+		}
 		for _, t := range info.Tools {
 			params := formatToolParams(t.InputSchema)
 			desc := t.Description
@@ -357,14 +351,9 @@ func (m *MCPManager) ToolDefinitionsBlock() string {
 		}
 	}
 
-	result := b.String()
-
-	m.mu.Lock()
-	m.toolDefsCache = result
+	m.toolDefsCache = b.String()
 	m.cacheDirty = false
-	m.mu.Unlock()
-
-	return result
+	return m.toolDefsCache
 }
 
 func (m *MCPManager) GetSession(serverName string) *mcpsdk.ClientSession {
@@ -590,6 +579,8 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 		} else if !configEqual(oldInfo.Config, newSC) {
 			toRestart = append(toRestart, serverWork{name, newSC})
 		} else {
+			// Prompt metadata can change without restarting the connection.
+			oldInfo.Config = newSC
 			kept++
 		}
 	}
@@ -660,6 +651,7 @@ func (m *MCPManager) Reload(newCfg *MCPConfig) (added, removed, restarted, kept 
 	return
 }
 
+// configEqual compares connection settings only; Description is prompt metadata.
 func configEqual(a, b ServerConfig) bool {
 	if a.Type != b.Type || a.Command != b.Command || a.URL != b.URL || a.Disabled != b.Disabled || a.TimeoutSeconds != b.TimeoutSeconds || a.OAuth != b.OAuth {
 		return false
