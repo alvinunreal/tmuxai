@@ -38,6 +38,7 @@ func TestLoadConfigValid(t *testing.T) {
 	input := `{
 		"mcpServers": {
 			"myserver": {
+				"description": "Local documentation. Use for library questions.",
 				"command": "/usr/bin/foo",
 				"args": ["--flag"],
 				"env": {"KEY": "val"},
@@ -66,6 +67,9 @@ func TestLoadConfigValid(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected myserver")
 	}
+	if srv.Description != "Local documentation. Use for library questions." {
+		t.Errorf("Unexpected description: %q", srv.Description)
+	}
 	if srv.Command != "/usr/bin/foo" {
 		t.Errorf("Expected command /usr/bin/foo, got %s", srv.Command)
 	}
@@ -81,6 +85,9 @@ func TestLoadConfigValid(t *testing.T) {
 	remote, ok := cfg.MCPServers["remotesrv"]
 	if !ok {
 		t.Fatal("Expected remotesrv")
+	}
+	if remote.Description != "" {
+		t.Errorf("Expected empty description when omitted, got %q", remote.Description)
 	}
 	if remote.URL != "http://localhost:8080/mcp" {
 		t.Errorf("Expected url, got %s", remote.URL)

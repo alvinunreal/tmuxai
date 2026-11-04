@@ -1,10 +1,14 @@
 package mcp
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestResolveTransportType(t *testing.T) {
@@ -107,6 +111,12 @@ func TestConfigEqual(t *testing.T) {
 			"identical",
 			ServerConfig{Command: "cmd", Args: []string{"a"}, TimeoutSeconds: 5, Disabled: false, Env: map[string]string{"K": "v"}, Headers: map[string]string{"H": "v"}},
 			ServerConfig{Command: "cmd", Args: []string{"a"}, TimeoutSeconds: 5, Disabled: false, Env: map[string]string{"K": "v"}, Headers: map[string]string{"H": "v"}},
+			true,
+		},
+		{
+			"description does not affect connection",
+			ServerConfig{Command: "cmd", Description: "Old guidance"},
+			ServerConfig{Command: "cmd", Description: "New guidance"},
 			true,
 		},
 		{
@@ -281,6 +291,148 @@ func TestMCPManagerToolDefinitionsBlock(t *testing.T) {
 	}
 	if !contains(block, "write_file(content: string, path: string)") {
 		t.Errorf("Expected formatted params, got %q", block)
+	}
+}
+
+func TestMCPManagerToolDefinitionsBlockDescription(t *testing.T) {
+	for _, description := range []string{"", " \n\t ", "Use for infrastructure issues.", "  First line.\nSecond line.  "} {
+		t.Run(description, func(t *testing.T) {
+			mgr := NewMCPManager(&MCPConfig{})
+			mgr.servers["srv"] = &ServerInfo{
+				Name:   "srv",
+				Config: ServerConfig{Description: description},
+				Status: StatusHealthy,
+				Tools:  []ToolDef{{Name: "search", Description: "Search issues"}},
+			}
+			want := "--- MCP: srv ---\n"
+			if desc := strings.TrimSpace(description); desc != "" {
+				want += "Description: " + desc + "\n"
+			}
+			want += "  - search() — Search issues\n"
+			if got := mgr.ToolDefinitionsBlock(); got != want {
+				t.Errorf("ToolDefinitionsBlock() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestMCPManagerToolDefinitionsBlockOmitsUnavailableDescriptions(t *testing.T) {
+	mgr := NewMCPManager(&MCPConfig{})
+	mgr.servers["disabled"] = &ServerInfo{
+		Name: "disabled", Config: ServerConfig{Description: "Disabled guidance", Disabled: true},
+		Status: StatusUnhealthy, Tools: []ToolDef{{Name: "search"}},
+	}
+	mgr.servers["unhealthy"] = &ServerInfo{
+		Name: "unhealthy", Config: ServerConfig{Description: "Unavailable guidance"},
+		Status: StatusUnhealthy, Tools: []ToolDef{{Name: "search"}},
+	}
+	mgr.servers["pending"] = &ServerInfo{
+		Name: "pending", Config: ServerConfig{Description: "Pending guidance"},
+		Status: StatusPending, Tools: []ToolDef{{Name: "search"}},
+	}
+	mgr.servers["empty"] = &ServerInfo{
+		Name: "empty", Config: ServerConfig{Description: "No tools"}, Status: StatusHealthy,
+	}
+	if got := mgr.ToolDefinitionsBlock(); got != "" {
+		t.Errorf("Expected no definitions for unavailable or empty servers, got %q", got)
+	}
+}
+
+func TestMCPManagerReloadDescriptionPreservesSession(t *testing.T) {
+	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "test", Version: "1.0.0"}, nil)
+	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "search", Description: "Search issues"},
+		func(context.Context, *mcpsdk.CallToolRequest, struct{}) (*mcpsdk.CallToolResult, any, error) {
+			return &mcpsdk.CallToolResult{}, nil, nil
+		})
+	ts := httptest.NewServer(mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
+		return server
+	}, nil))
+	defer ts.Close()
+
+	sc := ServerConfig{Type: "streamable-http", URL: ts.URL}
+	mgr := NewMCPManager(&MCPConfig{MCPServers: map[string]ServerConfig{"srv": sc}})
+	defer mgr.Shutdown()
+	if err := mgr.Init(); err != nil {
+		t.Fatal(err)
+	}
+	session := mgr.GetSession("srv")
+	if session == nil {
+		t.Fatal("Expected a connected session")
+	}
+	// Warm the cache before adding, changing, and removing descriptions.
+	mgr.ToolDefinitionsBlock()
+	for _, description := range []string{"Initial guidance", "Updated guidance", ""} {
+		sc.Description = description
+		cfg := &MCPConfig{MCPServers: map[string]ServerConfig{"srv": sc}}
+		added, removed, restarted, kept, err := mgr.Reload(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if added != 0 || removed != 0 || restarted != 0 || kept != 1 {
+			t.Fatalf("Unexpected reload counts: added=%d removed=%d restarted=%d kept=%d", added, removed, restarted, kept)
+		}
+		if mgr.GetSession("srv") != session {
+			t.Fatal("Description-only reload replaced the session")
+		}
+		if got := mgr.GetServerInfo()[0].Config.Description; got != description {
+			t.Errorf("Server description = %q, want %q", got, description)
+		}
+		if mgr.config != cfg {
+			t.Error("Reload did not retain the new configuration")
+		}
+		want := "--- MCP: srv ---\n"
+		if description != "" {
+			want += "Description: " + description + "\n"
+		}
+		want += "  - search() — Search issues\n"
+		if got := mgr.ToolDefinitionsBlock(); got != want {
+			t.Errorf("Reloaded definitions = %q, want %q", got, want)
+		}
+	}
+
+	// Connection changes must still reconnect and include the new metadata.
+	sc.TimeoutSeconds = 10
+	sc.Description = "Guidance after reconnect"
+	_, _, restarted, kept, err := mgr.Reload(&MCPConfig{MCPServers: map[string]ServerConfig{"srv": sc}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restarted != 1 || kept != 0 || mgr.GetSession("srv") == session {
+		t.Fatal("Connection setting change did not replace the session")
+	}
+	if got := mgr.ToolDefinitionsBlock(); !strings.Contains(got, "Description: "+sc.Description+"\n") {
+		t.Errorf("Missing description after reconnect: %q", got)
+	}
+}
+
+func TestMCPManagerReloadDescriptionConcurrentReads(t *testing.T) {
+	sc := ServerConfig{Command: "unused", Description: "Initial guidance"}
+	mgr := NewMCPManager(&MCPConfig{MCPServers: map[string]ServerConfig{"srv": sc}})
+	mgr.servers["srv"] = &ServerInfo{
+		Name: "srv", Config: sc, Status: StatusHealthy, Tools: []ToolDef{{Name: "search"}},
+	}
+	defer mgr.Shutdown()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 100 {
+			mgr.ToolDefinitionsBlock()
+			mgr.GetServerInfo()
+			NewRegistry(mgr)
+		}
+	}()
+	defer func() { <-done }()
+
+	for range 100 {
+		sc.Description += "."
+		_, _, _, _, err := mgr.Reload(&MCPConfig{MCPServers: map[string]ServerConfig{"srv": sc}})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := mgr.ToolDefinitionsBlock(); !strings.Contains(got, "Description: "+sc.Description+"\n") {
+		t.Errorf("Cache does not contain the latest description: %q", got)
 	}
 }
 
