@@ -731,7 +731,7 @@ TmuxAI » /websearch -f 3 latest tmux best practices
 TmuxAI » /webfetch https://example.com/docs
 ```
 
-- **Providers:** Brave Search API (primary), [Firecrawl](https://firecrawl.dev) search API, or self-hosted SearXNG. Set `default_provider` to pick the one queried first; the other configured providers are tried if it fails.
+- **Providers:** Brave Search API (primary), [Firecrawl](https://firecrawl.dev) search API, [Parallel](https://parallel.ai) anonymous MCP search, or self-hosted SearXNG. Set `default_provider` to pick the one queried first; the other configured providers are tried if it fails.
 - **Fallback chain:** direct fetch → Wayback Machine → Google Cache
 - **Safety:** Fetched content is sanitized and injected as assistant context, not user input
 - Configure providers and limits under `web_search` and `web_fetch` in `config.yaml` (see [Configuration](#configuration))
@@ -847,7 +847,7 @@ Use `/info` to see active MCP servers, tool counts, and estimated token usage.
 | `/skill unload --all`       | Unload all skills                                                |
 | `/skill info <name>`        | View skill details without loading                               |
 | `/skill validate`           | Validate all discovered skills                                   |
-| `/websearch [-f N] <query>` | Search the web via Brave, Firecrawl or SearXNG; use `-f N` to auto-fetch top N results |
+| `/websearch [-f N] <query>` | Search the web via Brave, Firecrawl, Parallel or SearXNG; use `-f N` to auto-fetch top N results |
 | `/webfetch <url>`           | Fetch readable content from a URL, with Wayback Machine fallback                |
 | `/mcp`                      | List MCP servers with status and tool counts                     |
 | `/mcp tools [server]`       | List available MCP tools, optionally filtered by server          |
@@ -989,7 +989,7 @@ If omitted, TmuxAI uses the legacy default: `-d -h`.
 
 ### Web Search & Fetch Configuration
 
-Enable web search (via Brave, Firecrawl or SearXNG) and web fetching (with Wayback/Google Cache fallback):
+Enable web search (via Brave, Firecrawl, Parallel or SearXNG) and web fetching (with Wayback/Google Cache fallback):
 
 ```yaml
 web_search:
@@ -1012,6 +1012,30 @@ web_fetch:
   timeout_seconds: 8
   allowed_redirects: false
 ```
+
+Parallel is an opt-in provider that needs no API key. For keyless search, use:
+
+```yaml
+web_search:
+  enabled: true
+  default_provider: parallel
+  providers:
+    parallel: {}
+```
+
+Try `/websearch tmux split-window documentation`. Anonymous requests use Parallel's
+[Fast defaults](https://docs.parallel.ai/integrations/mcp/search-mcp) at
+`https://mcp.parallel.ai/mcp`. Excerpts become search snippets, capped at 1000
+characters each before the existing total character budget is applied. `max_results`
+and `timeout_seconds` apply as usual. An optional `base_url` is a complete MCP
+endpoint; `api_key` is optional for authenticated access and is sent as `x-api-key`.
+Explicit credentials are used as supplied, with no anonymous retry on rejection.
+
+Only providers listed under `providers` are tried. Add `parallel: {}` alongside
+existing providers to allow it as a fallback, or set it as `default_provider` to
+try it first. Existing defaults, provider ordering and failover remain unchanged;
+`enabled: false` makes no search requests. Parallel only calls `web_search`;
+`/webfetch` continues to use the existing fetcher.
 
 ### Environment Variables
 
