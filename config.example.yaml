@@ -172,6 +172,7 @@ web_search:
     firecrawl:
       api_key: "${FIRECRAWL_API_KEY}"
       # base_url: "http://localhost:3002"   # optional, for a self-hosted Firecrawl
+    # parallel: {}          # Opt-in keyless search; set default_provider: parallel to try first
     searxng:
       base_url: "http://127.0.0.1:8888"
 
