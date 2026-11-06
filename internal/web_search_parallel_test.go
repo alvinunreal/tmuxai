@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/alvinunreal/tmuxai/config"
+	"github.com/spf13/viper"
 )
 
 // parallelTestServer serves synthetic MCP responses, never retained live data.
@@ -206,11 +208,11 @@ func TestParallelCloseIdleConnections(t *testing.T) {
 	}
 }
 
-// Optional real network gate through normal provider selection and SearchEngine.
-func TestParallelLive(t *testing.T) {
-	if os.Getenv("TMUXAI_PARALLEL_LIVE") != "1" {
-		t.Skip("set TMUXAI_PARALLEL_LIVE=1 for anonymous live search")
-	}
+// Load the documented empty provider map through the normal config path.
+func parallelManagerFromYAML(t *testing.T) *Manager {
+	t.Helper()
+	viper.Reset()
+	t.Cleanup(viper.Reset)
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("web_search:\n  enabled: true\n  default_provider: parallel\n  providers:\n    parallel: {}\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -221,6 +223,33 @@ func TestParallelLive(t *testing.T) {
 	}
 	m := &Manager{Config: cfg}
 	m.initSearchEngine()
+	if m.SearchEngine == nil || len(m.SearchEngine.providers) != 1 || m.SearchEngine.providers[0].Name() != "parallel" {
+		t.Fatalf("documented YAML did not select Parallel: %+v", m.SearchEngine)
+	}
+	return m
+}
+
+func TestParallelConfigYAML(t *testing.T) {
+	original := http.DefaultTransport
+	http.DefaultTransport = parallelOriginProbe(func(*http.Request) (*http.Response, error) {
+		t.Error("config loading or provider selection attempted network I/O")
+		return nil, errors.New("offline config test")
+	})
+	t.Cleanup(func() { http.DefaultTransport = original })
+	m := parallelManagerFromYAML(t)
+	p := m.SearchEngine.providers[0].(*ParallelProvider)
+	if p.baseURL != parallelDefaultBaseURL || p.client.Transport.(*parallelTransport).apiKey != "" {
+		t.Fatal("documented YAML did not select the anonymous hosted provider")
+	}
+	t.Log("config.Load -> initSearchEngine selects anonymous Parallel from documented parallel: {} YAML; no Search call or network")
+}
+
+// Optional real network gate through normal provider selection and SearchEngine.
+func TestParallelLive(t *testing.T) {
+	if os.Getenv("TMUXAI_PARALLEL_LIVE") != "1" {
+		t.Skip("set TMUXAI_PARALLEL_LIVE=1 for anonymous live search")
+	}
+	m := parallelManagerFromYAML(t)
 	p := m.SearchEngine.providers[0].(*ParallelProvider)
 	p.client.Transport = &parallelWireTrace{base: p.client.Transport, t: t}
 	r := m.SearchEngine.Search(context.Background(), "tmux split-window documentation")

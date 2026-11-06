@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -41,7 +42,8 @@ func NewParallelProvider(apiKey, baseURL string, hc *http.Client, timeoutSeconds
 			transport = base.Clone()
 		}
 	}
-	client.Transport = &parallelTransport{base: transport, apiKey: apiKey}
+	origin, _ := url.Parse(baseURL)
+	client.Transport = &parallelTransport{base: transport, apiKey: apiKey, origin: origin}
 	return &ParallelProvider{baseURL: baseURL, client: &client, timeout: time.Duration(timeoutSeconds) * time.Second}
 }
 
@@ -52,15 +54,42 @@ func (p *ParallelProvider) Name() string { return "parallel" }
 type parallelTransport struct {
 	base   http.RoundTripper
 	apiKey string
+	origin *url.URL
 }
 
 func (t *parallelTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Check every request before adding credentials or performing network I/O.
+	// Redirects and SDK-generated requests share this boundary; CheckRedirect
+	// alone would not cover requests made directly by the SDK.
+	if t.apiKey != "" && (!parallelSameOrigin(t.origin, req.URL) ||
+		(req.Host != "" && !parallelSameOrigin(t.origin, &url.URL{Scheme: req.URL.Scheme, Host: req.Host}))) {
+		return nil, fmt.Errorf("parallel: refusing authenticated request outside configured origin")
+	}
 	req = req.Clone(req.Context())
 	req.Header.Set("User-Agent", "tmuxai/"+Version)
 	if t.apiKey != "" {
 		req.Header.Set("x-api-key", t.apiKey)
 	}
 	return t.base.RoundTrip(req)
+}
+
+// Compare scheme, hostname and effective port. An HTTPS downgrade is always a
+// different origin, including when the host and port are otherwise identical.
+func parallelSameOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil || a.Hostname() == "" || b.Hostname() == "" {
+		return false
+	}
+	port := func(u *url.URL) string {
+		if u.Port() != "" {
+			return u.Port()
+		}
+		if strings.EqualFold(u.Scheme, "https") {
+			return "443"
+		}
+		return "80"
+	}
+	return (strings.EqualFold(a.Scheme, "http") || strings.EqualFold(a.Scheme, "https")) &&
+		strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Hostname(), b.Hostname()) && port(a) == port(b)
 }
 
 func (t *parallelTransport) CloseIdleConnections() {
