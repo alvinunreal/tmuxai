@@ -155,3 +155,12 @@ func TestKeenableDefaults(t *testing.T) {
 		t.Fatalf("unexpected defaults: %+v", p)
 	}
 }
+
+func TestLastSSEDataJoinsMultilineEvent(t *testing.T) {
+	body := []byte("event: message\ndata: {\"a\":1}\n\nevent: message\ndata: {\"jsonrpc\":\"2.0\",\ndata: \"id\":2}\n\n")
+	got := string(lastSSEData(body))
+	want := "{\"jsonrpc\":\"2.0\",\n\"id\":2}"
+	if got != want {
+		t.Fatalf("lastSSEData = %q, want %q", got, want)
+	}
+}

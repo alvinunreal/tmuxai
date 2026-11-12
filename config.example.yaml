@@ -175,7 +175,8 @@ web_search:
     searxng:
       base_url: "http://127.0.0.1:8888"
     # keenable: {}                          # keyless; uses https://api.keenable.ai/mcp-public
-    #   api_key: "${KEENABLE_API_KEY}"      # optional, for higher rate limits
+    # To add an optional api_key for higher rate limits, remove {} above:
+    #   api_key: "${KEENABLE_API_KEY}"
 
 # Web fetch: extract readable content from a URL
 # Fallback chain: direct -> Wayback Machine -> Google Cache

@@ -119,17 +119,30 @@ func (kp *KeenableProvider) rpc(ctx context.Context, sessionID string, id int, m
 	return msg.Result, resp.Header.Get("Mcp-Session-Id"), nil
 }
 
-// lastSSEData returns the data of the last SSE event in body.
+// lastSSEData returns the data of the last SSE event in body. Multiple
+// data: lines within one event are joined with newlines, per the SSE spec.
 func lastSSEData(body []byte) []byte {
-	var last []byte
+	var last, cur []string
 	scanner := bufio.NewScanner(bytes.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
-	for scanner.Scan() {
-		if data, ok := strings.CutPrefix(scanner.Text(), "data:"); ok {
-			last = []byte(strings.TrimSpace(data))
+	flush := func() {
+		if len(cur) > 0 {
+			last = cur
+			cur = nil
 		}
 	}
-	return last
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
+		if line == "" {
+			flush()
+			continue
+		}
+		if data, ok := strings.CutPrefix(line, "data:"); ok {
+			cur = append(cur, strings.TrimPrefix(data, " "))
+		}
+	}
+	flush()
+	return []byte(strings.Join(last, "\n"))
 }
 
 func (kp *KeenableProvider) Search(ctx context.Context, query string, maxResults int) SearchResponse {
