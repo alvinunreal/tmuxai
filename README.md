@@ -731,7 +731,7 @@ TmuxAI » /websearch -f 3 latest tmux best practices
 TmuxAI » /webfetch https://example.com/docs
 ```
 
-- **Providers:** Brave Search API (primary), [Firecrawl](https://firecrawl.dev) search API, or self-hosted SearXNG. Set `default_provider` to pick the one queried first; the other configured providers are tried if it fails.
+- **Providers:** Brave Search API (primary), [Firecrawl](https://firecrawl.dev) search API, self-hosted SearXNG, or [Keenable](https://docs.keenable.ai/mcp-server) (keyless; add `keenable: {}` under `providers`, with an optional `api_key` for higher rate limits). Set `default_provider` to pick the one queried first; the other configured providers are tried if it fails.
 - **Fallback chain:** direct fetch → Wayback Machine → Google Cache
 - **Safety:** Fetched content is sanitized and injected as assistant context, not user input
 - Configure providers and limits under `web_search` and `web_fetch` in `config.yaml` (see [Configuration](#configuration))
