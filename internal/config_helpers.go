@@ -183,6 +183,26 @@ func (m *Manager) GetAzureOpenAIDeploymentName() string {
 	return m.Config.AzureOpenAI.DeploymentName
 }
 
+// GetAzureOpenAIAPIBase returns the Azure endpoint with any session override applied.
+func (m *Manager) GetAzureOpenAIAPIBase() string {
+	if override, exists := m.SessionOverrides["azure_openai.api_base"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.AzureOpenAI.APIBase
+}
+
+// GetAzureOpenAIAPIVersion returns the Azure API version with any session override applied.
+func (m *Manager) GetAzureOpenAIAPIVersion() string {
+	if override, exists := m.SessionOverrides["azure_openai.api_version"]; exists {
+		if val, ok := override.(string); ok {
+			return val
+		}
+	}
+	return m.Config.AzureOpenAI.APIVersion
+}
+
 // GetModelsDefault returns the default model configuration name with session override if present
 func (m *Manager) GetModelsDefault() string {
 	// Check for session override first
@@ -291,8 +311,8 @@ func (m *Manager) getLegacyModelConfig() config.ModelConfig {
 			Provider:       "azure",
 			Model:          m.GetAzureOpenAIDeploymentName(),
 			APIKey:         m.GetAzureOpenAIAPIKey(),
-			APIBase:        m.Config.AzureOpenAI.APIBase,
-			APIVersion:     m.Config.AzureOpenAI.APIVersion,
+			APIBase:        m.GetAzureOpenAIAPIBase(),
+			APIVersion:     m.GetAzureOpenAIAPIVersion(),
 			DeploymentName: m.GetAzureOpenAIDeploymentName(),
 		}
 	}
