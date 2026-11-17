@@ -48,6 +48,45 @@ func TestAzureOpenAIEndpoint(t *testing.T) {
 	}
 }
 
+func TestAzureOpenAIEndpointSessionOverrides(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/openai/deployments/test-dep/chat/completions" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("api-version"); got != "2025-04-01-preview" {
+			t.Errorf("unexpected api-version: %s", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		AzureOpenAI: config.AzureOpenAIConfig{
+			APIKey:         "test-key",
+			APIBase:        server.URL + "/old-endpoint",
+			APIVersion:     "old-version",
+			DeploymentName: "test-dep",
+		},
+	}
+	manager := &Manager{Config: cfg, SessionOverrides: make(map[string]interface{})}
+	manager.ProcessSubCommand("/config set azure_openai.api_base " + server.URL)
+	manager.ProcessSubCommand("/config set azure_openai.api_version 2025-04-01-preview")
+	client := NewAiClient(cfg)
+	client.SetConfigManager(manager)
+
+	resp, err := client.ChatCompletion(context.Background(), []Message{{Role: "user", Content: "hi"}}, "model")
+	if err != nil {
+		t.Fatalf("ChatCompletion error: %v", err)
+	}
+	if resp.Content != "ok" {
+		t.Errorf("unexpected response: %s", resp.Content)
+	}
+	if cfg.AzureOpenAI.APIBase != server.URL+"/old-endpoint" || cfg.AzureOpenAI.APIVersion != "old-version" {
+		t.Fatal("session overrides changed the persistent configuration")
+	}
+}
+
 func TestOpenAIResponsesEndpoint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/responses" {
