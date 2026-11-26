@@ -157,7 +157,7 @@ prompts:
   watch: |
      xxx
 
-# Web search: search the web via Brave Search API, Firecrawl, self-hosted SearXNG, keyless Keenable, or keyless You.com
+# Web search: search the web via Brave Search API, Firecrawl, self-hosted SearXNG, keyless Keenable, keyless You.com, or SpecStream
 # Use /websearch <query> or /websearch -f N <query> to auto-fetch top N results
 web_search:
   enabled: false
@@ -180,6 +180,8 @@ web_search:
     # youcom: {}                            # keyless; about 100 searches a day via https://api.you.com/v1/agents/search
     # To use a You.com API key instead (or set YDC_API_KEY in the environment), remove {} above:
     #   api_key: "${YDC_API_KEY}"
+    # specstream:                           # results carry the page passages that answer the query
+    #   api_key: "${SPECSTREAM_API_KEY}"
 
 # Web fetch: extract readable content from a URL
 # Fallback chain: direct -> Wayback Machine -> Google Cache
