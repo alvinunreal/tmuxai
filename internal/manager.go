@@ -395,6 +395,8 @@ func (m *Manager) initSearchEngine() {
 			providers = append(providers, NewKeenableProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
 		case "youcom":
 			providers = append(providers, NewYouComProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
+		case "specstream":
+			providers = append(providers, NewSpecStreamProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
 		}
 	}
 
@@ -418,6 +420,8 @@ func (m *Manager) initSearchEngine() {
 			providers = append(providers, NewKeenableProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
 		case "youcom":
 			providers = append(providers, NewYouComProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
+		case "specstream":
+			providers = append(providers, NewSpecStreamProvider(pcfg.APIKey, pcfg.BaseURL, nil, cfg.TimeoutSeconds))
 		}
 	}
 
